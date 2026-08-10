@@ -25,7 +25,7 @@ end
 
 function Menu.render(state)
   if not state.menu.open then return end
-  local language = state.settings.language
+  local language = Text.resolveLanguage(state.settings.language)
   local labels = Text.labels(language)
   local scale = state.settings.hud.fontScale
   local lineHeight = math.max(9, math.floor(12 * scale))

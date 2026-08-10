@@ -10,7 +10,7 @@ end
 function Hud.render(state)
   if not state.settings.hud.visible or state.menu.open then return end
   local settings = state.settings
-  local language = settings.language
+  local language = Text.resolveLanguage(settings.language)
   local labels = Text.labels(language)
   local scale = settings.hud.fontScale
   local x, y = settings.hud.x, settings.hud.y
@@ -35,7 +35,7 @@ function Hud.renderWarning(state)
   if not warning or warning.untilFrame < Isaac.GetFrameCount() then return end
   local goal = Catalog.get(warning.goalId)
   if not goal then return end
-  local language = state.settings.language
+  local language = Text.resolveLanguage(state.settings.language)
   local labels = Text.labels(language)
   local detail = Catalog.text(goal, language).detail
   local message = warning.kind == "deadline"

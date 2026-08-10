@@ -2,7 +2,11 @@ local Text = {}
 local latinFont = Font()
 local cjkFont = Font()
 latinFont:Load("font/terminus8.fnt")
-cjkFont:Load("font/lanapixel.fnt")
+local cjkLoaded = cjkFont:Load("resources-dlc3.zh/font/lanapixel.fnt")
+if not cjkLoaded then
+  -- Repentance+ installations may expose the language font through the common font directory.
+  cjkLoaded = cjkFont:Load("font/lanapixel.fnt")
+end
 
 local ui = {
   zh = {
@@ -29,9 +33,13 @@ function Text.labels(language)
   return ui[language] or ui.en
 end
 
+function Text.resolveLanguage(language)
+  if language == "zh" and not cjkLoaded then return "en" end
+  return language
+end
 
 function Text.draw(value, x, y, scale, color, language, boxWidth, center)
-  local font = language == "zh" and cjkFont or latinFont
+  local font = language == "zh" and cjkLoaded and cjkFont or latinFont
   local tint = color or KColor(1, 1, 1, 1)
   font:DrawStringScaledUTF8(tostring(value), x, y, scale, scale, tint, boxWidth or 0, center == true)
 end

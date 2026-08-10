@@ -22,6 +22,12 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 - RED: `npm.cmd test` — 6 passed, 3 failed because the HUD had no Unicode font/condition rendering, MCM had no language/size/position controls, and storage had no `fontScale` field.
 - GREEN: the HUD and in-run menu now share the built-in LanaPixel Unicode renderer, persistent rows show localized `detail` conditions, and MCM exposes bounded language, scale, X, and Y settings.
 
+### Chinese F3 menu font regression
+
+- Root cause: v0.2.0 attempted to load `font/lanapixel.fnt`; in Repentance the Chinese LanaPixel asset resides in the DLC3 Chinese resource package.
+- RED: `npm.cmd test` — 9 passed, 1 failed because the renderer neither referenced `resources-dlc3.zh/font/lanapixel.fnt` nor handled a failed font load.
+- GREEN: `npm.cmd test` — 10 passed. The renderer checks `Font:Load`, tries the Repentance+ common path second, and resolves to visible English text if neither CJK path exists.
+
 ## Test specification
 
 | # | Guarantee | Test | Type | Result |
@@ -35,6 +41,7 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 | 7 | Save data uses defensive JSON decoding and a schema version | `tests/mod-contract.test.js` | storage contract | PASS |
 | 8 | Chinese text uses LanaPixel with UTF-8 scaled rendering | `tests/mod-contract.test.js` | rendering contract | PASS |
 | 9 | MCM exposes bounded language, font-size, X, and Y controls | `tests/mod-contract.test.js` | integration contract | PASS |
+| 10 | Chinese mode loads the DLC3 font and cannot select an unloaded font | `tests/mod-contract.test.js` | regression contract | PASS |
 
 ## Known gaps
 

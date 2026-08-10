@@ -68,6 +68,14 @@ test("HUD renders localized completion conditions with a scalable Unicode font",
   assert.match(hud, /fontScale/);
 });
 
+test("Chinese renderer loads the DLC3 Chinese font and falls back when loading fails", () => {
+  const text = read("scripts/ui/text.lua");
+  assert.match(text, /resources-dlc3\.zh\/font\/lanapixel\.fnt/);
+  assert.match(text, /cjkLoaded\s*=/);
+  assert.match(text, /cjkLoaded\s*and\s*cjkFont\s*or\s*latinFont/);
+  assert.match(text, /function Text\.resolveLanguage/);
+});
+
 test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {
   const mcm = read("scripts/integrations/mcm.lua");
   assert.match(mcm, /Language/);
