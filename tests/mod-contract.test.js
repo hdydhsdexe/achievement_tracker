@@ -58,6 +58,18 @@ test("menu and HUD are usable without optional Mod Config Menu", () => {
   assert.match(mcm, /ModConfigMenu\s*==\s*nil/);
 });
 
+test("F3 menu visualizes failed goals and counter progress", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const goals = read("scripts/data/goals.lua");
+  const sensors = read("scripts/core/sensors.lua");
+  assert.match(menu, /failedGoals/);
+  assert.match(menu, /Isaac\.DrawLine/);
+  assert.match(menu, /Sensors\.progress/);
+  assert.match(goals, /marbles = \{ key="gulp", target=5 \}/);
+  assert.match(goals, /u_broke_it = \{ key="items", target=50 \}/);
+  assert.match(sensors, /PILLEFFECT_GULP/);
+});
+
 test("HUD renders localized completion conditions with a scalable Unicode font", () => {
   const hud = read("scripts/ui/hud.lua");
   const text = read("scripts/ui/text.lua");
@@ -87,6 +99,17 @@ test("Chinese rendering is self-contained and does not reference EID", () => {
   assert.equal(fs.existsSync(licensePath), true, "font license must ship with the mod");
   const pages = fs.readdirSync(path.join(root, "resources/font")).filter((file) => /^achievement_zh_\d+\.png$/.test(file));
   assert.ok(pages.length > 0, "font must include at least one texture page");
+});
+
+test("Chinese renderer prefers bundled LanaPixel and retains the Noto fallback", () => {
+  const text = read("scripts/ui/text.lua");
+  const fontDir = path.join(root, "resources/font");
+  assert.match(text, /resources\/font\/achievement_lanapixel\.fnt/);
+  assert.match(text, /resources\/font\/achievement_zh\.fnt/);
+  assert.equal(fs.existsSync(path.join(fontDir, "achievement_lanapixel.fnt")), true);
+  assert.equal(fs.existsSync(path.join(fontDir, "LANAPIXEL_OFL.txt")), true);
+  const pages = fs.readdirSync(fontDir).filter((file) => /^achievement_lanapixel_\d+\.png$/.test(file));
+  assert.ok(pages.length > 0, "LanaPixel font must include a texture page");
 });
 
 test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {

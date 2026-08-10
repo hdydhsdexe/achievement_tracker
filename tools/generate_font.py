@@ -15,7 +15,7 @@ def collect_characters(root: Path) -> list[str]:
 def block(kind: int, payload: bytes) -> bytes:
     return struct.pack("<BI", kind, len(payload)) + payload
 
-def generate(root: Path, source_font: Path, size: int = 16) -> None:
+def generate(root: Path, source_font: Path, name: str = "achievement_zh", size: int = 16) -> None:
     output = root / "resources" / "font"
     output.mkdir(parents=True, exist_ok=True)
     font = ImageFont.truetype(str(source_font), size=size)
@@ -37,15 +37,19 @@ def generate(root: Path, source_font: Path, size: int = 16) -> None:
         x, row_height = x + width + padding, max(row_height, height)
     names = []
     for index, page in enumerate(pages):
-        name = f"achievement_zh_{index}.png"; page.save(output/name, optimize=True); names.append(name)
-    info = struct.pack("<hBBHBBBBBBBB", size,0,1,100,1,1,1,1,1,1,1,1) + b"AchievementTrackerCJK\0"
+        page_name = f"{name}_{index}.png"; page.save(output/page_name, optimize=True); names.append(page_name)
+    internal_name = ("AchievementTracker-" + name).encode("ascii", "replace") + b"\0"
+    info = struct.pack("<hBBHBBBBBBBB", size,0,1,100,1,1,1,1,1,1,1,1) + internal_name
     common = struct.pack("<HHHHHBBBBB", line_height,ascent+2,page_size,page_size,len(pages),0,0,4,4,4)
     page_data = b"".join(name.encode()+b"\0" for name in names)
     chars = b"".join(struct.pack("<IHHHHhhhBB", *record) for record in records)
-    (output/"achievement_zh.fnt").write_bytes(b"BMF\x03"+block(1,info)+block(2,common)+block(3,page_data)+block(4,chars))
+    (output/f"{name}.fnt").write_bytes(b"BMF\x03"+block(1,info)+block(2,common)+block(3,page_data)+block(4,chars))
     print(f"Generated {len(records)} glyphs across {len(pages)} page(s)")
 
 if __name__ == "__main__":
     parser=argparse.ArgumentParser(); parser.add_argument("--font",type=Path,required=True)
-    parser.add_argument("--root",type=Path,default=Path(__file__).resolve().parents[1]); args=parser.parse_args()
-    generate(args.root.resolve(), args.font.resolve())
+    parser.add_argument("--root",type=Path,default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--name", default="achievement_zh")
+    parser.add_argument("--size", type=int, default=16)
+    args=parser.parse_args()
+    generate(args.root.resolve(), args.font.resolve(), args.name, args.size)

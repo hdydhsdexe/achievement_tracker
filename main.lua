@@ -36,8 +36,7 @@ function AchievementTracker:onGameStarted(isContinued)
   load()
   if isContinued and type(State.settings.activeRun) == "table" then
     State.run = State.settings.activeRun
-    State.run.disqualified = State.run.disqualified or {}
-    State.run.observedPickups = State.run.observedPickups or {}
+    Sensors.normalizeRun(State.run)
   else
     State.run = Sensors.newRun()
   end
@@ -60,7 +59,14 @@ function AchievementTracker:onUpdate()
     local goal = Catalog.get(id)
     if goal then
       local warning = Evaluator.evaluate(State.evaluator, goal, Sensors.snapshot(goal, State.run, GameInstance))
-      if warning then warning.untilFrame = Isaac.GetFrameCount() + 240; State.activeWarning = warning end
+      if warning then
+        warning.untilFrame = Isaac.GetFrameCount() + 240
+        State.activeWarning = warning
+        if warning.kind == "failed" or warning.kind == "expired" then
+          State.run.failedGoals[goal.id] = true
+          save()
+        end
+      end
     end
   end
 end
@@ -77,6 +83,10 @@ function AchievementTracker:onPickupUpdate(pickup)
   if State.settings then Sensors.onPickupUpdate(State.run, pickup) end
 end
 
+function AchievementTracker:onUsePill(pillEffect)
+  if State.settings then Sensors.onUsePill(State.run, pillEffect) end
+end
+
 function AchievementTracker:onExit(shouldSave)
   if shouldSave then save() end
 end
@@ -85,6 +95,7 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, AchievementTra
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_UPDATE, AchievementTracker.onUpdate)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_RENDER, AchievementTracker.onRender)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, AchievementTracker.onPickupUpdate)
+AchievementTracker:AddCallback(ModCallbacks.MC_USE_PILL, AchievementTracker.onUsePill)
 AchievementTracker:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, AchievementTracker.onExit)
 
 return AchievementTracker

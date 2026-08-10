@@ -19,6 +19,17 @@ local goals = {
   { id="daily_streak", category="streak", zh={name="每日挑战连胜",detail="连续完成5次每日挑战"}, en={name="Daily streak",detail="Win five Daily Challenges in a row"} }
 }
 
+-- Progress metadata lives separately from localized copy so counter goals can be
+-- extended without coupling sensors to display text.
+local progressGoals = {
+  marbles = { key="gulp", target=5 },
+  u_broke_it = { key="items", target=50 }
+}
+for _, goal in ipairs(goals) do
+  local progress = progressGoals[goal.id]
+  if progress then goal.progressKey=progress.key; goal.target=progress.target end
+end
+
 local Catalog = { goals = goals }
 
 function Catalog.get(id)

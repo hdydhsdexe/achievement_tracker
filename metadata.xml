@@ -4,5 +4,5 @@
   <directory>achievement_tracker</directory>
   <id>achievement-tracker-local</id>
   <description>在游戏中持续显示成就完成条件并提供临界提醒。支持中文和 Mod Config Menu。</description>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </metadata>

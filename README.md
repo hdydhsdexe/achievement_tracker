@@ -15,7 +15,7 @@
 
 ## 中文字体
 
-Mod 内置由 Noto Sans SC 生成的精简中文位图字体，包含当前界面和成就条件实际使用的字形。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。字体资源遵循 SIL Open Font License 1.1，许可证位于 `resources/font/OFL.txt`。
+Mod 默认使用由 LanaPixel 生成的精简中文位图字体，并保留 Noto Sans SC 字体作为加载失败时的后备；两者都只包含当前界面和成就条件实际使用的字形。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。字体资源遵循 SIL Open Font License 1.1，许可证分别位于 `resources/font/LANAPIXEL_OFL.txt` 和 `resources/font/OFL.txt`。
 
 ## 安装
 
@@ -28,4 +28,4 @@ Mod 内置由 Noto Sans SC 生成的精简中文位图字体，包含当前界�
 ## 开发
 
 - `npm.cmd test`：运行零依赖合约测试。
-- `tools/generate_font.py`：从 Lua 中文文本重新生成精简字体；新增中文文案后应重新运行。
+- `tools/generate_font.py`：从 Lua 中文文本重新生成精简字体；可通过 `--name` 指定独立输出名，新增中文文案后应重新运行。

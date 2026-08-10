@@ -1,7 +1,17 @@
 local Sensors = {}
 
 function Sensors.newRun()
-  return { disqualified={}, observedPickups={} }
+  return { disqualified={}, observedPickups={}, failedGoals={}, progress={ gulp=0, items=0 } }
+end
+
+function Sensors.normalizeRun(run)
+  run.disqualified = run.disqualified or {}
+  run.observedPickups = run.observedPickups or {}
+  run.failedGoals = run.failedGoals or {}
+  run.progress = run.progress or {}
+  run.progress.gulp = tonumber(run.progress.gulp) or 0
+  run.progress.items = tonumber(run.progress.items) or 0
+  return run
 end
 
 function Sensors.initialize(run, player)
@@ -9,7 +19,23 @@ function Sensors.initialize(run, player)
 end
 
 function Sensors.update(run, player)
-  -- Per-frame player sensors are intentionally kept separate from pickup events.
+  Sensors.normalizeRun(run)
+  if player.GetCollectibleCount then
+    run.progress.items = math.max(run.progress.items, player:GetCollectibleCount())
+  end
+end
+
+function Sensors.onUsePill(run, pillEffect)
+  Sensors.normalizeRun(run)
+  if PillEffect and pillEffect == PillEffect.PILLEFFECT_GULP then
+    run.progress.gulp = run.progress.gulp + 1
+  end
+end
+
+function Sensors.progress(goal, run)
+  Sensors.normalizeRun(run)
+  if not goal.progressKey or not goal.target then return nil end
+  return math.min(goal.target, math.max(0, tonumber(run.progress[goal.progressKey]) or 0)), goal.target
 end
 
 function Sensors.onPickupUpdate(run, pickup)
