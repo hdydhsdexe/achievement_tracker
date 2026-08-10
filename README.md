@@ -24,6 +24,8 @@ The vanilla Repentance Lua API cannot reliably inspect every vanilla achievement
 
 中文通过游戏自带的 `font/lanapixel.fnt` Unicode 字体渲染，无需附带或下载第三方字体。
 
+在 Repentance+ 中，Mod 会依次尝试官中资源包、Rep+ 公共字体路径，以及已安装的 External Item Descriptions 中文字体。EID 只是字体后备来源，并非硬依赖；若所有中文字体均不可用，界面会安全回退为英文。
+
 ## Development
 
 Run `npm.cmd test` on Windows. Node is used only for contract tests and is not required by the game.

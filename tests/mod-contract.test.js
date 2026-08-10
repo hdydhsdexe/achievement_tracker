@@ -76,6 +76,13 @@ test("Chinese renderer loads the DLC3 Chinese font and falls back when loading f
   assert.match(text, /function Text\.resolveLanguage/);
 });
 
+test("Repentance Plus can load the optional EID Chinese font from Workshop or manual folders", () => {
+  const text = read("scripts/ui/text.lua");
+  assert.match(text, /external item descriptions_836319872\/resources\/font\/eid_cn_default\.fnt/);
+  assert.match(text, /external item descriptions\/resources\/font\/eid_cn_default\.fnt/);
+  assert.match(text, /for _, fontPath in ipairs/);
+});
+
 test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {
   const mcm = read("scripts/integrations/mcm.lua");
   assert.match(mcm, /Language/);

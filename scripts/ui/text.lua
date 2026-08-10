@@ -2,10 +2,17 @@ local Text = {}
 local latinFont = Font()
 local cjkFont = Font()
 latinFont:Load("font/terminus8.fnt")
-local cjkLoaded = cjkFont:Load("resources-dlc3.zh/font/lanapixel.fnt")
-if not cjkLoaded then
-  -- Repentance+ installations may expose the language font through the common font directory.
-  cjkLoaded = cjkFont:Load("font/lanapixel.fnt")
+local cjkLoaded = false
+local cjkFontPaths = {
+  -- Repentance Chinese resource pack and Repentance+ Chinese-patch installations.
+  "resources-dlc3.zh/font/lanapixel.fnt",
+  "font/lanapixel.fnt",
+  -- Repentance+ removes the language selector. EID provides a widely-used optional CJK fallback.
+  "../mods/external item descriptions_836319872/resources/font/eid_cn_default.fnt",
+  "../mods/external item descriptions/resources/font/eid_cn_default.fnt"
+}
+for _, fontPath in ipairs(cjkFontPaths) do
+  if not cjkLoaded then cjkLoaded = cjkFont:Load(fontPath) end
 end
 
 local ui = {
