@@ -1,31 +1,31 @@
-# Achievement Tracker
+# Achievement Tracker / 成就条件追踪器
 
-一个用于 **The Binding of Isaac: Repentance** 的局内成就条件追踪器。
+适用于 **The Binding of Isaac: Repentance / Repentance+** 的局内成就条件追踪器。
 
-## Current MVP
+## 功能
 
-- HUD 持续显示成就的具体完成条件，而不是只显示成就名称。
-- 支持中文与英文；新安装默认使用中文，并使用游戏内置 CJK 字体。
-- Select up to three goals from an in-run menu (`F3`).
-- Toggle the HUD with `F4`.
-- Persist tracked goals per Isaac save slot.
-- Receive deadline reminders for Boss Rush, Hush, and Zip!.
-- Receive a warning when the run no longer qualifies for It's the Key.
-- Browse 18 initial timed, route, completion, counter, and streak goals.
-- 安装 Mod Config Menu Pure 后，可调整语言、字体大小、HUD 横向/纵向位置、显示状态和追踪目标；该 Mod 仍为可选依赖。
+- HUD 持续显示成就的具体完成条件，而非仅显示成就名称。
+- `F3` 打开局内目标选择菜单，最多同时追踪三个目标。
+- `F4` 显示或隐藏 HUD。
+- 支持中文和英文，新安装默认使用中文。
+- 设置和当前局限制条件按以撒存档槽持久保存。
+- 为 Boss Rush、Hush、Zip! 提供时间提醒。
+- 检测 It's the Key 的心、硬币和炸弹拾取限制。
+- 可选适配 Mod Config Menu Pure，可调整语言、字体大小、HUD 位置和追踪目标。
 
-## Installation
+## 中文字体
 
-Place this directory under `The Binding of Isaac Rebirth/mods/achievement_tracker`, enable it in the Mods menu, then start a run. The base mod has no required dependencies.
+Mod 内置由 Noto Sans SC 生成的精简中文位图字体，包含当前界面和成就条件实际使用的字形。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。字体资源遵循 SIL Open Font License 1.1，许可证位于 `resources/font/OFL.txt`。
 
-## Important limitations
+## 安装
 
-The vanilla Repentance Lua API cannot reliably inspect every vanilla achievement or completion mark. Goals without an observable vanilla callback are guidance-only in this MVP. Automatic filtering of already-unlocked achievements is planned as an optional REPENTOGON/Repentance+ integration.
+将本目录放入 `The Binding of Isaac Rebirth/mods/achievement_tracker`，在 Mods 菜单启用后开始一局游戏。
 
-中文通过游戏自带的 `font/lanapixel.fnt` Unicode 字体渲染，无需附带或下载第三方字体。
+## 已知限制
 
-在 Repentance+ 中，Mod 会依次尝试官中资源包、Rep+ 公共字体路径，以及已安装的 External Item Descriptions 中文字体。EID 只是字体后备来源，并非硬依赖；若所有中文字体均不可用，界面会安全回退为英文。
+原版 Lua API 无法可靠读取所有原版成就或角色完成标记。当前部分目标只提供路线指引；自动排除已完成成就仍需要 Repentance+ 或 REPENTOGON 提供的接口。
 
-## Development
+## 开发
 
-Run `npm.cmd test` on Windows. Node is used only for contract tests and is not required by the game.
+- `npm.cmd test`：运行零依赖合约测试。
+- `tools/generate_font.py`：从 Lua 中文文本重新生成精简字体；新增中文文案后应重新运行。

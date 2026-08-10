@@ -33,6 +33,11 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 - RED: `npm.cmd test` — 10 passed, 1 failed because Repentance+ installations without a mounted Chinese language pack had no compatible external CJK font path.
 - GREEN: `npm.cmd test` — 11 passed. The loader now tries the EID Simplified Chinese font in both Workshop and manual-install folder layouts after the two game-resource paths.
 
+### Self-contained reduced Chinese font
+
+- RED: `npm.cmd test` — 10 passed, 1 failed because the renderer still referenced EID and no bundled font descriptor, texture, or license existed.
+- GREEN: `npm.cmd test` — 11 passed. A 298-glyph binary BMFont generated from OFL-licensed Noto Sans SC is loaded from this mod's own absolute path and has no EID references.
+
 ## Test specification
 
 | # | Guarantee | Test | Type | Result |
@@ -47,7 +52,7 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 | 8 | Chinese text uses LanaPixel with UTF-8 scaled rendering | `tests/mod-contract.test.js` | rendering contract | PASS |
 | 9 | MCM exposes bounded language, font-size, X, and Y controls | `tests/mod-contract.test.js` | integration contract | PASS |
 | 10 | Chinese mode loads the DLC3 font and cannot select an unloaded font | `tests/mod-contract.test.js` | regression contract | PASS |
-| 11 | Repentance+ can use an installed EID Simplified Chinese font | `tests/mod-contract.test.js` | compatibility contract | PASS |
+| 11 | Chinese rendering is self-contained and ships its descriptor, texture, and license | `tests/mod-contract.test.js` | asset contract | PASS |
 
 ## Known gaps
 

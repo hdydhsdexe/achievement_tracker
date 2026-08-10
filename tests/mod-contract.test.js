@@ -61,26 +61,32 @@ test("menu and HUD are usable without optional Mod Config Menu", () => {
 test("HUD renders localized completion conditions with a scalable Unicode font", () => {
   const hud = read("scripts/ui/hud.lua");
   const text = read("scripts/ui/text.lua");
-  assert.match(text, /font\/lanapixel\.fnt/);
+  assert.match(text, /resources\/font\/achievement_zh\.fnt/);
   assert.match(text, /DrawStringScaledUTF8/);
   assert.match(hud, /text\.detail/);
   assert.doesNotMatch(hud, /"- "\s*\.\.\s*text\.name/);
   assert.match(hud, /fontScale/);
 });
 
-test("Chinese renderer loads the DLC3 Chinese font and falls back when loading fails", () => {
+test("Chinese renderer verifies the bundled font with IsLoaded and falls back safely", () => {
   const text = read("scripts/ui/text.lua");
-  assert.match(text, /resources-dlc3\.zh\/font\/lanapixel\.fnt/);
   assert.match(text, /cjkLoaded\s*=/);
+  assert.match(text, /:IsLoaded\(\)/);
   assert.match(text, /cjkLoaded\s*and\s*cjkFont\s*or\s*latinFont/);
   assert.match(text, /function Text\.resolveLanguage/);
 });
 
-test("Repentance Plus can load the optional EID Chinese font from Workshop or manual folders", () => {
+test("Chinese rendering is self-contained and does not reference EID", () => {
   const text = read("scripts/ui/text.lua");
-  assert.match(text, /external item descriptions_836319872\/resources\/font\/eid_cn_default\.fnt/);
-  assert.match(text, /external item descriptions\/resources\/font\/eid_cn_default\.fnt/);
-  assert.match(text, /for _, fontPath in ipairs/);
+  const fontPath = path.join(root, "resources/font/achievement_zh.fnt");
+  const licensePath = path.join(root, "resources/font/OFL.txt");
+  assert.doesNotMatch(text, /external item descriptions/i);
+  assert.match(text, /resources\/font\/achievement_zh\.fnt/);
+  assert.match(text, /GetCurrentModPath/);
+  assert.equal(fs.existsSync(fontPath), true, "bundled Chinese .fnt must exist");
+  assert.equal(fs.existsSync(licensePath), true, "font license must ship with the mod");
+  const pages = fs.readdirSync(path.join(root, "resources/font")).filter((file) => /^achievement_zh_\d+\.png$/.test(file));
+  assert.ok(pages.length > 0, "font must include at least one texture page");
 });
 
 test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {
