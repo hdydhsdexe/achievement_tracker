@@ -3,6 +3,6 @@
   <name>Achievement Tracker</name>
   <directory>achievement_tracker</directory>
   <id>achievement-tracker-local</id>
-  <description>Track achievement goals and receive contextual reminders during a run.</description>
-  <version>0.1.0</version>
+  <description>在游戏中持续显示成就完成条件并提供临界提醒。支持中文和 Mod Config Menu。</description>
+  <version>0.2.0</version>
 </metadata>

@@ -3,11 +3,11 @@ local Storage = {}
 
 local function defaults()
   return {
-    schemaVersion = 1,
-    language = "en",
+    schemaVersion = 2,
+    language = "zh",
     maxTracked = 3,
     tracked = { "boss_rush", "hush" },
-    hud = { x = 18, y = 82, visible = true },
+    hud = { x = 18, y = 82, fontScale = 1, visible = true },
     manuallyCompleted = {},
     activeRun = nil
   }
@@ -24,6 +24,7 @@ function Storage.load(mod)
   if type(decoded.hud) == "table" then
     data.hud.x = tonumber(decoded.hud.x) or data.hud.x
     data.hud.y = tonumber(decoded.hud.y) or data.hud.y
+    data.hud.fontScale = math.max(0.5, math.min(2, tonumber(decoded.hud.fontScale) or data.hud.fontScale))
     data.hud.visible = decoded.hud.visible ~= false
   end
   if type(decoded.manuallyCompleted) == "table" then data.manuallyCompleted = decoded.manuallyCompleted end
@@ -32,7 +33,7 @@ function Storage.load(mod)
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 1
+  data.schemaVersion = 2
   mod:SaveData(json.encode(data))
 end
 

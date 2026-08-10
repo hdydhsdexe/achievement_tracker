@@ -54,8 +54,29 @@ test("menu and HUD are usable without optional Mod Config Menu", () => {
   const mcm = read("scripts/integrations/mcm.lua");
   assert.match(menu, /Input\.IsButtonTriggered/);
   assert.match(menu, /Tracker\.toggle/);
-  assert.match(hud, /Isaac\.RenderText/);
+  assert.match(hud, /Text\.draw/);
   assert.match(mcm, /ModConfigMenu\s*==\s*nil/);
+});
+
+test("HUD renders localized completion conditions with a scalable Unicode font", () => {
+  const hud = read("scripts/ui/hud.lua");
+  const text = read("scripts/ui/text.lua");
+  assert.match(text, /font\/lanapixel\.fnt/);
+  assert.match(text, /DrawStringScaledUTF8/);
+  assert.match(hud, /text\.detail/);
+  assert.doesNotMatch(hud, /"- "\s*\.\.\s*text\.name/);
+  assert.match(hud, /fontScale/);
+});
+
+test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {
+  const mcm = read("scripts/integrations/mcm.lua");
+  assert.match(mcm, /Language/);
+  assert.match(mcm, /Font size/);
+  assert.match(mcm, /HUD X/);
+  assert.match(mcm, /HUD Y/);
+  assert.match(mcm, /Minimum/);
+  assert.match(mcm, /Maximum/);
+  assert.match(mcm, /ModifyBy/);
 });
 
 test("persistent settings are loaded defensively and saved as JSON", () => {
@@ -65,4 +86,5 @@ test("persistent settings are loaded defensively and saved as JSON", () => {
   assert.match(storage, /json\.encode/);
   assert.match(storage, /schemaVersion/);
   assert.match(storage, /activeRun/);
+  assert.match(storage, /fontScale/);
 });

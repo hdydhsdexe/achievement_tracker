@@ -17,6 +17,11 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 - GREEN: `npm.cmd test` — 7 passed, 0 failed after implementing the first vertical slice and the collected-pickup sensor.
 - Coverage command: `npm.cmd run test:coverage` — 7 passed. The reported 100% covers the JavaScript contract-test harness only; it must not be interpreted as Lua statement coverage.
 
+### Chinese HUD and MCM display settings
+
+- RED: `npm.cmd test` — 6 passed, 3 failed because the HUD had no Unicode font/condition rendering, MCM had no language/size/position controls, and storage had no `fontScale` field.
+- GREEN: the HUD and in-run menu now share the built-in LanaPixel Unicode renderer, persistent rows show localized `detail` conditions, and MCM exposes bounded language, scale, X, and Y settings.
+
 ## Test specification
 
 | # | Guarantee | Test | Type | Result |
@@ -28,6 +33,8 @@ The journeys were derived from the user-approved MVP plan on 2026-08-10. No exte
 | 5 | Restriction tracking reacts to the pickup Collect animation | `tests/mod-contract.test.js` | API contract | PASS |
 | 6 | In-run menu/HUD work independently of optional MCM | `tests/mod-contract.test.js` | integration contract | PASS |
 | 7 | Save data uses defensive JSON decoding and a schema version | `tests/mod-contract.test.js` | storage contract | PASS |
+| 8 | Chinese text uses LanaPixel with UTF-8 scaled rendering | `tests/mod-contract.test.js` | rendering contract | PASS |
+| 9 | MCM exposes bounded language, font-size, X, and Y controls | `tests/mod-contract.test.js` | integration contract | PASS |
 
 ## Known gaps
 
