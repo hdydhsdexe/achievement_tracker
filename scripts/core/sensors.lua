@@ -1,13 +1,14 @@
 local Sensors = {}
 
-function Sensors.newRun()
-  return { disqualified={}, observedPickups={}, failedGoals={}, progress={ gulp=0, items=0 } }
+function Sensors.newRun(startSeed)
+  return { startSeed=startSeed, disqualified={}, observedPickups={}, failedGoals={}, completedGoals={}, progress={ gulp=0, items=0 } }
 end
 
 function Sensors.normalizeRun(run)
   run.disqualified = run.disqualified or {}
   run.observedPickups = run.observedPickups or {}
   run.failedGoals = run.failedGoals or {}
+  run.completedGoals = run.completedGoals or {}
   run.progress = run.progress or {}
   run.progress.gulp = tonumber(run.progress.gulp) or 0
   run.progress.items = tonumber(run.progress.items) or 0
@@ -22,6 +23,7 @@ function Sensors.update(run, player)
   Sensors.normalizeRun(run)
   if player.GetCollectibleCount then
     run.progress.items = math.max(run.progress.items, player:GetCollectibleCount())
+    if run.progress.items >= 50 then run.completedGoals.u_broke_it = true end
   end
 end
 
@@ -29,6 +31,7 @@ function Sensors.onUsePill(run, pillEffect)
   Sensors.normalizeRun(run)
   if PillEffect and pillEffect == PillEffect.PILLEFFECT_GULP then
     run.progress.gulp = run.progress.gulp + 1
+    if run.progress.gulp >= 5 then run.completedGoals.marbles = true end
   end
 end
 
@@ -41,7 +44,9 @@ end
 function Sensors.onPickupUpdate(run, pickup)
   local sprite = pickup:GetSprite()
   if not sprite:IsPlaying("Collect") then return end
-  local seed = pickup.InitSeed
+  -- InitSeed can be a very large integer. Numeric keys make the game's JSON
+  -- encoder treat this table as a gigantic sparse array and exhaust memory.
+  local seed = tostring(pickup.InitSeed)
   if run.observedPickups[seed] then return end
   run.observedPickups[seed] = true
   if pickup.Variant == PickupVariant.PICKUP_HEART then run.disqualified.heart = true end

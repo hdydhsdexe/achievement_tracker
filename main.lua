@@ -9,6 +9,7 @@ local Menu = require("scripts.ui.menu")
 local Sensors = require("scripts.core.sensors")
 local Storage = require("scripts.core.storage")
 local Tracker = require("scripts.core.tracker")
+local Unlocks = require("scripts.core.unlocks")
 
 local State = {
   settings = nil,
@@ -17,7 +18,8 @@ local State = {
   run = Sensors.newRun(),
   menu = Menu.new(),
   activeWarning = nil,
-  lastEvaluation = -1
+  lastEvaluation = -1,
+  profileCompleted = {}
 }
 
 local function save()
@@ -34,17 +36,25 @@ end
 
 function AchievementTracker:onGameStarted(isContinued)
   load()
-  if isContinued and type(State.settings.activeRun) == "table" then
-    State.run = State.settings.activeRun
+  local startSeed = GameInstance:GetSeeds():GetStartSeed()
+  local savedRun = State.settings.activeRun
+  local sameSavedRun = type(savedRun) == "table"
+    and savedRun.startSeed ~= nil
+    and savedRun.startSeed == startSeed
+  if type(savedRun) == "table" and (isContinued or sameSavedRun) then
+    State.run = savedRun
     Sensors.normalizeRun(State.run)
+    State.run.startSeed = startSeed
   else
-    State.run = Sensors.newRun()
+    State.run = Sensors.newRun(startSeed)
   end
   Evaluator.reset(State.evaluator)
   State.activeWarning = nil
+  State.lastEvaluation = -1
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
-  if not isContinued then save() end
+  State.profileCompleted = Unlocks.scan(Catalog.goals)
+  save()
   Mcm.setup(State, save)
 end
 
@@ -88,7 +98,10 @@ function AchievementTracker:onUsePill(pillEffect)
 end
 
 function AchievementTracker:onExit(shouldSave)
-  if shouldSave then save() end
+  -- MC_PRE_GAME_EXIT's flag is not consistent across every way of leaving a
+  -- run. Always persist our seed-bound run state; a different seed is reset on
+  -- the next MC_POST_GAME_STARTED.
+  save()
 end
 
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, AchievementTracker.onGameStarted)

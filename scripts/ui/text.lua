@@ -1,8 +1,5 @@
 local Text = {}
-local latinFont = Font()
-local lanaPixelFont = Font()
-local fallbackCjkFont = Font()
-latinFont:Load("font/terminus8.fnt", "")
+local bundledFont = Font()
 
 function Text.GetCurrentModPath()
   if debug and debug.getinfo then
@@ -28,25 +25,8 @@ function Text.GetCurrentModPath()
   return "../mods/achievement_tracker/"
 end
 
-local function tryLoadFont(font, path)
-  font:Load(path, "")
-  return font:IsLoaded()
-end
-
 local modPath = Text.GetCurrentModPath()
-local lanaPixelLoaded = tryLoadFont(lanaPixelFont, modPath .. "resources/font/achievement_lanapixel.fnt")
-if not lanaPixelLoaded then
-  lanaPixelLoaded = tryLoadFont(lanaPixelFont, "../mods/achievement_tracker/resources/font/achievement_lanapixel.fnt")
-end
-local fallbackCjkLoaded = false
-if not lanaPixelLoaded then
-  fallbackCjkLoaded = tryLoadFont(fallbackCjkFont, modPath .. "resources/font/achievement_zh.fnt")
-  if not fallbackCjkLoaded then
-    fallbackCjkLoaded = tryLoadFont(fallbackCjkFont, "../mods/achievement_tracker/resources/font/achievement_zh.fnt")
-  end
-end
-local cjkLoaded = lanaPixelLoaded or fallbackCjkLoaded
-local cjkFont = lanaPixelLoaded and lanaPixelFont or fallbackCjkFont
+bundledFont:Load(modPath .. "resources/font/achievement_lanapixel.fnt", "")
 
 local ui = {
   zh = {
@@ -64,19 +44,12 @@ local ui = {
 function Text.labels(language) return ui[language] or ui.en end
 
 function Text.resolveLanguage(language)
-  if language == "zh" and not cjkLoaded then return "en" end
   return language
 end
 
 function Text.draw(value, x, y, scale, color, language, boxWidth, center)
-  local font = language == "zh" and cjkLoaded and cjkFont or latinFont
   local tint = color or KColor(1, 1, 1, 1)
-  font:DrawStringScaledUTF8(tostring(value), x, y, scale, scale, tint, boxWidth or 0, center == true)
-end
-
-function Text.width(value, scale, language)
-  local font = language == "zh" and cjkLoaded and cjkFont or latinFont
-  return font:GetStringWidthUTF8(tostring(value)) * (scale or 1)
+  bundledFont:DrawStringScaledUTF8(tostring(value), x, y, scale, scale, tint, boxWidth or 0, center == true)
 end
 
 return Text

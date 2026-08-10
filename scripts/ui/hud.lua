@@ -1,6 +1,15 @@
 local Catalog = require("scripts.data.goals")
 local Text = require("scripts.ui.text")
+local Sensors = require("scripts.core.sensors")
 local Hud = {}
+
+local function drawProgress(x, y, scale, value, target, color, language)
+  local ratio = target > 0 and math.min(1, value / target) or 0
+  local segments = 10
+  local filled = math.floor(ratio * segments + 0.5)
+  local bar = "[" .. string.rep("#", filled) .. string.rep("-", segments - filled) .. "]"
+  Text.draw(bar, x, y, scale, color, language)
+end
 
 local function formatTime(seconds)
   local value = math.max(0, seconds or 0)
@@ -22,9 +31,21 @@ function Hud.render(state)
     if goal then
       local text = Catalog.text(goal, language)
       local suffix = goal.deadline and ("  < " .. formatTime(goal.deadline)) or ""
+      local progress, target = Sensors.progress(goal, state.run)
+      if progress then suffix = suffix .. string.format("  (%d/%d)", progress, target) end
+      local failed = state.run.failedGoals and state.run.failedGoals[goal.id]
+      local completed = (state.profileCompleted and state.profileCompleted[goal.id])
+        or (state.run.completedGoals and state.run.completedGoals[goal.id])
+      local color = failed and KColor(1, 0.25, 0.25, 1)
+        or completed and KColor(0.25, 1, 0.35, 1)
+        or KColor(1, 1, 1, 1)
       -- The persistent HUD intentionally shows the completion condition, not the achievement name.
-      Text.draw("- " .. text.detail .. suffix, x, y, scale, KColor(1, 1, 1, 1), language)
+      Text.draw("- " .. text.detail .. suffix, x, y, scale, color, language)
       y = y + lineHeight
+      if progress then
+        drawProgress(x + 8, y - 2, scale * 0.8, progress, target, color, language)
+        y = y + math.max(6, math.floor(8 * scale))
+      end
     end
   end
   Text.draw(labels.controls, x, y + 2, scale * 0.8, KColor(0.65, 0.65, 0.65, 1), language)
