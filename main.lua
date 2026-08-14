@@ -53,7 +53,16 @@ function AchievementTracker:onGameStarted(isContinued)
   State.lastEvaluation = -1
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
-  State.profileCompleted = Unlocks.scan(Catalog.goals)
+  State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted)
+  for index = 0, GameInstance:GetNumPlayers() - 1 do
+    local currentPlayer = Isaac.GetPlayer(index)
+    Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
+      "player", currentPlayer:GetPlayerType())
+  end
+  Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
+    "stage", GameInstance:GetLevel():GetStage())
+  Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
+    "stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
   save()
   Mcm.setup(State, save)
 end
@@ -81,12 +90,34 @@ function AchievementTracker:onUpdate()
   end
 end
 
+function AchievementTracker:onPreUpdate()
+  if State.settings and Menu.shouldPause(State, GameInstance) then return true end
+end
+
+function AchievementTracker:onPrePauseScreenRender()
+  if State.settings and State.menu and State.menu.open then return false end
+end
+
+function AchievementTracker:onInputAction(entity, inputHook, buttonAction)
+  if State.settings and State.menu and State.menu.open
+    and (buttonAction == ButtonAction.ACTION_PAUSE
+      or buttonAction == ButtonAction.ACTION_MAP) then return false end
+end
+
+function AchievementTracker:onPostHudRender()
+  if State.settings then Menu.render(State) end
+end
+
 function AchievementTracker:onRender()
   if not State.settings then return end
   Menu.update(State, save)
-  Hud.render(State)
-  Hud.renderWarning(State)
-  Menu.render(State)
+  if not State.menu.open then
+    Hud.render(State)
+    Hud.renderWarning(State)
+  end
+  if not ModCallbacks.MC_POST_HUD_RENDER then
+    Menu.render(State)
+  end
 end
 
 function AchievementTracker:onPickupUpdate(pickup)
@@ -95,6 +126,25 @@ end
 
 function AchievementTracker:onUsePill(pillEffect)
   if State.settings then Sensors.onUsePill(State.run, pillEffect) end
+end
+
+local function observeAndSave(kind, value, variant)
+  if not State.settings then return end
+  if Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
+    kind, value, variant) then save() end
+end
+
+function AchievementTracker:onPlayerInit(player)
+  observeAndSave("player", player:GetPlayerType())
+end
+
+function AchievementTracker:onNewLevel()
+  observeAndSave("stage", GameInstance:GetLevel():GetStage())
+  observeAndSave("stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
+end
+
+function AchievementTracker:onNpcInit(npc)
+  if npc:IsBoss() then observeAndSave("boss", npc.Type, npc.Variant) end
 end
 
 function AchievementTracker:onExit(shouldSave)
@@ -109,6 +159,23 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_UPDATE, AchievementTracker.o
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_RENDER, AchievementTracker.onRender)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, AchievementTracker.onPickupUpdate)
 AchievementTracker:AddCallback(ModCallbacks.MC_USE_PILL, AchievementTracker.onUsePill)
+AchievementTracker:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, AchievementTracker.onPlayerInit)
+AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, AchievementTracker.onNewLevel)
+AchievementTracker:AddCallback(ModCallbacks.MC_POST_NPC_INIT, AchievementTracker.onNpcInit)
 AchievementTracker:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, AchievementTracker.onExit)
+AchievementTracker:AddCallback(ModCallbacks.MC_INPUT_ACTION, AchievementTracker.onInputAction)
+-- MC_PRE_UPDATE is provided by REPENTOGON. Vanilla Repentance keeps the menu
+-- usable in real time instead of turning the script extender into a hard dependency.
+if ModCallbacks.MC_PRE_UPDATE then
+  AchievementTracker:AddCallback(ModCallbacks.MC_PRE_UPDATE, AchievementTracker.onPreUpdate)
+end
+if ModCallbacks.MC_PRE_PAUSE_SCREEN_RENDER then
+  AchievementTracker:AddCallback(ModCallbacks.MC_PRE_PAUSE_SCREEN_RENDER,
+    AchievementTracker.onPrePauseScreenRender)
+end
+if ModCallbacks.MC_POST_HUD_RENDER then
+  AchievementTracker:AddCallback(ModCallbacks.MC_POST_HUD_RENDER,
+    AchievementTracker.onPostHudRender)
+end
 
 return AchievementTracker
