@@ -26,19 +26,15 @@ Mod 使用由 LanaPixel 生成的自带中文位图字体，只包含当前界�
 
 ## 从游戏存档导入准确成就状态
 
-普通 Mod 没有读取任意本地文件的权限。本项目提供纯前端导入器，在浏览器本地解析游戏的 `persistentgamedata*.dat`，再生成 Achievement Tracker 自己的 `saveN.dat`；文件不会上传，游戏原始存档也不会被修改。
+普通 Mod 没有读取任意本地文件的权限。Windows 用户完全关闭游戏后，双击 Mod 根目录的 `一键导入成就.cmd` 即可。脚本不需要管理员权限、Node.js、REPENTOGON 或网络，只读取当前用户 Documents 下的本地备份，并一次处理最新批次中实际存在的全部槽位。
 
-1. 完全关闭游戏，并备份 `The Binding of Isaac Rebirth/data/achievement_tracker/saveN.dat`。
-2. 双击打开 `tools/save_importer/index.html`。
-3. 选择要导入的游戏存档。关闭 Steam Cloud 时通常位于：
-   - `%USERPROFILE%\Documents\My Games\Binding of Isaac Repentance`
-   - `%USERPROFILE%\Documents\My Games\Binding of Isaac Repentance+`
-4. 使用 Steam Cloud 时，选择 Steam `userdata/<Steam ID>/250900/remote` 中的 `rep_persistentgamedataN.dat`（Repentance）或 `rep+persistentgamedataN.dat`（Repentance+）；也可以选择带日期前缀的备份文件。
-5. 为保留语言、HUD 位置和追踪目标，选择对应槽位现有的 `data/achievement_tracker/saveN.dat`。首次使用时可以不选，导入器会创建最小的新文件。
-6. 下载合并后的 `saveN.dat`，确认 `N` 与游戏存档槽一致，再复制到 `The Binding of Isaac Rebirth/data/achievement_tracker` 覆盖同名文件。
-7. 重新启动游戏。导入快照中的 `achievementId` 状态优先于奖励可用性和旧观察记录。
+脚本识别 Repentance 的 `%Documents%\My Games\Binding of Isaac\Repentance\YYYYMMDD.rep_persistentgamedataN.dat`、Repentance+ 的 `%Documents%\My Games\Binding of Isaac Repentance+\save_backups\YYYYMMDD.rep+persistentgamedataN.dat`，并兼容旧版 Repentance 平铺目录 `%Documents%\My Games\Binding of Isaac Repentance`。各目录、版本和日期分别构成一个不可拆分的存档集合；日期批次按 `YYYYMMDD`、无日期当前文件按最后写入时间选择全局唯一最新集合，不会用旧批次补齐缺失槽位。最新时间并列且内容不同会安全停止，内容相同的镜像则稳定去重。自动流程不会扫描 Steam 注册表、`userdata` 或 Cloud `remote`。
 
-导入是离线快照：本局中新解锁不会自动写入快照。需要刷新时，关闭游戏并重新执行以上流程。导入器当前支持带 `ISAACNGSAVE09R  ` 文件头的 Repentance / Repentance+ 存档。
+所有游戏存档和现有 Mod JSON 会先整批验证。旧 `saveN.dat` 自动备份至 `The Binding of Isaac Rebirth/data/achievement_tracker/backups/<时间戳>`，随后原子替换对应槽位；缺失槽位保持不变，失败时自动回滚。脚本不会修改游戏原始存档。可在 PowerShell 中运行 `tools/save_importer/one-click-import.ps1 -DryRun`，只查看预计来源、槽位和解锁数量，即使游戏正在运行也不会写文件。
+
+需要手动选择文件、跨环境操作或排查自动发现问题时，可双击 `tools/save_importer/index.html` 使用原有本地网页导入器。它支持 Documents 中的 `persistentgamedataN.dat`、Steam Cloud 中的 `rep_persistentgamedataN.dat` / `rep+persistentgamedataN.dat` 以及日期前缀备份；选择对应的现有 Mod `saveN.dat` 后下载合并文件，再复制回 `data/achievement_tracker`。所有解析均在本机完成，不会上传文件。
+
+导入是离线快照：本局中新解锁不会自动写入快照。需要刷新时，关闭游戏并再次双击启动器。若要恢复，关闭游戏后将最近备份目录中的 `saveN.dat` 复制回 `data/achievement_tracker`。导入器当前支持带 `ISAACNGSAVE09R  ` 文件头的 Repentance / Repentance+ 存档。
 
 ## 已知限制
 
@@ -47,6 +43,7 @@ Mod 使用由 LanaPixel 生成的自带中文位图字体，只包含当前界�
 ## 开发
 
 - `npm.cmd test`：运行零依赖合约测试。
+- `一键导入成就.cmd`：Windows 一键发现、备份并导入全部有效存档槽。
 - `tools/save_importer/index.html`：离线解析游戏存档并生成 Achievement Tracker 导入文件。
 - `tools/generate_font.py`：从 Lua 中文文本重新生成精简字体；可通过 `--name` 指定独立输出名，新增中文文案后应重新运行。
 - `tools/generate_reward_type_icons.py`：重新生成非标准奖励的五格像素图集。
