@@ -53,16 +53,18 @@ function AchievementTracker:onGameStarted(isContinued)
   State.lastEvaluation = -1
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
-  State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted)
+  State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted,
+    State.settings.achievementImport)
   for index = 0, GameInstance:GetNumPlayers() - 1 do
     local currentPlayer = Isaac.GetPlayer(index)
     Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
-      "player", currentPlayer:GetPlayerType())
+      "player", currentPlayer:GetPlayerType(), nil, State.settings.achievementImport)
   end
   Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
-    "stage", GameInstance:GetLevel():GetStage())
+    "stage", GameInstance:GetLevel():GetStage(), nil, State.settings.achievementImport)
   Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
-    "stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
+    "stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType(),
+    State.settings.achievementImport)
   save()
   Mcm.setup(State, save)
 end
@@ -99,9 +101,10 @@ function AchievementTracker:onPrePauseScreenRender()
 end
 
 function AchievementTracker:onInputAction(entity, inputHook, buttonAction)
-  if State.settings and State.menu and State.menu.open
-    and (buttonAction == ButtonAction.ACTION_PAUSE
-      or buttonAction == ButtonAction.ACTION_MAP) then return false end
+  if State.settings and Menu.shouldBlockInput(State, entity, inputHook, buttonAction) then
+    if inputHook == InputHook.GET_ACTION_VALUE then return 0 end
+    return false
+  end
 end
 
 function AchievementTracker:onPostHudRender()
@@ -131,7 +134,7 @@ end
 local function observeAndSave(kind, value, variant)
   if not State.settings then return end
   if Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
-    kind, value, variant) then save() end
+    kind, value, variant, State.settings.achievementImport) then save() end
 end
 
 function AchievementTracker:onPlayerInit(player)

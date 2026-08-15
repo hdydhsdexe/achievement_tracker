@@ -42,9 +42,11 @@ local ui = {
     completionCondition = "完成条件", unlockReward = "解锁奖励",
     completed = "已完成", unconfirmed = "未确认", rewardId = "编号",
     availableAfterTransformation = "转换后可完成",
-    filterHint = "Tab 分类", pauseUnavailable = "当前环境无法暂停，游戏仍在运行",
+    filterHint = "Tab 分类  / 搜索", pauseUnavailable = "当前环境无法暂停，游戏仍在运行",
     multiplayerRealtime = "多人模式：游戏仍在运行", emptyFilter = "该分类暂无成就",
-    controlsMenu = "方向键选择  Enter/Space追踪  Esc关闭",
+    searchPrompt = "搜索", searchResults = "%d 个结果", emptySearch = "没有匹配的成就",
+    controlsMenu = "方向键选择  Enter/Space追踪  /搜索  Esc关闭",
+    controlsSearch = "输入英文/数字  Backspace删除  Enter完成  Esc清空",
     filterNames = { all="全部", collectible="道具", trinket="饰品", card="卡牌", other="其他" },
     rewardKinds = { collectible="道具", trinket="饰品", card="卡牌", character="角色", area="区域", challenge="挑战", feature="机制", other="其他" }
   },
@@ -55,9 +57,11 @@ local ui = {
     completionCondition = "CONDITION", unlockReward = "UNLOCKS",
     completed = "completed", unconfirmed = "unconfirmed", rewardId = "ID",
     availableAfterTransformation = "available after transformation",
-    filterHint = "Tab: filter", pauseUnavailable = "Pause unavailable; game is still running",
+    filterHint = "Tab filter  / search", pauseUnavailable = "Pause unavailable; game is still running",
     multiplayerRealtime = "Multiplayer: game is still running", emptyFilter = "No achievements in this category",
-    controlsMenu = "Arrows select  Enter/Space track  Esc close",
+    searchPrompt = "SEARCH", searchResults = "%d results", emptySearch = "No matching achievements",
+    controlsMenu = "Arrows select  Enter/Space track  / search  Esc close",
+    controlsSearch = "Type letters/numbers  Backspace delete  Enter done  Esc clear",
     filterNames = { all="All", collectible="Items", trinket="Trinkets", card="Cards", other="Other" },
     rewardKinds = { collectible="Item", trinket="Trinket", card="Card", character="Character", area="Area", challenge="Challenge", feature="Feature", other="Other" }
   }

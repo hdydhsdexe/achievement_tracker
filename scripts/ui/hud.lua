@@ -3,6 +3,12 @@ local Text = require("scripts.ui.text")
 local Sensors = require("scripts.core.sensors")
 local Hud = {}
 
+local HUD_TITLE = KColor(1.00, 0.94, 0.78, 1)
+local HUD_BODY = KColor(0.96, 0.86, 0.68, 1)
+local HUD_MUTED = KColor(0.72, 0.65, 0.56, 1)
+local HUD_COMPLETED = KColor(0.60, 1.00, 0.65, 1)
+local HUD_FAILED = KColor(1.00, 0.38, 0.34, 1)
+
 local function drawProgress(x, y, scale, value, target, color, language)
   local ratio = target > 0 and math.min(1, value / target) or 0
   local segments = 10
@@ -24,7 +30,7 @@ function Hud.render(state)
   local scale = settings.hud.fontScale
   local x, y = settings.hud.x, settings.hud.y
   local lineHeight = math.max(9, math.floor(12 * scale))
-  Text.draw(labels.title, x, y, scale, KColor(1, 0.85, 0.25, 1), language)
+  Text.draw(labels.title, x, y, scale, HUD_TITLE, language)
   y = y + lineHeight
   for _, id in ipairs(state.tracker.ids) do
     local goal = Catalog.get(id)
@@ -36,9 +42,9 @@ function Hud.render(state)
       local failed = state.run.failedGoals and state.run.failedGoals[goal.id]
       local completed = (state.profileCompleted and state.profileCompleted[goal.id])
         or (state.run.completedGoals and state.run.completedGoals[goal.id])
-      local color = failed and KColor(1, 0.25, 0.25, 1)
-        or completed and KColor(0.25, 1, 0.35, 1)
-        or KColor(1, 1, 1, 1)
+      local color = failed and HUD_FAILED
+        or completed and HUD_COMPLETED
+        or HUD_BODY
       -- The persistent HUD intentionally shows the completion condition, not the achievement name.
       Text.draw("- " .. text.detail .. suffix, x, y, scale, color, language)
       y = y + lineHeight
@@ -48,7 +54,7 @@ function Hud.render(state)
       end
     end
   end
-  Text.draw(labels.controls, x, y + 2, scale * 0.8, KColor(0.65, 0.65, 0.65, 1), language)
+  Text.draw(labels.controls, x, y + 2, scale * 0.8, HUD_MUTED, language)
 end
 
 function Hud.renderWarning(state)
@@ -62,7 +68,8 @@ function Hud.renderWarning(state)
   local message = warning.kind == "deadline"
     and (detail .. "：" .. formatTime(warning.remaining) .. " " .. labels.remaining)
     or (detail .. "：" .. labels.failed .. " (" .. tostring(warning.reason or warning.kind) .. ")")
-  Text.draw(message, 12, 42, state.settings.hud.fontScale, KColor(1, 0.35, 0.25, 1), language, Isaac.GetScreenWidth() - 24, true)
+  Text.draw(message, 12, 42, state.settings.hud.fontScale, HUD_FAILED, language,
+    Isaac.GetScreenWidth() - 24, true)
 end
 
 return Hud

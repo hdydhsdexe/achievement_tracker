@@ -48,7 +48,14 @@ function Rewards.display(goal)
   if reward and validKinds[reward.kind] then
     return { kind=reward.kind, id=Rewards.resolveId(reward), enum=reward.enum }
   end
-  return { kind=inferredKind(goal) }
+  local kind = inferredKind(goal)
+  local observation = goal and goal.observation
+  local id
+  if kind == "character" and observation and type(observation.values) == "table"
+    and type(observation.values[1]) == "number" then
+    id = observation.values[1]
+  end
+  return { kind=kind, id=id }
 end
 
 function Rewards.filterKind(reward)

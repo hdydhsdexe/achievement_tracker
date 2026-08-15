@@ -176,6 +176,62 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
   assert.ok(cardIds.every((id) => id >= 1 && id <= 97));
 });
 
+test("character rewards retain PlayerType ids for inferred and legacy unlock goals", () => {
+  const rewards = read("scripts/core/rewards.lua");
+  const goals = read("scripts/data/goals.lua");
+  const early = read("scripts/data/achievements_1_50.lua");
+  const repentance = read("scripts/data/achievements_401_500.lua");
+  assert.match(rewards, /kind == "character"[\s\S]*?observation\.values\[1\]/);
+  assert.match(rewards, /return \{ kind=kind, id=id \}/);
+  assert.match(early, /achievement_1=\{kind="player", values=\{1\}\}/);
+  assert.match(repentance, /a\(474,[^\n]+observe\("player",21\)/);
+  for (const [goalId, playerType] of [
+    ["forgotten_unlock", 16], ["lost_unlock", 10], ["keeper_unlock", 14]
+  ]) {
+    assert.match(goals, new RegExp(`id="${goalId}"[^\n]+reward=\\{kind="character",id=${playerType}\\}`));
+  }
+});
+
+test("character reward renderer loads cached vanilla portraits with safe fallbacks", () => {
+  const icons = read("scripts/ui/reward_icons.lua");
+  const actor = read("resources/gfx/ui/achievement_tracker_ui.anm2");
+  for (const [playerType, portrait] of [
+    [1, "magdalene"], [10, "thelost"], [16, "theforgotten"],
+    [19, "jacob"], [21, "isaac_b"], [30, "eden_b"], [37, "jacob_b"]
+  ]) {
+    assert.match(icons, new RegExp(`\\[${playerType}\\]="playerportrait_${portrait}\\.png"`));
+  }
+  const batches = fs.readdirSync(path.join(root, "scripts/data"))
+    .filter((file) => /^achievements_\d+_\d+\.lua$/.test(file))
+    .map((file) => read(`scripts/data/${file}`)).join("\n");
+  const observedPlayerTypes = new Set([
+    ...[...batches.matchAll(/observe\("player",(\d+)\)/g)].map((match) => Number(match[1])),
+    ...[...batches.matchAll(/kind="player",\s*values=\{(\d+)\}/g)].map((match) => Number(match[1]))
+  ]);
+  const mappedPlayerTypes = new Set(
+    [...icons.matchAll(/\[(\d+)\]="playerportrait_/g)].map((match) => Number(match[1]))
+  );
+  for (const playerType of observedPlayerTypes) {
+    assert.ok(mappedPlayerTypes.has(playerType), `missing portrait mapping for PlayerType ${playerType}`);
+  }
+  assert.match(icons, /local function characterSprite\(reward\)/);
+  assert.match(icons, /pcall\(function\(\)/);
+  assert.match(icons, /ReplaceSpritesheet\(4, "gfx\/ui\/stage\/" \.\. filename\)/);
+  assert.match(icons, /sprite:SetFrame\(tall and "RewardPortraitTall" or "RewardPortrait", 0\)/);
+  assert.match(icons, /TALL_CHARACTER_PORTRAITS = \{ \[37\]=true, \[39\]=true \}/);
+  assert.match(icons, /local function taintedEdenOverlay\(\)[\s\S]*?edenHead:Load\("gfx\/ui\/stage\/eden_b_head\.anm2", true\)/);
+  assert.match(icons, /edenHead:GetDefaultAnimation\(\)/);
+  assert.match(icons, /reward\.id == TAINTED_EDEN and taintedEdenOverlay\(\) or nil/);
+  assert.match(icons, /if reward\.kind == "character" then entry = characterSprite\(reward\) end/);
+  assert.match(icons, /if not entry and reward\.kind ~= "card" then entry = fallbackSprite\(reward\) end/);
+  assert.match(icons, /entry\.overlay:Render\(Vector\(x, y\)\)/);
+  assert.match(actor, /Animation Name="RewardPortrait"[\s\S]*?Width="144" Height="144"/);
+  assert.match(actor, /Animation Name="RewardPortraitTall"[\s\S]*?Width="144" Height="166"/);
+  const renderBody = icons.match(/function RewardIcons\.render[\s\S]*?\nend/)[0];
+  assert.doesNotMatch(renderBody, /LoadGraphics|characterSprite/,
+    "portrait loading must stay behind the cache rather than run every render call");
+});
+
 test("F3 visual menu filters rewards and renders condition-to-reward details", () => {
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
@@ -188,10 +244,12 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /labels\.unconfirmed/);
   assert.match(menu, /local INK = KColor/);
   assert.doesNotMatch(menu, /local WHITE = KColor/);
-  assert.match(menu, /local DARK_INK = KColor\(0\.169, 0\.129, 0\.110, 1\)/);
-  assert.match(menu, /local INK = KColor\(0\.33, 0\.24, 0\.19, 1\)/);
-  assert.match(menu, /local MUTED = KColor\(0\.36, 0\.27, 0\.21, 1\)/);
-  assert.match(menu, /local STAMP_INK = KColor\(0\.30, 0\.22, 0\.17, 1\)/);
+  assert.match(menu, /local DARK_INK = KColor\(1\.00, 0\.94, 0\.78, 1\)/);
+  assert.match(menu, /local INK = KColor\(0\.96, 0\.86, 0\.68, 1\)/);
+  assert.match(menu, /local MUTED = KColor\(0\.72, 0\.65, 0\.56, 1\)/);
+  assert.match(menu, /local STAMP_INK = KColor\(0\.78, 0\.86, 0\.62, 1\)/);
+  assert.match(menu, /local DIMMED_INK = KColor\(0\.62, 0\.60, 0\.58, 1\)/);
+  assert.match(menu, /local CONVERTIBLE_INK = KColor\(1\.00, 0\.72, 0\.30, 1\)/);
   assert.doesNotMatch(menu, /local (?:GREEN|BLUE|ACCENT) = KColor/);
   assert.match(menu, /Game\(\):IsPaused\(\)/);
   assert.match(menu, /MC_PRE_PAUSE_SCREEN_RENDER/);
@@ -218,6 +276,59 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.doesNotMatch(menu, /menuScale \* 0\.(?:64|68|72|76|82|84|88|9)/);
 });
 
+test("catalog fuzzy search indexes bilingual copy and reward metadata with scores", () => {
+  const goals = read("scripts/data/goals.lua");
+  assert.match(goals, /local function normalizeSearch/);
+  assert.match(goals, /local function subsequenceScore/);
+  assert.match(goals, /goal\.zh\.name/);
+  assert.match(goals, /goal\.en\.name/);
+  assert.match(goals, /goal\.zh\.detail/);
+  assert.match(goals, /goal\.en\.detail/);
+  assert.match(goals, /reward\.kind/);
+  assert.match(goals, /reward\.id/);
+  assert.match(goals, /reward\.enum/);
+  assert.match(goals, /function Catalog\.search\(query\)/);
+  assert.match(goals, /score\s*=\s*totalScore/);
+  assert.match(goals, /table\.sort\(results/);
+});
+
+test("F3 search uses slash without Ctrl or F and combines with category filtering", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const labels = read("scripts/ui/text.lua");
+  const readme = read("README.md");
+  const evidence = read("docs/testing/f3-fuzzy-search.tdd.md");
+  assert.match(menu, /local MAX_SEARCH_LENGTH = 48/);
+  assert.match(menu, /query="", searchFocused=false/);
+  assert.match(menu, /triggered\(Keyboard\.KEY_SLASH\)/);
+  assert.doesNotMatch(menu, /Keyboard\.KEY_LEFT_CONTROL|Keyboard\.KEY_RIGHT_CONTROL/);
+  assert.doesNotMatch(menu, /triggered\(Keyboard\.KEY_F\)/);
+  for (const document of [labels, readme, evidence]) assert.doesNotMatch(document, /Ctrl\+F/);
+  for (const key of ["KEY_A", "KEY_Z", "KEY_0", "KEY_9", "KEY_SPACE", "KEY_BACKSPACE", "KEY_DELETE"]) {
+    assert.match(menu, new RegExp(`Keyboard\\.${key}`));
+  }
+  assert.match(menu, /Catalog\.search\(state\.menu\.query\)/);
+  assert.match(menu, /matchesFilter\(goal, filter\)/);
+  assert.match(menu, /left\.score ~= right\.score/);
+  assert.match(menu, /state\.menu\.query = ""/);
+});
+
+test("F3 search renders localized status and suppresses only the typing player's actions", () => {
+  const main = read("main.lua");
+  const menu = read("scripts/ui/menu.lua");
+  const labels = read("scripts/ui/text.lua");
+  assert.match(main, /Menu\.shouldBlockInput\(State, entity, inputHook, buttonAction\)/);
+  assert.match(main, /InputHook\.GET_ACTION_VALUE/);
+  assert.match(menu, /function Menu\.shouldBlockInput/);
+  assert.match(menu, /player\.ControllerIndex ~= 0/);
+  assert.match(menu, /labels\.searchPrompt/);
+  assert.match(menu, /labels\.searchResults/);
+  assert.match(menu, /labels\.emptySearch/);
+  for (const key of ["searchPrompt", "searchResults", "emptySearch", "controlsSearch"]) {
+    assert.equal((labels.match(new RegExp(`${key}\\s*=`, "g")) || []).length, 2,
+      `${key} must be localized in Chinese and English`);
+  }
+});
+
 test("REPENTOGON pause support is conditional and never pauses multiplayer", () => {
   const main = read("main.lua");
   const menu = read("scripts/ui/menu.lua");
@@ -226,8 +337,8 @@ test("REPENTOGON pause support is conditional and never pauses multiplayer", () 
   assert.match(main, /return true/);
   assert.match(main, /ModCallbacks\.MC_PRE_PAUSE_SCREEN_RENDER/);
   assert.match(main, /onPrePauseScreenRender/);
-  assert.match(main, /ButtonAction\.ACTION_PAUSE/);
-  assert.match(main, /ButtonAction\.ACTION_MAP/);
+  assert.match(menu, /ButtonAction\.ACTION_PAUSE/);
+  assert.match(menu, /ButtonAction\.ACTION_MAP/);
   assert.match(main, /ModCallbacks\.MC_INPUT_ACTION/);
   assert.match(main, /ModCallbacks\.MC_POST_HUD_RENDER/);
   assert.match(main, /if not ModCallbacks\.MC_POST_HUD_RENDER then\s+Menu\.render\(State\)/);
@@ -246,6 +357,17 @@ test("HUD renders localized completion conditions with a scalable Unicode font",
   assert.match(hud, /text\.detail/);
   assert.doesNotMatch(hud, /"- "\s*\.\.\s*text\.name/);
   assert.match(hud, /fontScale/);
+});
+
+test("HUD uses the ivory palette while retaining bright completion and failure states", () => {
+  const hud = read("scripts/ui/hud.lua");
+  assert.match(hud, /local HUD_TITLE = KColor\(1\.00, 0\.94, 0\.78, 1\)/);
+  assert.match(hud, /local HUD_BODY = KColor\(0\.96, 0\.86, 0\.68, 1\)/);
+  assert.match(hud, /local HUD_MUTED = KColor\(0\.72, 0\.65, 0\.56, 1\)/);
+  assert.match(hud, /local HUD_COMPLETED = KColor\(0\.60, 1\.00, 0\.65, 1\)/);
+  assert.match(hud, /local HUD_FAILED = KColor\(1\.00, 0\.38, 0\.34, 1\)/);
+  assert.match(hud, /or HUD_BODY/);
+  assert.match(hud, /HUD_FAILED, language/);
 });
 
 test("renderer always uses the bundled LanaPixel font without fallbacks", () => {

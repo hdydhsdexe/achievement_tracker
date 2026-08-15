@@ -9,6 +9,7 @@ local COLUMNS = 3
 local ROWS = 9
 local PAGE_SIZE = COLUMNS * ROWS
 local FILTERS = { "all", "collectible", "trinket", "card", "other" }
+local MAX_SEARCH_LENGTH = 48
 local PANEL_WIDTH_RATIO = 0.64
 local MIN_PANEL_WIDTH = 270
 local MAX_PANEL_WIDTH = 340
@@ -16,16 +17,15 @@ local MAX_PANEL_HEIGHT = 238
 local MENU_MIN_BODY_PIXELS = 8
 local MENU_MAX_BODY_PIXELS = 11
 
--- Warm monochrome inks sampled from the referenced Isaac paper-menu style.
--- Body tones are slightly darker than the reference because this panel uses
--- the game's darker parchment texture.
-local DARK_INK = KColor(0.169, 0.129, 0.110, 1)
-local INK = KColor(0.33, 0.24, 0.19, 1)
-local MUTED = KColor(0.36, 0.27, 0.21, 1)
-local STAMP_INK = KColor(0.30, 0.22, 0.17, 1)
-local DIMMED_INK = KColor(0.48, 0.46, 0.43, 1)
+-- Light fills retain the font atlas' black pixel outline, keeping the menu
+-- readable on parchment without the muddy dark-on-dark look.
+local DARK_INK = KColor(1.00, 0.94, 0.78, 1)
+local INK = KColor(0.96, 0.86, 0.68, 1)
+local MUTED = KColor(0.72, 0.65, 0.56, 1)
+local STAMP_INK = KColor(0.78, 0.86, 0.62, 1)
+local DIMMED_INK = KColor(0.62, 0.60, 0.58, 1)
 local DIMMED_TINT = Color(0.48, 0.48, 0.48, 1)
-local CONVERTIBLE_INK = KColor(0.67, 0.40, 0.10, 1)
+local CONVERTIBLE_INK = KColor(1.00, 0.72, 0.30, 1)
 local CONVERTIBLE_TINT = Color(1.00, 0.68, 0.28, 1)
 
 local function menuTypeScales(fontScale)
@@ -42,7 +42,8 @@ end
 
 function Menu.new()
   return { open=false, cursor=1, offset=1, goals=nil, filterIndex=1,
-    relevanceContext=nil, relevanceSignature=nil, completionSignature=nil }
+    query="", searchFocused=false, relevanceContext=nil,
+    relevanceSignature=nil, completionSignature=nil }
 end
 
 local function isCompleted(state, goal)
@@ -68,23 +69,37 @@ local function refreshGoals(state, context, preserveSelection)
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
   local currentPending, convertiblePending, otherCharacterPending, completed = {}, {}, {}, {}
+  local searchMeta = {}
   context = context or CharacterRelevance.buildContext(Game(), Catalog.goals)
   local filter = FILTERS[state.menu.filterIndex] or "all"
-  for _, goal in ipairs(Catalog.goals) do
+  for _, match in ipairs(Catalog.search(state.menu.query)) do
+    local goal = match.goal
     if matchesFilter(goal, filter) then
-      local bucket = completed
+      local bucket, relevanceRank = completed, 4
       if not isCompleted(state, goal) then
         local relevance = CharacterRelevance.classify(goal, context)
-        if relevance == "current" then bucket = currentPending
-        elseif relevance == "convertible" then bucket = convertiblePending
-        else bucket = otherCharacterPending end
+        if relevance == "current" then bucket, relevanceRank = currentPending, 1
+        elseif relevance == "convertible" then bucket, relevanceRank = convertiblePending, 2
+        else bucket, relevanceRank = otherCharacterPending, 3 end
       end
       table.insert(bucket, goal)
+      searchMeta[goal.id] = { score=match.score, relevanceRank=relevanceRank,
+        catalogIndex=match.catalogIndex }
     end
   end
   local goals = {}
   for _, bucket in ipairs({ currentPending, convertiblePending, otherCharacterPending, completed }) do
     for _, goal in ipairs(bucket) do table.insert(goals, goal) end
+  end
+  if state.menu.query ~= "" then
+    table.sort(goals, function(leftGoal, rightGoal)
+      local left, right = searchMeta[leftGoal.id], searchMeta[rightGoal.id]
+      if left.score ~= right.score then return left.score < right.score end
+      if left.relevanceRank ~= right.relevanceRank then
+        return left.relevanceRank < right.relevanceRank
+      end
+      return left.catalogIndex < right.catalogIndex
+    end)
   end
   state.menu.goals = goals
   state.menu.relevanceContext = context
@@ -105,6 +120,50 @@ end
 
 local function triggered(key) return Input.IsButtonTriggered(key, 0) end
 
+local function typedSearchCharacter()
+  for key = Keyboard.KEY_A, Keyboard.KEY_Z do
+    if triggered(key) then return string.char(string.byte("a") + key - Keyboard.KEY_A) end
+  end
+  for key = Keyboard.KEY_0, Keyboard.KEY_9 do
+    if triggered(key) then return string.char(string.byte("0") + key - Keyboard.KEY_0) end
+  end
+  if triggered(Keyboard.KEY_SPACE) then return " " end
+  return nil
+end
+
+local function updateSearchInput(state)
+  if triggered(Keyboard.KEY_ESCAPE) then
+    local changed = state.menu.query ~= ""
+    state.menu.query, state.menu.searchFocused = "", false
+    return changed, true
+  end
+  if triggered(Keyboard.KEY_ENTER) then
+    state.menu.searchFocused = false
+    return false, true
+  end
+  if triggered(Keyboard.KEY_DELETE) then
+    local changed = state.menu.query ~= ""
+    state.menu.query = ""
+    return changed, true
+  end
+  if triggered(Keyboard.KEY_BACKSPACE) then
+    if state.menu.query ~= "" then
+      state.menu.query = string.sub(state.menu.query, 1, #state.menu.query - 1)
+      return true, true
+    end
+    return false, true
+  end
+  local character = typedSearchCharacter()
+  if character and #state.menu.query < MAX_SEARCH_LENGTH then
+    if character ~= " " or (state.menu.query ~= ""
+      and string.sub(state.menu.query, -1) ~= " ") then
+      state.menu.query = state.menu.query .. character
+      return true, true
+    end
+  end
+  return false, false
+end
+
 function Menu.isMultiplayer(game)
   local controllers, count = {}, 0
   for index = 0, game:GetNumPlayers() - 1 do
@@ -122,6 +181,16 @@ function Menu.shouldPause(state, game)
   return state and state.menu and state.menu.open and not Menu.isMultiplayer(game)
 end
 
+function Menu.shouldBlockInput(state, entity, inputHook, buttonAction)
+  if not state or not state.menu or not state.menu.open then return false end
+  if buttonAction == ButtonAction.ACTION_PAUSE
+    or buttonAction == ButtonAction.ACTION_MAP then return true end
+  if not state.menu.searchFocused then return false end
+  local player = entity and entity:ToPlayer()
+  if player and player.ControllerIndex ~= 0 then return false end
+  return true
+end
+
 function Menu.update(state, save)
   if triggered(Keyboard.KEY_F3) then
     if state.menu.open then
@@ -129,6 +198,7 @@ function Menu.update(state, save)
     elseif not Game():IsPaused() or ModCallbacks.MC_PRE_PAUSE_SCREEN_RENDER then
       state.menu.open = true
       state.menu.cursor, state.menu.offset, state.menu.filterIndex = 1, 1, 1
+      state.menu.query, state.menu.searchFocused = "", false
       refreshGoals(state, nil, false)
     end
   end
@@ -140,6 +210,19 @@ function Menu.update(state, save)
     or state.menu.completionSignature ~= completionSignature then
     refreshGoals(state, context, true)
   end
+  local searchConsumed = false
+  local searchShortcut = triggered(Keyboard.KEY_SLASH)
+  if searchShortcut then
+    state.menu.searchFocused = true
+    searchConsumed = true
+  elseif state.menu.searchFocused then
+    local queryChanged
+    queryChanged, searchConsumed = updateSearchInput(state)
+    if queryChanged then
+      state.menu.cursor, state.menu.offset = 1, 1
+      refreshGoals(state, context, false)
+    end
+  end
   if triggered(Keyboard.KEY_TAB) then
     state.menu.filterIndex = state.menu.filterIndex % #FILTERS + 1
     state.menu.cursor, state.menu.offset = 1, 1
@@ -148,20 +231,23 @@ function Menu.update(state, save)
   local goals = state.menu.goals or {}
   local count = #goals
   if count > 0 then
-    if triggered(Keyboard.KEY_LEFT) then state.menu.cursor = math.max(1, state.menu.cursor - 1) end
-    if triggered(Keyboard.KEY_RIGHT) then state.menu.cursor = math.min(count, state.menu.cursor + 1) end
-    if triggered(Keyboard.KEY_UP) then state.menu.cursor = math.max(1, state.menu.cursor - COLUMNS) end
-    if triggered(Keyboard.KEY_DOWN) then state.menu.cursor = math.min(count, state.menu.cursor + COLUMNS) end
-    if triggered(Keyboard.KEY_ENTER) or triggered(Keyboard.KEY_SPACE) then
-      Tracker.toggle(state.tracker, goals[state.menu.cursor].id)
-      state.settings.tracked = state.tracker.ids
-      save()
+    if not state.menu.searchFocused then
+      if triggered(Keyboard.KEY_LEFT) then state.menu.cursor = math.max(1, state.menu.cursor - 1) end
+      if triggered(Keyboard.KEY_RIGHT) then state.menu.cursor = math.min(count, state.menu.cursor + 1) end
+      if triggered(Keyboard.KEY_UP) then state.menu.cursor = math.max(1, state.menu.cursor - COLUMNS) end
+      if triggered(Keyboard.KEY_DOWN) then state.menu.cursor = math.min(count, state.menu.cursor + COLUMNS) end
+      if not searchConsumed
+        and (triggered(Keyboard.KEY_ENTER) or triggered(Keyboard.KEY_SPACE)) then
+        Tracker.toggle(state.tracker, goals[state.menu.cursor].id)
+        state.settings.tracked = state.tracker.ids
+        save()
+      end
     end
     state.menu.offset = math.floor((state.menu.cursor - 1) / PAGE_SIZE) * PAGE_SIZE + 1
   else
     state.menu.cursor, state.menu.offset = 1, 1
   end
-  if triggered(Keyboard.KEY_ESCAPE) then state.menu.open = false end
+  if not searchConsumed and triggered(Keyboard.KEY_ESCAPE) then state.menu.open = false end
 end
 
 local function filterLine(labels, active)
@@ -205,11 +291,20 @@ function Menu.render(state)
   local gridTop = top + 32
   RewardIcons.renderPaper(panelX, panelY, panelWidth, panelHeight)
 
-  Text.draw(labels.menuTitle, panelX, top, typeScale.title, DARK_INK,
+  local title = labels.menuTitle
+  if state.menu.searchFocused or state.menu.query ~= "" then
+    title = labels.searchPrompt .. ": " .. state.menu.query
+      .. (state.menu.searchFocused and "_" or "")
+  end
+  Text.draw(Text.ellipsize(title, contentWidth, typeScale.title), panelX, top,
+    typeScale.title, DARK_INK,
     language, panelWidth, true)
   Text.draw(filterLine(labels, state.menu.filterIndex), x, top + 16,
     typeScale.label, INK, language)
-  Text.draw(labels.filterHint, panelX + panelWidth - 76, top + 16,
+  local filterHint = state.menu.query ~= ""
+    and string.format(labels.searchResults, #goals) or labels.filterHint
+  Text.draw(filterHint, panelX + panelWidth - 12
+      - Text.width(filterHint, typeScale.small), top + 16,
     typeScale.small, MUTED, language)
 
   local last = math.min(#goals, state.menu.offset + PAGE_SIZE - 1)
@@ -272,13 +367,15 @@ function Menu.render(state)
     Text.draw(rewardMeta(reward, labels), nameX, detailY + 34,
       typeScale.small, MUTED, language)
   else
-    Text.draw(labels.emptyFilter, x, detailY + 12, typeScale.body, MUTED, language)
+    local emptyLabel = state.menu.query ~= "" and labels.emptySearch or labels.emptyFilter
+    Text.draw(emptyLabel, x, detailY + 12, typeScale.body, MUTED, language)
   end
 
   local page = #goals > 0 and math.floor((state.menu.cursor - 1) / PAGE_SIZE) + 1 or 1
   local pages = math.max(1, math.ceil(#goals / PAGE_SIZE))
   local footerY = panelY + panelHeight - 14
-  Text.draw(Text.ellipsize(labels.controlsMenu, contentWidth - 94, typeScale.small),
+  local controls = state.menu.searchFocused and labels.controlsSearch or labels.controlsMenu
+  Text.draw(Text.ellipsize(controls, contentWidth - 94, typeScale.small),
     x, footerY, typeScale.small, MUTED, language)
   Text.draw(string.format("%d/%d %s  |  %d/%d", #state.tracker.ids,
     state.tracker.max, labels.tracked, page, pages),

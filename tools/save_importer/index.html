@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Achievement Tracker 存档导入器</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #17151c; color: #f4eef8; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 56px; }
+    h1 { margin-bottom: 8px; }
+    .notice { border-left: 4px solid #e9b949; background: #29232a; padding: 12px 16px; }
+    .card { margin-top: 20px; padding: 20px; border: 1px solid #51485a; border-radius: 12px; background: #211e27; }
+    label { display: block; margin: 16px 0 6px; font-weight: 700; }
+    input, select, button { box-sizing: border-box; width: 100%; padding: 10px; font: inherit; }
+    input, select { border: 1px solid #6e6278; border-radius: 6px; background: #17151c; color: inherit; }
+    button { margin-top: 20px; border: 0; border-radius: 6px; background: #a36ed2; color: #160f1c; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    code { overflow-wrap: anywhere; }
+    .hint { color: #c8bdcf; font-size: .92rem; }
+    #status { min-height: 1.5em; margin-top: 14px; white-space: pre-wrap; }
+    #status.error { color: #ff9b9b; }
+    #status.success { color: #9ce6ad; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Achievement Tracker 存档导入器</h1>
+    <p>所有解析都在此浏览器页面内完成，文件不会上传，也不会修改《以撒》的原始存档。</p>
+    <p class="notice"><strong>操作前请关闭游戏并备份文件。</strong>下载完成后，再手动替换 Mod 数据目录中的对应 <code>saveN.dat</code>；替换后重新启动游戏。</p>
+
+    <section class="card" aria-labelledby="import-title">
+      <h2 id="import-title">生成 Mod 存档</h2>
+
+      <label for="game-save">1. 游戏 persistentgamedata 存档</label>
+      <input id="game-save" type="file" accept=".dat,application/octet-stream" required>
+      <p class="hint">可选择 <code>persistentgamedataN.dat</code>、Steam Cloud 的 <code>rep_persistentgamedataN.dat</code>、Repentance+ 的 <code>rep+persistentgamedataN.dat</code>，或它们带日期前缀的备份。</p>
+
+      <label for="save-slot">2. 存档槽位</label>
+      <select id="save-slot">
+        <option value="">从文件名自动识别</option>
+        <option value="1">槽位 1</option>
+        <option value="2">槽位 2</option>
+        <option value="3">槽位 3</option>
+      </select>
+      <p class="hint">只有文件名无法识别时才需手动选择；若文件名与手选槽位冲突，导入会停止。</p>
+
+      <label for="mod-save">3. 现有 Achievement Tracker saveN.dat（可选）</label>
+      <input id="mod-save" type="file" accept=".dat,application/json,text/plain">
+      <p class="hint">选择后会保留原有语言、追踪目标、观察记录和其他设置。不选择则生成最小的新存档。</p>
+
+      <button id="generate" type="button">解析并下载 saveN.dat</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <h2>常见目录</h2>
+      <p>本地游戏存档通常位于 <code>%USERPROFILE%\Documents\My Games\Binding of Isaac Repentance</code>；Steam Cloud 文件通常位于 <code>Steam\userdata\&lt;SteamID&gt;\250900\remote</code>，常见文件名为 <code>rep_persistentgamedataN.dat</code> 或 <code>rep+persistentgamedataN.dat</code>。</p>
+      <p>Mod 存档位于游戏目录下的 <code>data\achievement_tracker\saveN.dat</code>。请先把旧文件复制到安全位置，再放入下载的新文件。</p>
+    </section>
+  </main>
+
+  <script src="save-importer.js"></script>
+  <script>
+    "use strict";
+
+    const gameSaveInput = document.getElementById("game-save");
+    const modSaveInput = document.getElementById("mod-save");
+    const saveSlotSelect = document.getElementById("save-slot");
+    const generateButton = document.getElementById("generate");
+    const status = document.getElementById("status");
+
+    function showStatus(message, kind) {
+      status.textContent = message;
+      status.className = kind || "";
+    }
+
+    function resolveSlot(fileName) {
+      const inferred = IsaacSaveImporter.inferPersistentSaveSlot(fileName);
+      const selected = saveSlotSelect.value === "" ? null : Number(saveSlotSelect.value);
+      if (inferred !== null && selected !== null && inferred !== selected) {
+        throw new Error(`存档槽位冲突：文件名表示槽位 ${inferred}，手动选择了槽位 ${selected}。`);
+      }
+      const slot = selected ?? inferred;
+      if (slot === null) {
+        throw new Error("无法从文件名识别槽位，请手动选择槽位 1、2 或 3。");
+      }
+      return slot;
+    }
+
+    function downloadJson(result) {
+      const blob = new Blob([result.json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    gameSaveInput.addEventListener("change", function () {
+      const file = gameSaveInput.files[0];
+      if (!file || saveSlotSelect.value !== "") {
+        return;
+      }
+      const inferred = IsaacSaveImporter.inferPersistentSaveSlot(file.name);
+      if (inferred !== null) {
+        showStatus(`已从文件名识别为槽位 ${inferred}。`);
+      }
+    });
+
+    generateButton.addEventListener("click", async function () {
+      const gameFile = gameSaveInput.files[0];
+      if (!gameFile) {
+        showStatus("请先选择游戏 persistentgamedata 存档。", "error");
+        return;
+      }
+
+      generateButton.disabled = true;
+      showStatus("正在本地解析……");
+      try {
+        if (gameFile.size > IsaacSaveImporter.LIMITS.maxPersistentFileBytes) {
+          throw new Error("游戏存档文件过大，已拒绝读取。");
+        }
+        const modFile = modSaveInput.files[0] || null;
+        if (modFile && modFile.size > IsaacSaveImporter.LIMITS.maxModSaveJsonChars) {
+          throw new Error("现有 Mod 存档文件过大，已拒绝读取。");
+        }
+        const slot = resolveSlot(gameFile.name);
+        const parsed = IsaacSaveImporter.parsePersistentGameData(await gameFile.arrayBuffer());
+        const existingJson = modFile ? await modFile.text() : null;
+        const result = IsaacSaveImporter.mergeModSaveJson(existingJson, {
+          saveSlot: slot,
+          achievementCount: parsed.achievementCount,
+          unlockedIds: parsed.unlockedIds,
+        }, {
+          existingFileName: modFile ? modFile.name : null,
+        });
+
+        downloadJson(result);
+        showStatus(`已生成 ${result.fileName}，包含 ${parsed.unlockedIds.length} 个已解锁成就。请确认游戏已关闭、备份旧文件，再手动替换并重启游戏。`, "success");
+      } catch (error) {
+        showStatus(error instanceof Error ? error.message : String(error), "error");
+      } finally {
+        generateButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
