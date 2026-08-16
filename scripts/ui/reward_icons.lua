@@ -59,8 +59,47 @@ local characterPortraits = {
 
 local TALL_CHARACTER_PORTRAITS = { [37]=true, [39]=true }
 local TAINTED_EDEN = 30
+local VANILLA_CARD_MAX = Card and Card.NUM_CARDS and (Card.NUM_CARDS - 1) or 97
 
-local cardSprite
+-- ui_cardspills.anm2 exposes card faces by Card ID through its CardFronts
+-- animation, but rune-like objects and soul stones deliberately leave blank
+-- frames there. Those IDs use the same native HUD actors as the game itself.
+local nativeCardResources = {
+  [32]="gfx/005.303_rune1.anm2",
+  [33]="gfx/005.303_rune1.anm2",
+  [34]="gfx/005.303_rune1.anm2",
+  [35]="gfx/005.303_rune1.anm2",
+  [36]="gfx/005.304_rune2.anm2",
+  [37]="gfx/005.304_rune2.anm2",
+  [38]="gfx/005.304_rune2.anm2",
+  [39]="gfx/005.304_rune2.anm2",
+  [40]="gfx/005.304_rune2.anm2",
+  [41]="gfx/005.307_blackrune.anm2",
+  [55]="gfx/005.313_rune shard.anm2",
+  [78]="gfx/005.300.15_cracked key.anm2",
+  [80]="gfx/005.300.17_unus card.anm2",
+  [81]="gfx/005.300.18_soul of isaac.anm2",
+  [82]="gfx/005.300.19_soul of magdalene.anm2",
+  [83]="gfx/005.300.20_soul of cain.anm2",
+  [84]="gfx/005.300.21_soul of judas.anm2",
+  [85]="gfx/005.300.22_soul of blue baby.anm2",
+  [86]="gfx/005.300.23_soul of eve.anm2",
+  [87]="gfx/005.300.24_soul of samson.anm2",
+  [88]="gfx/005.300.25_soul of azazel.anm2",
+  [89]="gfx/005.300.26_soul of lazarus.anm2",
+  [90]="gfx/005.300.27_soul of eden.anm2",
+  [91]="gfx/005.300.28_soul of the lost.anm2",
+  [92]="gfx/005.300.29_soul of lilith.anm2",
+  [93]="gfx/005.300.30_soul of the keeper.anm2",
+  [94]="gfx/005.300.31_soul of apollyon.anm2",
+  [95]="gfx/005.300.32_soul of the forgotten.anm2",
+  [96]="gfx/005.300.33_soul of bethany.anm2",
+  [97]="gfx/005.300.34_soul of jacob.anm2"
+}
+
+local cardFrontSprite
+local cardSpillSprite
+local nativeCardSprites = {}
 local backdropSprite
 local paperSprite
 
@@ -117,39 +156,117 @@ local function fallbackSprite(reward)
   return { sprite=sprite, baseSize=16 }
 end
 
+local function getCardFrontSprite()
+  if cardFrontSprite ~= nil then return cardFrontSprite or nil end
+  local ok, sprite = pcall(function()
+    local loaded = Sprite()
+    loaded:Load("gfx/ui/ui_cardfronts.anm2", true)
+    return loaded:IsLoaded() and loaded or nil
+  end)
+  cardFrontSprite = ok and sprite or false
+  return cardFrontSprite or nil
+end
+
+local function getCardSpillSprite()
+  if cardSpillSprite ~= nil then return cardSpillSprite or nil end
+  local ok, sprite = pcall(function()
+    local loaded = Sprite()
+    loaded:Load("gfx/ui/ui_cardspills.anm2", true)
+    return loaded:IsLoaded() and loaded or nil
+  end)
+  cardSpillSprite = ok and sprite or false
+  return cardSpillSprite or nil
+end
+
+local function getNativeCardSprite(path)
+  if nativeCardSprites[path] ~= nil then return nativeCardSprites[path] or nil end
+  local ok, sprite = pcall(function()
+    local loaded = Sprite()
+    loaded:Load(path, true)
+    return loaded:IsLoaded() and loaded or nil
+  end)
+  nativeCardSprites[path] = ok and sprite or false
+  return nativeCardSprites[path] or nil
+end
+
+local function validFrame(sprite, animation, frame)
+  if not sprite or not sprite:IsLoaded() or type(animation) ~= "string"
+    or animation == "" then return false end
+  local ok, valid = pcall(function()
+    sprite:SetFrame(animation, frame)
+    return sprite:GetAnimation() == animation and sprite:GetFrame() == frame
+  end)
+  return ok and valid == true
+end
+
+local function setCardSpillFrame(sprite, frame)
+  if not sprite or not sprite:IsLoaded() or type(frame) ~= "number" then return false end
+  local ok, valid = pcall(function()
+    -- CardFronts declares only 78 animation frames, while its face layer stores
+    -- later cards (notably Queen of Hearts) at their actual Card IDs. Pin the
+    -- animation itself to frame zero and select the face directly on layer zero.
+    sprite:SetFrame("CardFronts", 0)
+    sprite:SetLayerFrame(0, frame)
+    return sprite:GetAnimation() == "CardFronts" and sprite:GetFrame() == 0
+  end)
+  return ok and valid == true
+end
+
+local function cardEntry(reward)
+  local configOk, config = pcall(Rewards.config, reward)
+  if not configOk then config = nil end
+  local hudAnimation = config and config.HudAnim
+  if type(hudAnimation) == "string" and hudAnimation ~= "" then
+    local sprite = getCardFrontSprite()
+    if validFrame(sprite, hudAnimation, 0) then
+      return { sprite=sprite, animation=hudAnimation, frame=0, baseSize=32 }
+    end
+  end
+
+  -- Repentance returns a blank HudAnim for vanilla cards, so resolve their
+  -- native HUD actor explicitly. Resource replacements still flow through
+  -- because every sprite is loaded from the active game's virtual filesystem.
+  if type(reward.id) == "number" and reward.id >= 1
+    and reward.id <= VANILLA_CARD_MAX then
+    local path = nativeCardResources[reward.id]
+    if path then
+      local sprite = getNativeCardSprite(path)
+      if validFrame(sprite, "HUD", 0) then
+        return { sprite=sprite, animation="HUD", frame=0, baseSize=32 }
+      end
+    else
+      local sprite = getCardSpillSprite()
+      -- Frame zero is an empty sentinel; the remaining layer frames are keyed
+      -- directly by the vanilla Card ID rather than by ID minus one.
+      if setCardSpillFrame(sprite, reward.id) then
+        return {
+          sprite=sprite, animation="CardFronts", frame=0,
+          layer=0, layerFrame=reward.id, baseSize=24
+        }
+      end
+    end
+  end
+  return nil
+end
+
 local function cached(reward)
   local key = cacheKey(reward)
   if cache[key] ~= nil then return cache[key] or nil end
   local entry
   if reward.kind == "collectible" or reward.kind == "trinket" then entry = itemSprite(reward) end
   if reward.kind == "character" then entry = characterSprite(reward) end
-  if not entry and reward.kind ~= "card" then entry = fallbackSprite(reward) end
+  if reward.kind == "card" then entry = cardEntry(reward) end
+  if not entry then entry = fallbackSprite(reward) end
   cache[key] = entry or false
   return entry
 end
 
-local function getCardSprite()
-  if cardSprite then return cardSprite end
-  cardSprite = Sprite()
-  cardSprite:Load("gfx/ui/ui_cardspills.anm2", true)
-  -- Vanilla card-spill frames use a top-left pivot; normalize them to the
-  -- center-based contract shared by collectibles and fallback icons.
-  cardSprite.Offset = Vector(-8, -10)
-  return cardSprite
-end
-
 function RewardIcons.render(reward, x, y, size, tint)
   if not reward then return false end
-  if reward.kind == "card" and reward.id and reward.id >= 1 and reward.id <= 97 then
-    local sprite = getCardSprite()
-    sprite:SetFrame("Cards", reward.id - 1)
-    sprite.Scale = Vector(size / 20, size / 20)
-    sprite.Color = tint or Color(1, 1, 1, 1)
-    sprite:Render(Vector(x, y))
-    return true
-  end
   local entry = cached(reward)
   if not entry then return false end
+  if entry.animation then entry.sprite:SetFrame(entry.animation, entry.frame) end
+  if entry.layerFrame then entry.sprite:SetLayerFrame(entry.layer, entry.layerFrame) end
   entry.sprite.Scale = Vector(size / entry.baseSize, size / entry.baseSize)
   entry.sprite.Color = tint or Color(1, 1, 1, 1)
   entry.sprite:Render(Vector(x, y))
@@ -181,7 +298,9 @@ end
 
 function RewardIcons.clear()
   cache = {}
-  cardSprite = nil
+  cardFrontSprite = nil
+  cardSpillSprite = nil
+  nativeCardSprites = {}
   backdropSprite = nil
   paperSprite = nil
 end

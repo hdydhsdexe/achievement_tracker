@@ -143,7 +143,10 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
   const actor = read("resources/gfx/ui/achievement_tracker_ui.anm2");
   assert.match(icons, /local cache\s*=\s*{/);
   assert.match(icons, /GfxFileName/);
+  assert.match(icons, /config\.HudAnim/);
+  assert.match(icons, /gfx\/ui\/ui_cardfronts\.anm2/);
   assert.match(icons, /gfx\/ui\/ui_cardspills\.anm2/);
+  assert.match(icons, /"CardFronts"/);
   assert.match(icons, /ReplaceSpritesheet/);
   assert.match(icons, /LoadGraphics/);
   assert.match(icons, /function RewardIcons\.render/);
@@ -153,6 +156,12 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
   assert.doesNotMatch(renderBody, /LoadGraphics/);
   assert.equal(fs.existsSync(path.join(root, "resources/gfx/ui/achievement_tracker_ui.anm2")), true);
   assert.equal(fs.existsSync(path.join(root, "resources/gfx/ui/achievement_reward_types.png")), true);
+  assert.equal(fs.existsSync(path.join(root, "resources/gfx/ui/ui_cardfronts.anm2")), false,
+    "the mod must read the game's card-front actor instead of bundling it");
+  assert.equal(fs.existsSync(path.join(root, "resources/gfx/ui/ui_cardfronts.png")), false,
+    "the mod must read the active game's card-front texture instead of copying it");
+  assert.equal(fs.existsSync(path.join(root, "resources/gfx/ui/ui_cardspills.png")), false,
+    "the mod must read the active game's card-spill texture instead of copying it");
   assert.match(icons, /fallbackFrames/);
   assert.match(icons, /SetFrame\("FallbackIcon"/);
   assert.match(actor, /achievement_reward_types\.png/);
@@ -161,7 +170,53 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
   assert.match(actor, /Animation Name="RewardItem"/);
   assert.match(icons, /ReplaceSpritesheet\(3, config\.GfxFileName\)/);
   assert.match(icons, /SetFrame\("RewardItem", 0\)/);
-  assert.match(icons, /cardSprite\.Offset\s*=\s*Vector\(-8, -10\)/);
+  assert.match(icons, /validFrame\(sprite, hudAnimation, 0\)/);
+  assert.match(icons, /VANILLA_CARD_MAX\s*=\s*Card and Card\.NUM_CARDS and \(Card\.NUM_CARDS - 1\) or 97/);
+  assert.match(icons, /reward\.id\s*<=\s*VANILLA_CARD_MAX/);
+  assert.doesNotMatch(icons, /sprite:GetDefaultAnimation\(\)/,
+    "the default card-front animation is the one-frame Fool animation");
+  assert.match(icons, /setCardSpillFrame\(sprite, reward\.id\)/);
+  assert.match(icons, /sprite:SetFrame\("CardFronts", 0\)/);
+  assert.match(icons, /sprite:SetLayerFrame\(0, frame\)/,
+    "card spill faces must select layer frame by Card ID, including Queen of Hearts");
+  assert.match(icons, /layerFrame=reward\.id/);
+  assert.match(icons, /entry\.sprite:SetLayerFrame\(entry\.layer, entry\.layerFrame\)/);
+  assert.match(icons, /sprite:GetAnimation\(\) == animation/);
+  assert.match(icons, /sprite:GetFrame\(\) == frame/);
+  assert.match(icons, /pcall\(Rewards\.config, reward\)/);
+  assert.match(icons, /baseSize=32/);
+  assert.match(icons, /baseSize=24/);
+  assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
+  assert.match(icons, /if cardFrontSprite ~= nil then return cardFrontSprite or nil end/);
+  assert.match(icons, /if cardSpillSprite ~= nil then return cardSpillSprite or nil end/);
+  assert.match(icons, /function RewardIcons\.clear\(\)[\s\S]*?cardFrontSprite\s*=\s*nil/);
+  assert.match(icons, /function RewardIcons\.clear\(\)[\s\S]*?cardSpillSprite\s*=\s*nil/);
+  assert.match(icons, /validFrame\(sprite, "HUD", 0\)/);
+  assert.match(icons,
+    /local path = nativeCardResources\[reward\.id\][\s\S]*?if path then[\s\S]*?else[\s\S]*?getCardSpillSprite\(\)/,
+    "special native actors must be resolved before the shared spill atlas");
+  assert.match(icons, /entry\.sprite\.Color = tint or Color\(1, 1, 1, 1\)/);
+  for (const [id, resource] of [
+    [32, "005.303_rune1.anm2"],
+    [41, "005.307_blackrune.anm2"],
+    [55, "005.313_rune shard.anm2"],
+    [78, "005.300.15_cracked key.anm2"],
+    [80, "005.300.17_unus card.anm2"],
+    [81, "005.300.18_soul of isaac.anm2"],
+    [97, "005.300.34_soul of jacob.anm2"]
+  ]) {
+    assert.match(icons, new RegExp(`\\[${id}\\].*${resource.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}`),
+      `card id ${id} must resolve to its native HUD actor`);
+  }
+  const nativeCardIds = [...icons.matchAll(/^\s*\[(\d+)\]="gfx\/005\.[^"]+\.anm2",?$/gm)]
+    .map((match) => Number(match[1]));
+  assert.deepEqual(nativeCardIds, [
+    32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+    55, 78, 80,
+    81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97
+  ]);
+  assert.match(icons, /if nativeCardSprites\[path\] ~= nil then return nativeCardSprites\[path\] or nil end/);
+  assert.match(icons, /function RewardIcons\.clear\(\)[\s\S]*?nativeCardSprites\s*=\s*\{\}/);
   assert.doesNotMatch(icons, /005\.100_collectible\.anm2/);
   assert.match(actor, /Width="263" Height="176"/);
   assert.match(actor, /Animation Name="Backdrop"[\s\S]*?AlphaTint="220"/);
@@ -174,6 +229,10 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
     .map((match) => Number(match[1]));
   assert.ok(cardIds.length > 0);
   assert.ok(cardIds.every((id) => id >= 1 && id <= 97));
+  for (const representative of [27, 32, 51, 56, 80, 97]) {
+    assert.ok(cardIds.includes(representative),
+      `catalog should exercise card rendering with card id ${representative}`);
+  }
 });
 
 test("character rewards retain PlayerType ids for inferred and legacy unlock goals", () => {
@@ -223,7 +282,7 @@ test("character reward renderer loads cached vanilla portraits with safe fallbac
   assert.match(icons, /edenHead:GetDefaultAnimation\(\)/);
   assert.match(icons, /reward\.id == TAINTED_EDEN and taintedEdenOverlay\(\) or nil/);
   assert.match(icons, /if reward\.kind == "character" then entry = characterSprite\(reward\) end/);
-  assert.match(icons, /if not entry and reward\.kind ~= "card" then entry = fallbackSprite\(reward\) end/);
+  assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
   assert.match(icons, /entry\.overlay:Render\(Vector\(x, y\)\)/);
   assert.match(actor, /Animation Name="RewardPortrait"[\s\S]*?Width="144" Height="144"/);
   assert.match(actor, /Animation Name="RewardPortraitTall"[\s\S]*?Width="144" Height="166"/);
