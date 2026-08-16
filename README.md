@@ -34,7 +34,7 @@ Mod 使用由 LanaPixel 生成的自带中文位图字体，只包含当前界�
 
 需要手动选择文件、跨环境操作或排查自动发现问题时，可双击 `tools/save_importer/index.html` 使用原有本地网页导入器。它支持 Documents 中的 `persistentgamedataN.dat`、Steam Cloud 中的 `rep_persistentgamedataN.dat` / `rep+persistentgamedataN.dat` 以及日期前缀备份；选择对应的现有 Mod `saveN.dat` 后下载合并文件，再复制回 `data/achievement_tracker`。所有解析均在本机完成，不会上传文件。
 
-导入是离线快照：本局中新解锁不会自动写入快照。需要刷新时，关闭游戏并再次双击启动器。若要恢复，关闭游戏后将最近备份目录中的 `saveN.dat` 复制回 `data/achievement_tracker`。导入器当前支持带 `ISAACNGSAVE09R  ` 文件头的 Repentance / Repentance+ 存档。
+导入结果以离线快照为基础。安装 REPENTOGON 时，Mod 会在官方成就解锁回调后把精确 `achievementId` 追加到当前槽位的 `saveN.dat`；原版环境会在下一局开始时使用奖励 `IsAvailable()` 做保守补录，但只接受在目录中唯一对应一个成就的物品、饰品或卡牌奖励，且绝不删除快照中的既有成就。角色、区域、功能以及共享同一奖励等无法可靠反推的成就，仍需关闭游戏并再次双击启动器刷新。若要恢复，关闭游戏后将最近备份目录中的 `saveN.dat` 复制回 `data/achievement_tracker`。导入器当前支持带 `ISAACNGSAVE09R  ` 文件头的 Repentance / Repentance+ 存档。
 
 ## 已知限制
 

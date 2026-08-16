@@ -56,3 +56,61 @@ test("game startup passes the loaded snapshot into the one-time profile scan", (
 
   assert.match(main, /Unlocks\.scan\(Catalog\.goals,\s*State\.settings\.observedCompleted,\s*State\.settings\.achievementImport\)/);
 });
+
+test("startup positive evidence requires a unique standard reward key", () => {
+  const unlocks = read("scripts/core/unlocks.lua");
+  const early = read("scripts/data/achievements_1_50.lua");
+  const later = read("scripts/data/achievements_101_200.lua");
+  const rewardIndex = unlocks.match(/local rewardAchievementIds\s*=\s*\{\}([\s\S]*?)local rewardAchievementCounts/)?.[1] ?? "";
+
+  assert.match(early, /a\(8,[^\n]*,20\)/, "achievement 8 uses collectible 20");
+  assert.match(later, /a\(159,[^\n]*reward\("collectible",20\)\)/,
+    "achievement 159 shares collectible 20");
+  assert.match(unlocks, /local function standardRewardKey\(goal\)/);
+  assert.match(unlocks, /reward\.kind\s*~?=\s*"collectible"[\s\S]*?"trinket"[\s\S]*?"card"/);
+  assert.match(unlocks, /local rewardId\s*=\s*Rewards\.resolveId\(reward\)/);
+  assert.match(unlocks, /rewardAchievementIds\[rewardKey\]\[achievementId\]\s*=\s*true/);
+  assert.doesNotMatch(rewardIndex, /achievementCount/,
+    "reward uniqueness is catalog-wide, independent of snapshot range");
+  assert.match(unlocks, /rewardAchievementCounts\[rewardKey\]\s*==\s*1/);
+  assert.match(unlocks, /function Unlocks\.refreshAchievementImport\(goals, achievementImport\)/);
+  assert.match(unlocks, /local importedUnlocked, achievementCount\s*=\s*importedAchievements\(achievementImport\)/);
+  assert.match(unlocks, /if not importedUnlocked then return false end/);
+  assert.match(unlocks, /not importedUnlocked\[achievementId\][\s\S]*?Unlocks\.isCompleted\(goal\)/);
+  assert.match(unlocks, /importedUnlocked\[achievementId\]\s*=\s*true/);
+  assert.match(unlocks, /table\.sort\(unlockedIds\)/);
+  assert.match(unlocks, /achievementImport\.unlockedIds\s*=\s*unlockedIds/);
+  assert.match(unlocks, /importCache\[achievementImport\]\s*=\s*nil/);
+  assert.doesNotMatch(unlocks, /importedUnlocked\[[^\]]+\]\s*=\s*(?:false|nil)/);
+});
+
+test("game startup refreshes imported achievements before scanning and persists at the existing save point", () => {
+  const main = read("main.lua");
+  const started = main.match(/function AchievementTracker:onGameStarted\(isContinued\)([\s\S]*?)\nend/)?.[1] ?? "";
+
+  const loadIndex = started.indexOf("load()");
+  const refreshIndex = started.indexOf("Unlocks.refreshAchievementImport");
+  const scanIndex = started.indexOf("State.profileCompleted = Unlocks.scan");
+  const saveIndex = started.lastIndexOf("save()");
+  assert.ok(loadIndex >= 0 && loadIndex < refreshIndex, "refresh must run after load");
+  assert.ok(refreshIndex < scanIndex, "refresh must run before the profile scan");
+  assert.ok(scanIndex < saveIndex, "the existing end-of-start save persists additions");
+});
+
+test("REPENTOGON exact achievement callback bypasses reward availability and remains monotonic", () => {
+  const unlocks = read("scripts/core/unlocks.lua");
+  const main = read("main.lua");
+  const recorder = unlocks.match(/function Unlocks\.recordImportedAchievement\(goals, achievementImport, achievementId\)([\s\S]*?)\nend/)?.[1] ?? "";
+
+  assert.match(unlocks, /function Unlocks\.recordImportedAchievement\(goals, achievementImport, achievementId\)/);
+  assert.match(recorder, /isInteger\(achievementId\)[\s\S]*?achievementId\s*<\s*1[\s\S]*?achievementId\s*>=\s*achievementCount/);
+  assert.match(recorder, /for _, goal in ipairs\(goals or \{\}\)[\s\S]*?goal\.achievementId\s*==\s*achievementId/);
+  assert.match(recorder, /if not catalogContainsAchievement then return false end/);
+  assert.match(recorder, /if importedUnlocked\[achievementId\] then return false end/);
+  assert.match(recorder, /importedUnlocked\[achievementId\]\s*=\s*true/);
+  assert.doesNotMatch(recorder, /isCompleted|standardRewardKey|IsAvailable/);
+  assert.match(main, /function AchievementTracker:onAchievementUnlocked\(achievementId\)/);
+  assert.match(main, /Unlocks\.recordImportedAchievement\(Catalog\.goals,\s*State\.settings\.achievementImport,\s*achievementId\)/);
+  assert.match(main, /onAchievementUnlocked[\s\S]*?State\.profileCompleted\s*=\s*Unlocks\.scan[\s\S]*?save\(\)/);
+  assert.match(main, /if ModCallbacks\.MC_POST_ACHIEVEMENT_UNLOCK then[\s\S]*?AddCallback\(ModCallbacks\.MC_POST_ACHIEVEMENT_UNLOCK,\s*AchievementTracker\.onAchievementUnlocked\)/);
+});

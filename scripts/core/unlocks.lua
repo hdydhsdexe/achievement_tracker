@@ -51,6 +51,94 @@ local function importedAchievements(snapshot)
   return result.unlocked, result.achievementCount
 end
 
+local function commitImportedAchievements(achievementImport, importedUnlocked, changed)
+  local unlockedIds = {}
+  for achievementId in pairs(importedUnlocked) do
+    unlockedIds[#unlockedIds + 1] = achievementId
+  end
+  table.sort(unlockedIds)
+  if not changed then
+    if #unlockedIds ~= #achievementImport.unlockedIds then
+      changed = true
+    else
+      for index, achievementId in ipairs(unlockedIds) do
+        if achievementImport.unlockedIds[index] ~= achievementId then
+          changed = true
+          break
+        end
+      end
+    end
+  end
+  if not changed then return false end
+
+  achievementImport.unlockedIds = unlockedIds
+  importCache[achievementImport] = nil
+  return true
+end
+
+local function standardRewardKey(goal)
+  local reward = goal and goal.reward
+  if not reward then return nil end
+  if reward.kind ~= "collectible" and reward.kind ~= "trinket" and reward.kind ~= "card" then
+    return nil
+  end
+  local rewardId = Rewards.resolveId(reward)
+  if not isInteger(rewardId) or rewardId < 1 then return nil end
+  return reward.kind .. ":" .. tostring(rewardId)
+end
+
+function Unlocks.refreshAchievementImport(goals, achievementImport)
+  local importedUnlocked, achievementCount = importedAchievements(achievementImport)
+  if not importedUnlocked then return false end
+
+  local rewardAchievementIds = {}
+  for _, goal in ipairs(goals or {}) do
+    local achievementId = goal.achievementId
+    local rewardKey = standardRewardKey(goal)
+    if rewardKey and isInteger(achievementId) and achievementId >= 1 then
+      rewardAchievementIds[rewardKey] = rewardAchievementIds[rewardKey] or {}
+      rewardAchievementIds[rewardKey][achievementId] = true
+    end
+  end
+  local rewardAchievementCounts = {}
+  for rewardKey, achievementIds in pairs(rewardAchievementIds) do
+    local count = 0
+    for _ in pairs(achievementIds) do count = count + 1 end
+    rewardAchievementCounts[rewardKey] = count
+  end
+
+  local changed = false
+  for _, goal in ipairs(goals or {}) do
+    local achievementId = goal.achievementId
+    local rewardKey = standardRewardKey(goal)
+    if isInteger(achievementId) and achievementId >= 1 and achievementId < achievementCount
+      and rewardKey and rewardAchievementCounts[rewardKey] == 1
+      and not importedUnlocked[achievementId] and Unlocks.isCompleted(goal) then
+      importedUnlocked[achievementId] = true
+      changed = true
+    end
+  end
+  return commitImportedAchievements(achievementImport, importedUnlocked, changed)
+end
+
+function Unlocks.recordImportedAchievement(goals, achievementImport, achievementId)
+  local importedUnlocked, achievementCount = importedAchievements(achievementImport)
+  if not importedUnlocked or not isInteger(achievementId)
+    or achievementId < 1 or achievementId >= achievementCount then return false end
+
+  local catalogContainsAchievement = false
+  for _, goal in ipairs(goals or {}) do
+    if goal.achievementId == achievementId then
+      catalogContainsAchievement = true
+      break
+    end
+  end
+  if not catalogContainsAchievement then return false end
+  if importedUnlocked[achievementId] then return false end
+  importedUnlocked[achievementId] = true
+  return commitImportedAchievements(achievementImport, importedUnlocked, true)
+end
+
 function Unlocks.scan(goals, observedCompleted, achievementImport)
   local completed = {}
   for id, value in pairs(observedCompleted or {}) do

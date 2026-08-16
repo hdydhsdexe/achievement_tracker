@@ -53,6 +53,7 @@ function AchievementTracker:onGameStarted(isContinued)
   State.lastEvaluation = -1
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
+  Unlocks.refreshAchievementImport(Catalog.goals, State.settings.achievementImport)
   State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted,
     State.settings.achievementImport)
   for index = 0, GameInstance:GetNumPlayers() - 1 do
@@ -150,6 +151,16 @@ function AchievementTracker:onNpcInit(npc)
   if npc:IsBoss() then observeAndSave("boss", npc.Type, npc.Variant) end
 end
 
+function AchievementTracker:onAchievementUnlocked(achievementId)
+  if not State.settings then return end
+  if Unlocks.recordImportedAchievement(Catalog.goals, State.settings.achievementImport,
+    achievementId) then
+    State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted,
+      State.settings.achievementImport)
+    save()
+  end
+end
+
 function AchievementTracker:onExit(shouldSave)
   -- MC_PRE_GAME_EXIT's flag is not consistent across every way of leaving a
   -- run. Always persist our seed-bound run state; a different seed is reset on
@@ -167,6 +178,10 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, AchievementTracke
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_NPC_INIT, AchievementTracker.onNpcInit)
 AchievementTracker:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, AchievementTracker.onExit)
 AchievementTracker:AddCallback(ModCallbacks.MC_INPUT_ACTION, AchievementTracker.onInputAction)
+if ModCallbacks.MC_POST_ACHIEVEMENT_UNLOCK then
+  AchievementTracker:AddCallback(ModCallbacks.MC_POST_ACHIEVEMENT_UNLOCK,
+    AchievementTracker.onAchievementUnlocked)
+end
 -- MC_PRE_UPDATE is provided by REPENTOGON. Vanilla Repentance keeps the menu
 -- usable in real time instead of turning the script extender into a hard dependency.
 if ModCallbacks.MC_PRE_UPDATE then
