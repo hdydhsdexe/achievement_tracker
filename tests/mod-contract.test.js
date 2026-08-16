@@ -412,7 +412,9 @@ test("HUD renders localized completion conditions with a scalable Unicode font",
   assert.match(text, /resources\/font\/achievement_lanapixel\.fnt/);
   assert.match(text, /DrawStringScaledUTF8/);
   assert.match(hud, /text\.detail/);
-  assert.doesNotMatch(hud, /"- "\s*\.\.\s*text\.name/);
+  assert.match(hud, /"- "\s*\.\.\s*text\.name/);
+  assert.match(hud, /Routes\.evaluate/);
+  assert.match(text, /function Text\.wrap/);
   assert.match(hud, /fontScale/);
 });
 
@@ -513,9 +515,47 @@ test("character, boss, and stage observations persist as completion evidence", (
   assert.match(batch, /achievement_34=\{kind="boss"/);
   assert.match(unlocks, /function Unlocks\.observe/);
   assert.match(storage, /observedCompleted/);
-  for (const callback of ["MC_POST_PLAYER_INIT", "MC_POST_NEW_LEVEL", "MC_POST_NPC_INIT"]) {
+  for (const callback of ["MC_POST_PLAYER_INIT", "MC_POST_NEW_LEVEL", "MC_POST_NPC_DEATH"]) {
     assert.match(main, new RegExp(callback));
   }
+});
+
+test("completion-mark routes are parsed, persisted, and evaluated from live context", () => {
+  const goals = read("scripts/data/goals.lua");
+  const marks = read("scripts/core/completion_marks.lua");
+  const routes = read("scripts/core/routes.lua");
+  const main = read("main.lua");
+  const hud = read("scripts/ui/hud.lua");
+
+  assert.match(goals, /CompletionMarks\.attach\(goals\)/);
+  for (const mark of ["MOMS_HEART", "ISAAC", "SATAN", "BOSS_RUSH", "BLUE_BABY", "LAMB",
+    "MEGA_SATAN", "ULTRA_GREED", "HUSH", "DELIRIUM", "MOTHER", "BEAST"]) {
+    assert.match(marks, new RegExp(`"${mark}"`));
+  }
+  assert.match(marks, /goal\.completionRequirements\s*=\s*result/);
+  assert.match(marks, /function CompletionMarks\.syncRepentogon/);
+  assert.match(marks, /Isaac\.GetCompletionMarks/);
+  assert.match(marks, /function CompletionMarks\.infer/);
+  assert.match(routes, /function Routes\.context/);
+  assert.match(routes, /function Routes\.evaluate/);
+  assert.match(routes, /Knife Piece 1/);
+  assert.match(routes, /Dad's Note/);
+  assert.match(routes, /Strange Key/);
+  assert.match(routes, /Broken Shovel/);
+  assert.match(routes, /context\.aids\[key\]/);
+  assert.match(routes, /context\.ascent/);
+  assert.match(routes, /mausoleumMomDefeated/);
+  assert.match(routes, /fleshHeartDefeated/);
+  assert.match(routes, /STAGE\.CHAPTER5 and context\.stageType == WOTL/,
+    "Cathedral must use the WOTL stage type");
+  assert.match(routes, /STAGE\.CHAPTER5 and context\.stageType == ORIGINAL/,
+    "Sheol must use the original stage type");
+  assert.match(main, /Routes\.resetAttempt/);
+  assert.match(main, /Routes\.observeNpc/);
+  assert.match(main, /CompletionMarks\.merge/);
+  assert.match(main, /AchievementUnlocksDisallowed/);
+  assert.match(hud, /HUD_WARNING/);
+  assert.match(hud, /route\.known, route\.required/);
 });
 
 test("character relevance normalizes paired and transformed PlayerType variants", () => {

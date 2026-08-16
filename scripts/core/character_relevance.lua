@@ -71,6 +71,12 @@ local CHARACTERS = {
   { name="???", type=playerType("PLAYER_XXX", 4) }
 }
 
+local CHARACTER_NAMES = {}
+for _, character in ipairs(CHARACTERS) do
+  CHARACTER_NAMES[CharacterRelevance and CharacterRelevance.normalize
+    and CharacterRelevance.normalize(character.type) or (NORMALIZED[character.type] or character.type)] = character.name
+end
+
 -- HuijiWiki currently ships three merged English conditions. The localized
 -- condition is authoritative for these rows, so keep the exceptions explicit
 -- until the generated source data is corrected upstream.
@@ -141,6 +147,14 @@ local DEFAULT_UNLOCK_ACHIEVEMENTS = {
 
 function CharacterRelevance.normalize(value)
   return NORMALIZED[value] or value
+end
+
+function CharacterRelevance.characterName(value)
+  return CHARACTER_NAMES[CharacterRelevance.normalize(value)]
+end
+
+function CharacterRelevance.characters()
+  return CHARACTERS
 end
 
 local requirementCache = setmetatable({}, { __mode="k" })

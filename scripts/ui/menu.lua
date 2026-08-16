@@ -1,4 +1,5 @@
 local Catalog = require("scripts.data.goals")
+local CompletionMarks = require("scripts.core.completion_marks")
 local CharacterRelevance = require("scripts.core.character_relevance")
 local Rewards = require("scripts.core.rewards")
 local RewardIcons = require("scripts.ui.reward_icons")
@@ -49,6 +50,7 @@ end
 local function isCompleted(state, goal)
   return (state.profileCompleted and state.profileCompleted[goal.id])
     or (state.run.completedGoals and state.run.completedGoals[goal.id])
+    or CompletionMarks.isSatisfied(goal, state.settings.completionMarks)
 end
 
 local function completedSignature(state)

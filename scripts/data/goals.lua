@@ -1,4 +1,5 @@
 local Rewards = require("scripts.core.rewards")
+local CompletionMarks = require("scripts.core.completion_marks")
 local goals = {}
 for _, goal in ipairs(require("scripts.data.achievements_1_50")) do table.insert(goals, goal) end
 for _, goal in ipairs(require("scripts.data.achievements_51_100")) do table.insert(goals, goal) end
@@ -24,6 +25,7 @@ for _, goal in ipairs(goals) do
   end
   goal.reward = Rewards.display(goal)
 end
+CompletionMarks.attach(goals)
 
 local Catalog = { goals = goals }
 

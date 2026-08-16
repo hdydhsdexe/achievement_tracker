@@ -113,4 +113,35 @@ function Text.ellipsize(value, maxWidth, scale)
   return table.concat(glyphs) .. suffix
 end
 
+local function glyphs(value)
+  local result = {}
+  local source = tostring(value or "")
+  if utf8 and utf8.codes then
+    for _, codepoint in utf8.codes(source) do table.insert(result, utf8.char(codepoint)) end
+  else
+    for index = 1, #source do table.insert(result, string.sub(source, index, index)) end
+  end
+  return result
+end
+
+function Text.wrap(value, maxWidth, scale)
+  local lines, current = {}, ""
+  for _, glyph in ipairs(glyphs(value)) do
+    if glyph == "\n" then
+      table.insert(lines, current)
+      current = ""
+    else
+      local candidate = current .. glyph
+      if current ~= "" and Text.width(candidate, scale) > maxWidth then
+        table.insert(lines, current)
+        current = glyph == " " and "" or glyph
+      else
+        current = candidate
+      end
+    end
+  end
+  if current ~= "" or #lines == 0 then table.insert(lines, current) end
+  return lines
+end
+
 return Text

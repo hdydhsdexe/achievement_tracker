@@ -2,6 +2,11 @@ local json = require("json")
 local Storage = {}
 local MAX_ACHIEVEMENT_COUNT = 16384
 local MAX_MOD_SAVE_DATA_BYTES = 4 * 1024 * 1024
+local COMPLETION_MARKS = {
+  MOMS_HEART=true, ISAAC=true, SATAN=true, BOSS_RUSH=true, BLUE_BABY=true,
+  LAMB=true, MEGA_SATAN=true, ULTRA_GREED=true, HUSH=true, DELIRIUM=true,
+  MOTHER=true, BEAST=true
+}
 
 local function isInteger(value)
   return type(value) == "number" and value == math.floor(value)
@@ -40,9 +45,32 @@ local function normalizeAchievementImport(snapshot)
   }
 end
 
+local function normalizeCompletionMarks(snapshot)
+  local normalized, playerCount = {}, 0
+  if type(snapshot) ~= "table" then return normalized end
+  for player, marks in pairs(snapshot) do
+    local playerNumber = tonumber(player)
+    if playerCount < 64 and isInteger(playerNumber) and playerNumber >= 0 and playerNumber <= 1024
+      and type(marks) == "table" then
+      local clean = {}
+      for mark, value in pairs(marks) do
+        value = tonumber(value)
+        if COMPLETION_MARKS[mark] and isInteger(value) and value >= 1 and value <= 2 then
+          clean[mark] = value
+        end
+      end
+      if next(clean) ~= nil then
+        normalized[tostring(playerNumber)] = clean
+        playerCount = playerCount + 1
+      end
+    end
+  end
+  return normalized
+end
+
 local function defaults()
   return {
-    schemaVersion = 4,
+    schemaVersion = 5,
     language = "zh",
     maxTracked = 3,
     tracked = {},
@@ -50,6 +78,7 @@ local function defaults()
     manuallyCompleted = {},
     observedCompleted = {},
     achievementImport = nil,
+    completionMarks = {},
     activeRun = nil
   }
 end
@@ -72,14 +101,16 @@ function Storage.load(mod)
   end
   if type(decoded.manuallyCompleted) == "table" then data.manuallyCompleted = decoded.manuallyCompleted end
   if type(decoded.observedCompleted) == "table" then data.observedCompleted = decoded.observedCompleted end
+  data.completionMarks = normalizeCompletionMarks(decoded.completionMarks)
   data.achievementImport = normalizeAchievementImport(decoded.achievementImport)
   if type(decoded.activeRun) == "table" then data.activeRun = decoded.activeRun end
   return data
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 4
+  data.schemaVersion = 5
   data.achievementImport = normalizeAchievementImport(data.achievementImport)
+  data.completionMarks = normalizeCompletionMarks(data.completionMarks)
   mod:SaveData(json.encode(data))
 end
 

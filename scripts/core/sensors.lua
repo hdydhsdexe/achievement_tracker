@@ -1,7 +1,8 @@
 local Sensors = {}
 
 function Sensors.newRun(startSeed)
-  return { startSeed=startSeed, disqualified={}, observedPickups={}, failedGoals={}, completedGoals={}, progress={ gulp=0, items=0 } }
+  return { startSeed=startSeed, disqualified={}, observedPickups={}, failedGoals={},
+    completedGoals={}, progress={ gulp=0, items=0 }, routeItems={}, routeEvents={}, routeFloor=nil }
 end
 
 function Sensors.normalizeRun(run)
@@ -10,6 +11,8 @@ function Sensors.normalizeRun(run)
   run.failedGoals = run.failedGoals or {}
   run.completedGoals = run.completedGoals or {}
   run.progress = run.progress or {}
+  run.routeItems = run.routeItems or {}
+  run.routeEvents = run.routeEvents or {}
   run.progress.gulp = tonumber(run.progress.gulp) or 0
   run.progress.items = tonumber(run.progress.items) or 0
   return run

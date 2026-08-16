@@ -6,10 +6,10 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v4 validates and normalizes imported achievement snapshots", () => {
+test("storage schema v5 validates achievements and persistent completion marks", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*4/);
+  assert.match(storage, /schemaVersion\s*=\s*5/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);
   assert.match(storage, /achievementImport\s*=\s*nil/);
@@ -24,6 +24,9 @@ test("storage schema v4 validates and normalizes imported achievement snapshots"
   assert.match(storage, /#raw\s*>\s*MAX_MOD_SAVE_DATA_BYTES/);
   assert.match(storage, /achievementImport\s*=\s*normalizeAchievementImport\(decoded\.achievementImport\)/);
   assert.match(storage, /data\.achievementImport\s*=\s*normalizeAchievementImport\(data\.achievementImport\)/);
+  assert.match(storage, /local function normalizeCompletionMarks\(snapshot\)/);
+  assert.match(storage, /completionMarks\s*=\s*normalizeCompletionMarks\(decoded\.completionMarks\)/);
+  assert.match(storage, /data\.completionMarks\s*=\s*normalizeCompletionMarks\(data\.completionMarks\)/);
 });
 
 test("unlock scan treats an in-range imported achievement id as authoritative", () => {
