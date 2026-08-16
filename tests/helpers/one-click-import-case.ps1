@@ -245,7 +245,7 @@ $local = New-Directory (Join-Path $layout.Documents 'My Games\Binding of Isaac R
 New-IsaacSave (Join-Path $local 'persistentgamedata1.dat') -Unlocked @(1, 3)
 New-IsaacSave (Join-Path $local 'persistentgamedata3.dat') -Unlocked @(2, 5)
 $data = New-Directory $layout.Data
-$oldJson = '{"schemaVersion":3,"language":"zh","tracked":["boss_rush"],"observedCompleted":{"boss_rush":true}}'
+$oldJson = '{"schemaVersion":3,"language":"zh","tracked":["achievement_326"],"observedCompleted":{"achievement_326":true}}'
 [System.IO.File]::WriteAllText((Join-Path $data 'save1.dat'), $oldJson, (New-Object System.Text.UTF8Encoding($false)))
 $slot2 = Join-Path $data 'save2.dat'
 [System.IO.File]::WriteAllText($slot2, '{"sentinel":true}', (New-Object System.Text.UTF8Encoding($false)))
@@ -259,8 +259,8 @@ $merged = Get-Content -LiteralPath (Join-Path $data 'save1.dat') -Raw | ConvertF
 $minimal = Get-Content -LiteralPath (Join-Path $data 'save3.dat') -Raw | ConvertFrom-Json
 Assert-Equal $merged.schemaVersion 4 'schema upgraded'
 Assert-Equal $merged.language 'zh' 'language preserved'
-Assert-Equal $merged.tracked[0] 'boss_rush' 'tracked goals preserved'
-Assert-True ([bool]$merged.observedCompleted.boss_rush) 'observations preserved'
+Assert-Equal $merged.tracked[0] 'achievement_326' 'tracked goals preserved'
+Assert-True ([bool]$merged.observedCompleted.achievement_326) 'observations preserved'
 Assert-Equal $merged.achievementImport.saveSlot 1 'slot 1 snapshot'
 Assert-Equal $merged.achievementImport.unlockedIds.Count 2 'slot 1 unlocks'
 Assert-Equal $minimal.schemaVersion 4 'minimal slot 3 created'
@@ -317,7 +317,7 @@ $local = New-Directory (Join-Path $layout.Documents 'My Games\Binding of Isaac R
 New-IsaacSave (Join-Path $local 'persistentgamedata1.dat') -Unlocked @(1)
 New-IsaacSave (Join-Path $local 'persistentgamedata2.dat') -Unlocked @(2)
 $data = New-Directory $layout.Data
-$original = '{"language":"en","tracked":["hush"]}'
+$original = '{"language":"en","tracked":["achievement_320"]}'
 [System.IO.File]::WriteAllText((Join-Path $data 'save1.dat'), $original, (New-Object System.Text.UTF8Encoding($false)))
 $options = Get-Options $layout
 $options.AfterReplace = { param($slot) if ($slot -eq 2) { throw 'simulated replacement failure' } }

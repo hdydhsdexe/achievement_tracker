@@ -31,7 +31,12 @@ end
 
 local function load()
   State.settings = Storage.load(AchievementTracker)
-  State.tracker = Tracker.new(State.settings.maxTracked, State.settings.tracked)
+  local tracked = {}
+  for _, id in ipairs(State.settings.tracked) do
+    if Catalog.isTrackable(id) then tracked[#tracked + 1] = id end
+  end
+  State.settings.tracked = tracked
+  State.tracker = Tracker.new(State.settings.maxTracked, tracked)
 end
 
 function AchievementTracker:onGameStarted(isContinued)

@@ -16,13 +16,19 @@ test("mod has valid entry metadata and registers gameplay callbacks", () => {
   }
 });
 
-test("catalog ships at least fifteen selectable goals with localized text", () => {
+test("catalog exposes only achievement-backed goals and drops stale tracked ids", () => {
   const catalog = read("scripts/data/goals.lua");
-  const ids = [...catalog.matchAll(/\bid\s*=\s*"([a-z0-9_]+)"/g)].map((match) => match[1]);
-  assert.ok(ids.length >= 15, `expected >= 15 goals, received ${ids.length}`);
-  assert.equal(new Set(ids).size, ids.length, "goal ids must be unique");
-  assert.match(catalog, /zh\s*=\s*{/);
-  assert.match(catalog, /en\s*=\s*{/);
+  const main = read("main.lua");
+  const storage = read("scripts/core/storage.lua");
+  const batches = fs.readdirSync(path.join(root, "scripts/data"))
+    .filter((file) => /^achievements_\d+_\d+\.lua$/.test(file));
+  assert.equal(batches.length, 8);
+  for (const file of batches) assert.match(read(`scripts/data/${file}`), /achievementId=number/);
+  assert.doesNotMatch(catalog, /legacyGoals|id="boss_rush"|id="hush"/);
+  assert.match(catalog, /function Catalog\.isTrackable\(id\)/);
+  assert.match(catalog, /goal\.achievementId ~= nil/);
+  assert.match(main, /if Catalog\.isTrackable\(id\) then tracked\[#tracked \+ 1\] = id end/);
+  assert.match(storage, /tracked\s*=\s*\{\}/);
 });
 
 test("catalog includes HuijiWiki achievement batch 1 through 50", () => {
@@ -114,10 +120,10 @@ test("tracker HUD visualizes failed, completed, and counter progress states", ()
   assert.doesNotMatch(hud, /Isaac\.DrawLine/);
   assert.match(hud, /string\.rep\("#"/);
   assert.match(hud, /Sensors\.progress/);
-  assert.match(goals, /marbles = \{ key="gulp", target=5 \}/);
-  assert.match(goals, /u_broke_it = \{ key="items", target=50 \}/);
+  assert.match(goals, /achievement_330 = \{ progressKey="items", target=50 \}/);
+  assert.match(goals, /achievement_386 = \{ progressKey="gulp", target=5 \}/);
   assert.match(sensors, /PILLEFFECT_GULP/);
-  assert.match(sensors, /completedGoals\.marbles/);
+  assert.match(sensors, /completedGoals\.achievement_386/);
 });
 
 test("reward metadata is normalized once for completion detection and display", () => {
@@ -132,9 +138,7 @@ test("reward metadata is normalized once for completion detection and display", 
   }
   assert.doesNotMatch(unlocks, /local rewards\s*=\s*{/);
   assert.match(unlocks, /Rewards\.config/);
-  for (const id of ["zip", "its_the_key", "marbles", "huge_growth", "u_broke_it", "daily_streak"]) {
-    assert.match(goals, new RegExp(`id="${id}"[^\\n]+reward=`));
-  }
+  assert.match(goals, /trackingMetadata/);
   assert.match(goals, /goal\.reward\s*=\s*Rewards\.display\(goal\)/);
 });
 
@@ -235,20 +239,14 @@ test("reward icon renderer uses vanilla graphics with cached sprites", () => {
   }
 });
 
-test("character rewards retain PlayerType ids for inferred and legacy unlock goals", () => {
+test("character rewards retain PlayerType ids inferred from achievement observations", () => {
   const rewards = read("scripts/core/rewards.lua");
-  const goals = read("scripts/data/goals.lua");
   const early = read("scripts/data/achievements_1_50.lua");
   const repentance = read("scripts/data/achievements_401_500.lua");
   assert.match(rewards, /kind == "character"[\s\S]*?observation\.values\[1\]/);
   assert.match(rewards, /return \{ kind=kind, id=id \}/);
   assert.match(early, /achievement_1=\{kind="player", values=\{1\}\}/);
   assert.match(repentance, /a\(474,[^\n]+observe\("player",21\)/);
-  for (const [goalId, playerType] of [
-    ["forgotten_unlock", 16], ["lost_unlock", 10], ["keeper_unlock", 14]
-  ]) {
-    assert.match(goals, new RegExp(`id="${goalId}"[^\n]+reward=\\{kind="character",id=${playerType}\\}`));
-  }
 });
 
 test("character reward renderer loads cached vanilla portraits with safe fallbacks", () => {
@@ -495,12 +493,12 @@ test("failed run state survives quitting and is restored only for the same run",
 test("vanilla unlock inference uses reward availability and sorts completed goals last", () => {
   const unlocks = read("scripts/core/unlocks.lua");
   const menu = read("scripts/ui/menu.lua");
-  const goals = read("scripts/data/goals.lua");
+  const achievements = read("scripts/data/achievements_301_400.lua");
   assert.match(unlocks, /IsAvailable/);
   assert.match(unlocks, /pcall\(rewardAvailable/);
-  assert.match(goals, /COLLECTIBLE_MARBLES/);
-  assert.match(goals, /CARD_HUGE_GROWTH/);
-  assert.match(goals, /TRINKET_BUTTER/);
+  assert.match(achievements, /a\(326,[^\n]+reward\("card",28\)/);
+  assert.match(achievements, /a\(361,[^\n]+reward\("card",52\)/);
+  assert.match(achievements, /a\(386,[^\n]+reward\("collectible",538\)/);
   assert.match(menu, /local currentPending, convertiblePending, otherCharacterPending, completed/);
   assert.match(menu, /state\.profileCompleted/);
 });

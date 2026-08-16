@@ -155,9 +155,9 @@ test("merges an import snapshot while preserving existing Mod fields", () => {
   const existing = {
     schemaVersion: 3,
     language: "zh",
-    tracked: ["boss_rush"],
-    observedCompleted: { boss_rush: true },
-    manuallyCompleted: { legacy: true },
+    tracked: ["achievement_326"],
+    observedCompleted: { achievement_326: true },
+    manuallyCompleted: { achievement_10: true },
   };
 
   const merged = mergeModSaveData(existing, {

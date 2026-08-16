@@ -23,7 +23,7 @@ function Sensors.update(run, player)
   Sensors.normalizeRun(run)
   if player.GetCollectibleCount then
     run.progress.items = math.max(run.progress.items, player:GetCollectibleCount())
-    if run.progress.items >= 50 then run.completedGoals.u_broke_it = true end
+    if run.progress.items >= 50 then run.completedGoals.achievement_330 = true end
   end
 end
 
@@ -31,7 +31,7 @@ function Sensors.onUsePill(run, pillEffect)
   Sensors.normalizeRun(run)
   if PillEffect and pillEffect == PillEffect.PILLEFFECT_GULP then
     run.progress.gulp = run.progress.gulp + 1
-    if run.progress.gulp >= 5 then run.completedGoals.marbles = true end
+    if run.progress.gulp >= 5 then run.completedGoals.achievement_386 = true end
   end
 end
 

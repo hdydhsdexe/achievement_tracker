@@ -45,7 +45,7 @@ local function defaults()
     schemaVersion = 4,
     language = "zh",
     maxTracked = 3,
-    tracked = { "boss_rush", "hush" },
+    tracked = {},
     hud = { x = 18, y = 82, fontScale = 1, visible = true },
     manuallyCompleted = {},
     observedCompleted = {},
