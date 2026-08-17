@@ -184,13 +184,115 @@ test("reward metadata is normalized once for completion detection and display", 
   assert.match(rewards, /function Rewards\.resolveId/);
   assert.match(rewards, /function Rewards\.config/);
   assert.match(rewards, /function Rewards\.display/);
-  for (const kind of ["collectible", "trinket", "card", "character", "area", "challenge", "feature", "other"]) {
+  for (const kind of ["collectible", "trinket", "card", "pickup", "slot", "grid",
+    "character", "area", "challenge", "feature", "other"]) {
     assert.match(rewards, new RegExp(`\\b${kind}\\b`));
   }
   assert.doesNotMatch(unlocks, /local rewards\s*=\s*{/);
   assert.match(unlocks, /Rewards\.config/);
   assert.match(goals, /trackingMetadata/);
   assert.match(goals, /goal\.reward\s*=\s*Rewards\.display\(goal\)/);
+});
+
+test("F3 maps achievement-unlocked world entities to semantic reward metadata", () => {
+  const goals = read("scripts/data/goals.lua");
+  const rewards = read("scripts/core/rewards.lua");
+  const expected = [
+    [33, "pickup", "variant=10, subtype=8"],
+    [224, "pickup", "variant=10, subtype=7"],
+    [226, "pickup", "variant=40, subtype=4"],
+    [240, "pickup", "variant=20, subtype=6"],
+    [242, "pickup", "variant=20, subtype=5"],
+    [328, "pickup", "variant=10, subtype=9"],
+    [333, "pickup", "variant=30, subtype=4"],
+    [391, "pickup", "variant=10, subtype=11"],
+    [411, "pickup", "variant=10, subtype=12"],
+    [601, "pickup", "variant=57, subtype=0"],
+    [603, "pickup", "variant=70, subtype=14"],
+    [604, "pickup", "variant=69, subtype=2"],
+    [606, "pickup", "variant=70, subtype=2049"],
+    [609, "pickup", "variant=56, subtype=0"],
+    [611, "pickup", "variant=58, subtype=0"],
+    [613, "pickup", "variant=20, subtype=7"],
+    [615, "pickup", "variant=90, subtype=4"],
+    [605, "grid", "gridType=14, variant=11"],
+    [612, "grid", "gridType=27, variant=0"],
+    [607, "slot", "variant=16"],
+    [608, "slot", "variant=15"],
+    [614, "slot", "variant=18"],
+    [616, "slot", "variant=17"]
+  ];
+  assert.match(goals, /local rewardOverrides\s*=\s*\{/);
+  for (const [achievementId, kind, fields] of expected) {
+    const fieldPattern = fields.replace(/([.*+?^${}()|[\]\\])/g, "\\$1").replace(/, /g, ",\\s*");
+    assert.match(goals, new RegExp(
+      `achievement_${achievementId}\\s*=\\s*\\{kind="${kind}",\\s*${fieldPattern}\\s*\\}`),
+      `achievement ${achievementId} must expose ${kind} metadata`);
+  }
+  assert.match(goals, /local override = rewardOverrides\[goal\.id\]/);
+  assert.match(goals, /if override then goal\.reward = override end/);
+  assert.match(rewards, /variant=reward\.variant/);
+  assert.match(rewards, /subtype=reward\.subtype/);
+  assert.match(rewards, /gridType=reward\.gridType/);
+  assert.match(rewards, /return "other"/,
+    "world entity rewards must remain in the existing Other filter");
+});
+
+test("F3 world entity icons use native game actors with static frames and fallback", () => {
+  const icons = read("scripts/ui/reward_icons.lua");
+  const expectedResources = [
+    "005.018_heart (halfsoul).anm2", "005.017_goldheart.anm2",
+    "005.020_scared heart.anm2", "005.01a_bone heart.anm2",
+    "005.01b_rotten heart.anm2", "005.025_sticky nickel.anm2",
+    "005.026_lucky penny.anm2", "005.027_golden penny.anm2",
+    "005.034_chargedkey.anm2", "005.043_golden bomb.anm2",
+    "005.057_mega chest.anm2", "005.084_pill gold-gold.anm2",
+    "005.069_black sack.anm2", "005.071_horse pill blue-blue.anm2",
+    "005.056_wooden chest.anm2", "005.058_haunted chest.anm2",
+    "005.090_golden battery.anm2", "006.015_hell game.anm2",
+    "006.016_crane game.anm2", "006.017_confessional.anm2",
+    "006.018_rotten beggar.anm2", "grid/grid_poop.anm2",
+    "grid/grid_rock.anm2"
+  ];
+  for (const resource of expectedResources) {
+    assert.match(icons, new RegExp(resource.replace(/([.*+?^${}()|[\]\\])/g, "\\$1")),
+      `${resource} must be loaded from the active game resources`);
+  }
+  assert.match(icons, /local nativePickupResources\s*=\s*\{/);
+  assert.match(icons, /local nativeSlotResources\s*=\s*\{/);
+  assert.match(icons, /local nativeGridResources\s*=\s*\{/);
+  assert.match(icons, /grid_poop_charming\.png/);
+  assert.match(icons, /animation="State1", frame=5/);
+  assert.match(icons, /animation="foolsgold", frame=0/);
+  assert.match(icons, /animation="Idle", frame=0/);
+  assert.match(icons, /resource\.spritesheet[\s\S]*?ReplaceSpritesheet\(0, resource\.spritesheet\)/);
+  assert.match(icons, /validFrame\(sprite, resource\.animation, resource\.frame\)/);
+  assert.match(icons, /reward\.kind == "pickup"/);
+  assert.match(icons, /reward\.kind == "slot"/);
+  assert.match(icons, /reward\.kind == "grid"/);
+  assert.match(icons, /offsetX|offsetY/,
+    "large native actors need explicit centering metadata");
+  assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
+  for (const copiedAsset of [
+    "005.017_goldheart.anm2", "006.016_crane game.anm2",
+    "grid_poop_charming.png", "grid_rock.anm2"
+  ]) {
+    assert.equal(fs.existsSync(path.join(root, "resources/gfx", copiedAsset)), false,
+      `${copiedAsset} must not be bundled by the mod`);
+  }
+});
+
+test("F3 localizes and searches world entity reward kinds without adding filters", () => {
+  const goals = read("scripts/data/goals.lua");
+  const menu = read("scripts/ui/menu.lua");
+  const text = read("scripts/ui/text.lua");
+  for (const kind of ["pickup", "slot", "grid"]) {
+    assert.match(goals, new RegExp(`${kind}="[^"]+"`));
+    assert.equal((text.match(new RegExp(`${kind}="`, "g")) || []).length, 2,
+      `${kind} must have Chinese and English labels`);
+  }
+  assert.match(menu, /local FILTERS = \{ "all", "collectible", "trinket", "card", "other" \}/);
+  assert.doesNotMatch(menu, /local FILTERS = \{[^\n]*"pickup"/);
 });
 
 test("reward icon renderer uses vanilla graphics with cached sprites", () => {
