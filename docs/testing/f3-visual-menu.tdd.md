@@ -68,3 +68,36 @@ passing and 2 failing tests; the completed implementation returned the suite to
 green. At a 480-pixel internal width the panel is approximately 307 pixels wide
 with 86-pixel side clearances; at 408 pixels it uses the 270-pixel minimum with
 69-pixel clearances for the left and right HUD regions.
+
+## 2026-08-17 priority and navigation regression
+
+The journeys were derived from the approved Codex implementation plan: tracked
+achievements must lead the F3 list, held arrows must repeat without wrapping,
+and mouse hover/click must select and toggle visible tiles without affecting
+another controller.
+
+- RED: `npm.cmd test` ran 69 tests with 65 passing and 4 failing. The intended
+  failures covered the absent tracked bucket, priority-first search ordering,
+  held-arrow timing, and mouse hit/click handling.
+- GREEN: `npm.cmd test` ran the same 69 tests with all 69 passing.
+- Review RED/GREEN: input review found real-time arrow/Space leakage and a
+  same-frame keyboard/mouse targeting ambiguity. The added contract ran 70
+  tests with 69 passing and 1 intended failure before the fixes; the final run
+  passed all 70.
+- Coverage: `npm.cmd run test:coverage` ran 70 tests with all 70 passing and
+  reported 92.45% lines, 89.87% branches, and 100% functions for the executable
+  JavaScript suite.
+
+| Guarantee | Test | Type | Result |
+|---|---|---|---|
+| Tracked goals lead current, convertible, other-character, and untracked completed goals; search preserves those groups before fuzzy score | `F3 tracking mode ranks tracked, current, convertible, other, and completed goals` | contract | PASS |
+| Arrow presses move once, then repeat after 300 ms every 90 ms while list boundaries remain clamped | `F3 navigation repeats held arrows after a real-time delay without wrapping` | contract | PASS |
+| Mouse hover targets only visible tiles, a left-button edge toggles once, and panel shooting suppression is limited to controller 0 | `F3 mouse hover selects visible tiles and a left-click edge toggles tracking` | contract | PASS |
+| Real-time arrow and Space menu input cannot also shoot or use an item; nonzero controllers and non-player queries remain untouched | `F3 consumes only controller-zero gameplay actions owned by menu keys` | contract | PASS |
+| Existing import, pause, search, character relevance, HUD, and tracking contracts remain intact | complete `npm.cmd test` suite | regression | PASS |
+
+The Node suite validates source contracts but cannot execute the Lua menu inside
+Isaac. Live-game checks remain for paused and real-time menus, multiple internal
+resolutions, held-key cadence, click-to-track reordering, and multiplayer input
+isolation. No checkpoint commits were created because the approved plan requires
+review before any commit.

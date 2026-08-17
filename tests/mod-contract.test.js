@@ -108,6 +108,57 @@ test("F3 menu uses a paged three-column tile grid", () => {
   assert.match(menu, /column \* columnWidth/);
 });
 
+test("F3 navigation repeats held arrows after a real-time delay without wrapping", () => {
+  const menu = read("scripts/ui/menu.lua");
+  assert.match(menu, /local HOLD_DELAY_MS = 300/);
+  assert.match(menu, /local HOLD_REPEAT_MS = 90/);
+  assert.match(menu, /Input\.IsButtonPressed\(key, 0\)/);
+  assert.match(menu, /Isaac\.GetTime\(\)/);
+  assert.match(menu, /repeatKeys/);
+  assert.match(menu, /state\.menu\.repeatKeys = \{\}/);
+  assert.match(menu, /math\.max\(1, state\.menu\.cursor - 1\)/);
+  assert.match(menu, /math\.min\(count, state\.menu\.cursor \+ COLUMNS\)/);
+  assert.doesNotMatch(menu, /state\.menu\.cursor\s*%\s*count/,
+    "held navigation must clamp at the list boundaries rather than wrap");
+});
+
+test("F3 mouse hover selects visible tiles and a left-click edge toggles tracking", () => {
+  const main = read("main.lua");
+  const menu = read("scripts/ui/menu.lua");
+  assert.match(menu, /local function menuLayout\(\)/);
+  assert.match(menu, /Input\.GetMousePosition\(false\)/);
+  assert.match(menu, /Input\.IsMouseBtnPressed\(Mouse\.MOUSE_BUTTON_LEFT\)/);
+  assert.match(menu, /local clicked = mouseDown and not state\.menu\.mouseDown/);
+  assert.match(menu, /local function mouseGoalIndex/);
+  assert.match(menu, /state\.menu\.offset \+ row \* COLUMNS \+ column/);
+  assert.match(menu, /local function toggleGoal/);
+  assert.match(menu, /refreshGoals\(state, context, true\)/);
+  assert.match(menu, /SHOOT_KEYS\[buttonAction\]/);
+  assert.match(menu, /mouseInsidePanel\(Input\.GetMousePosition\(false\), menuLayout\(\)\)/);
+  assert.match(main, /InputHook\.GET_ACTION_VALUE/,
+    "blocked mouse shooting must return the correct value for analog input hooks");
+});
+
+test("F3 consumes only controller-zero gameplay actions owned by menu keys", () => {
+  const menu = read("scripts/ui/menu.lua");
+  assert.match(menu, /local SHOOT_KEYS = \{/);
+  for (const [action, key] of [
+    ["ACTION_SHOOTLEFT", "KEY_LEFT"], ["ACTION_SHOOTRIGHT", "KEY_RIGHT"],
+    ["ACTION_SHOOTUP", "KEY_UP"], ["ACTION_SHOOTDOWN", "KEY_DOWN"]
+  ]) {
+    assert.match(menu, new RegExp(`\\[ButtonAction\\.${action}\\]\\s*=\\s*Keyboard\\.${key}`));
+  }
+  assert.match(menu, /Input\.IsButtonPressed\(shootKey, 0\)/,
+    "held arrow navigation must not leak into shooting");
+  assert.match(menu, /buttonAction == ButtonAction\.ACTION_ITEM[\s\S]*?Keyboard\.KEY_SPACE/,
+    "Space tracking must not use the active item");
+  assert.match(menu, /if not player or player\.ControllerIndex ~= 0 then return false end/,
+    "other controllers and nil or non-player input queries must remain untouched");
+  assert.match(menu, /local keyboardIndex = keyboardActivated and state\.menu\.cursor/);
+  assert.match(menu, /local activatedIndex = mouseIndex or keyboardIndex/,
+    "mouse movement alone must not retarget a simultaneous keyboard activation");
+});
+
 test("tracker HUD visualizes failed, completed, and counter progress states", () => {
   const menu = read("scripts/ui/menu.lua");
   const hud = read("scripts/ui/hud.lua");
@@ -492,7 +543,7 @@ test("failed run state survives quitting and is restored only for the same run",
   assert.match(sensors, /function Sensors\.newRun\(startSeed\)/);
 });
 
-test("vanilla unlock inference uses reward availability and sorts completed goals last", () => {
+test("vanilla unlock inference uses reward availability and sorts untracked completed goals last", () => {
   const unlocks = read("scripts/core/unlocks.lua");
   const menu = read("scripts/ui/menu.lua");
   const achievements = read("scripts/data/achievements_301_400.lua");
@@ -501,7 +552,7 @@ test("vanilla unlock inference uses reward availability and sorts completed goal
   assert.match(achievements, /a\(326,[^\n]+reward\("card",28\)/);
   assert.match(achievements, /a\(361,[^\n]+reward\("card",52\)/);
   assert.match(achievements, /a\(386,[^\n]+reward\("collectible",538\)/);
-  assert.match(menu, /local currentPending, convertiblePending, otherCharacterPending, completed/);
+  assert.match(menu, /local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed/);
   assert.match(menu, /state\.profileCompleted/);
 });
 
@@ -568,6 +619,23 @@ test("Boss Rush completion uses the persistent game-state flag across room and f
   assert.match(main, /MC_POST_NEW_ROOM/);
 });
 
+test("challenge runs show only their unlock while F3 marks challenge-only unlocks unavailable elsewhere", () => {
+  const goals = read("scripts/data/goals.lua");
+  const hud = read("scripts/ui/hud.lua");
+  const menu = read("scripts/ui/menu.lua");
+  const text = read("scripts/ui/text.lua");
+  assert.match(goals, /local CHALLENGE_ACHIEVEMENT_IDS = \{/);
+  assert.match(goals, /goal\.challengeId = challengeId/);
+  assert.match(goals, /function Catalog\.challengeGoal/);
+  assert.match(goals, /function Catalog\.isCompletable/);
+  assert.match(hud, /local challengeId = Isaac\.GetChallenge\(\)/);
+  assert.match(hud, /Catalog\.challengeGoal\(challengeId\)/);
+  assert.match(hud, /trackedIds = challengeGoal and \{ challengeGoal\.id \} or \{\}/);
+  assert.match(menu, /Catalog\.isCompletable\(goal, Isaac\.GetChallenge\(\)\)/);
+  assert.match(menu, /not completable and labels\.unavailable/);
+  assert.match(text, /unavailable\s*=\s*"不可完成"/);
+});
+
 test("character relevance normalizes paired and transformed PlayerType variants", () => {
   const relevance = read("scripts/core/character_relevance.lua");
   for (const [variant, base] of [[11, 8], [12, 3], [17, 16], [20, 19], [38, 29], [39, 37], [40, 35]]) {
@@ -617,12 +685,21 @@ test("character relevance overrides malformed merged catalog conditions", () => 
   assert.match(later, /a\(270,[^\n]+as Isaac Defeat Mega Satan/);
 });
 
-test("F3 tracking mode ranks current-character goals and dims other-character goals", () => {
+test("F3 tracking mode ranks completable goals before unavailable challenges and completed goals", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.core\.character_relevance"\)/);
-  assert.match(menu, /local currentPending, convertiblePending, otherCharacterPending, completed/);
+  assert.match(menu, /local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed/);
+  assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)/);
+  assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\) and \(completedGoal or completable\)/,
+    "tracking must not promote an unfinished unavailable challenge");
+  assert.match(menu, /elseif not completedGoal and not completable then[\s\S]*?bucket, priorityRank = unavailable, 5/);
   assert.match(menu, /CharacterRelevance\.classify\(goal, context\)/);
-  assert.match(menu, /for _, bucket in ipairs\(\{ currentPending, convertiblePending, otherCharacterPending, completed \}\)/);
+  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed \}\)/);
+  assert.match(menu, /if left\.priorityRank ~= right\.priorityRank then[\s\S]*?left\.priorityRank < right\.priorityRank/,
+    "availability priority must outrank fuzzy-search score");
+  assert.match(menu, /if left\.score ~= right\.score then return left\.score < right\.score end/);
+  assert.match(menu, /trackedOrder\[goal\.id\]/,
+    "the non-search tracked group must retain the HUD tracking order");
   assert.match(menu, /local dimmed = not completed and relevance == "other"/);
   assert.match(menu, /local DIMMED_INK = KColor/);
   assert.match(menu, /local DIMMED_TINT = Color/);

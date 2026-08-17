@@ -44,7 +44,13 @@ function Hud.render(state)
   end
   Text.draw(labels.title, x, y, scale, HUD_TITLE, language)
   y = y + lineHeight
-  for _, id in ipairs(state.tracker.ids) do
+  local trackedIds = state.tracker.ids
+  local challengeId = Isaac.GetChallenge()
+  if challengeId ~= 0 then
+    local challengeGoal = Catalog.challengeGoal(challengeId)
+    trackedIds = challengeGoal and { challengeGoal.id } or {}
+  end
+  for _, id in ipairs(trackedIds) do
     local goal = Catalog.get(id)
     if goal then
       local text = Catalog.text(goal, language)

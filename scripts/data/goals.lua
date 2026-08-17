@@ -18,10 +18,25 @@ local trackingMetadata = {
   achievement_330 = { progressKey="items", target=50 },
   achievement_386 = { progressKey="gulp", target=5 }
 }
+local CHALLENGE_ACHIEVEMENT_IDS = {
+  89,90,91,92,93,94,120,96,97,98,99,100,60,63,101,
+  102,103,104,62,95,224,225,226,227,228,229,230,231,232,233,
+  331,332,333,334,335,517,518,519,520,521,522,531,532,533,538
+}
+local challengeGoals = {}
+local challengeIdsByGoal = {}
+for challengeId, achievementId in ipairs(CHALLENGE_ACHIEVEMENT_IDS) do
+  challengeIdsByGoal["achievement_" .. achievementId] = challengeId
+end
 for _, goal in ipairs(goals) do
   local metadata = trackingMetadata[goal.id]
   if metadata then
     for key, value in pairs(metadata) do goal[key] = value end
+  end
+  local challengeId = challengeIdsByGoal[goal.id]
+  if challengeId then
+    goal.challengeId = challengeId
+    challengeGoals[challengeId] = goal
   end
   goal.reward = Rewards.display(goal)
 end
@@ -37,6 +52,16 @@ end
 function Catalog.isTrackable(id)
   local goal = Catalog.get(id)
   return goal ~= nil and goal.achievementId ~= nil
+end
+
+function Catalog.challengeGoal(challengeId)
+  return challengeGoals[tonumber(challengeId) or 0]
+end
+
+function Catalog.isCompletable(goal, challengeId)
+  challengeId = tonumber(challengeId) or 0
+  if challengeId == 0 then return goal.challengeId == nil end
+  return goal.challengeId == challengeId
 end
 
 function Catalog.text(goal, language)

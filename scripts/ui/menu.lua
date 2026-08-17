@@ -11,12 +11,21 @@ local ROWS = 9
 local PAGE_SIZE = COLUMNS * ROWS
 local FILTERS = { "all", "collectible", "trinket", "card", "other" }
 local MAX_SEARCH_LENGTH = 48
+local HOLD_DELAY_MS = 300
+local HOLD_REPEAT_MS = 90
 local PANEL_WIDTH_RATIO = 0.64
 local MIN_PANEL_WIDTH = 270
 local MAX_PANEL_WIDTH = 340
 local MAX_PANEL_HEIGHT = 238
+local LINE_HEIGHT = 13
 local MENU_MIN_BODY_PIXELS = 8
 local MENU_MAX_BODY_PIXELS = 11
+local SHOOT_KEYS = {
+  [ButtonAction.ACTION_SHOOTLEFT]=Keyboard.KEY_LEFT,
+  [ButtonAction.ACTION_SHOOTRIGHT]=Keyboard.KEY_RIGHT,
+  [ButtonAction.ACTION_SHOOTUP]=Keyboard.KEY_UP,
+  [ButtonAction.ACTION_SHOOTDOWN]=Keyboard.KEY_DOWN
+}
 
 -- Light fills retain the font atlas' black pixel outline, keeping the menu
 -- readable on parchment without the muddy dark-on-dark look.
@@ -28,6 +37,23 @@ local DIMMED_INK = KColor(0.62, 0.60, 0.58, 1)
 local DIMMED_TINT = Color(0.48, 0.48, 0.48, 1)
 local CONVERTIBLE_INK = KColor(1.00, 0.72, 0.30, 1)
 local CONVERTIBLE_TINT = Color(1.00, 0.68, 0.28, 1)
+
+local function menuLayout()
+  local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
+  local panelWidth = math.min(MAX_PANEL_WIDTH,
+    math.max(MIN_PANEL_WIDTH, math.floor(screenWidth * PANEL_WIDTH_RATIO)))
+  panelWidth = math.min(panelWidth, screenWidth - 24)
+  local panelHeight = math.min(MAX_PANEL_HEIGHT, screenHeight - 28)
+  local panelX = math.floor((screenWidth - panelWidth) / 2)
+  local panelY = math.floor((screenHeight - panelHeight) / 2)
+  local x, top = panelX + 12, panelY + 10
+  local contentWidth = panelWidth - 24
+  return {
+    panelWidth=panelWidth, panelHeight=panelHeight, panelX=panelX, panelY=panelY,
+    x=x, top=top, contentWidth=contentWidth,
+    columnWidth=math.floor(contentWidth / COLUMNS), gridTop=top + 32
+  }
+end
 
 local function menuTypeScales(fontScale)
   local requestedPixels = math.floor((tonumber(fontScale) or 1) * 10 + 0.5)
@@ -44,13 +70,18 @@ end
 function Menu.new()
   return { open=false, cursor=1, offset=1, goals=nil, filterIndex=1,
     query="", searchFocused=false, relevanceContext=nil,
-    relevanceSignature=nil, completionSignature=nil }
+    relevanceSignature=nil, completionSignature=nil, repeatKeys={},
+    mouseDown=false, mouseX=nil, mouseY=nil }
 end
 
 local function isCompleted(state, goal)
   return (state.profileCompleted and state.profileCompleted[goal.id])
     or (state.run.completedGoals and state.run.completedGoals[goal.id])
     or CompletionMarks.isSatisfied(goal, state.settings.completionMarks)
+end
+
+local function isCompletable(goal)
+  return Catalog.isCompletable(goal, Isaac.GetChallenge())
 end
 
 local function completedSignature(state)
@@ -70,37 +101,48 @@ local function refreshGoals(state, context, preserveSelection)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
-  local currentPending, convertiblePending, otherCharacterPending, completed = {}, {}, {}, {}
+  local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed = {}, {}, {}, {}, {}, {}
   local searchMeta = {}
+  local trackedOrder = {}
+  for index, id in ipairs(state.tracker.ids) do trackedOrder[id] = index end
   context = context or CharacterRelevance.buildContext(Game(), Catalog.goals)
   local filter = FILTERS[state.menu.filterIndex] or "all"
   for _, match in ipairs(Catalog.search(state.menu.query)) do
     local goal = match.goal
     if matchesFilter(goal, filter) then
-      local bucket, relevanceRank = completed, 4
-      if not isCompleted(state, goal) then
+      local completedGoal = isCompleted(state, goal)
+      local completable = isCompletable(goal)
+      local bucket, priorityRank = completed, 6
+      if Tracker.contains(state.tracker, goal.id) and (completedGoal or completable) then
+        bucket, priorityRank = tracked, 1
+      elseif not completedGoal and not completable then
+        bucket, priorityRank = unavailable, 5
+      elseif not completedGoal then
         local relevance = CharacterRelevance.classify(goal, context)
-        if relevance == "current" then bucket, relevanceRank = currentPending, 1
-        elseif relevance == "convertible" then bucket, relevanceRank = convertiblePending, 2
-        else bucket, relevanceRank = otherCharacterPending, 3 end
+        if relevance == "current" then bucket, priorityRank = currentPending, 2
+        elseif relevance == "convertible" then bucket, priorityRank = convertiblePending, 3
+        else bucket, priorityRank = otherCharacterPending, 4 end
       end
       table.insert(bucket, goal)
-      searchMeta[goal.id] = { score=match.score, relevanceRank=relevanceRank,
-        catalogIndex=match.catalogIndex }
+      searchMeta[goal.id] = { score=match.score, priorityRank=priorityRank,
+        stableOrder=trackedOrder[goal.id] or match.catalogIndex }
     end
   end
+  table.sort(tracked, function(left, right)
+    return trackedOrder[left.id] < trackedOrder[right.id]
+  end)
   local goals = {}
-  for _, bucket in ipairs({ currentPending, convertiblePending, otherCharacterPending, completed }) do
+  for _, bucket in ipairs({ tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed }) do
     for _, goal in ipairs(bucket) do table.insert(goals, goal) end
   end
   if state.menu.query ~= "" then
     table.sort(goals, function(leftGoal, rightGoal)
       local left, right = searchMeta[leftGoal.id], searchMeta[rightGoal.id]
-      if left.score ~= right.score then return left.score < right.score end
-      if left.relevanceRank ~= right.relevanceRank then
-        return left.relevanceRank < right.relevanceRank
+      if left.priorityRank ~= right.priorityRank then
+        return left.priorityRank < right.priorityRank
       end
-      return left.catalogIndex < right.catalogIndex
+      if left.score ~= right.score then return left.score < right.score end
+      return left.stableOrder < right.stableOrder
     end)
   end
   state.menu.goals = goals
@@ -121,6 +163,73 @@ local function refreshGoals(state, context, preserveSelection)
 end
 
 local function triggered(key) return Input.IsButtonTriggered(key, 0) end
+
+local function resetRepeatKeys(state)
+  state.menu.repeatKeys = {}
+end
+
+local function repeated(state, key, now)
+  if triggered(key) then
+    state.menu.repeatKeys[key] = { nextAt=now + HOLD_DELAY_MS }
+    return true
+  end
+  if not Input.IsButtonPressed(key, 0) then
+    state.menu.repeatKeys[key] = nil
+    return false
+  end
+  local held = state.menu.repeatKeys[key]
+  if held and now >= held.nextAt then
+    held.nextAt = now + HOLD_REPEAT_MS
+    return true
+  end
+  return false
+end
+
+local function pointInside(position, left, top, right, bottom)
+  return position.X >= left and position.X < right
+    and position.Y >= top and position.Y < bottom
+end
+
+local function mouseInsidePanel(position, layout)
+  return pointInside(position, layout.panelX, layout.panelY,
+    layout.panelX + layout.panelWidth, layout.panelY + layout.panelHeight)
+end
+
+local function mouseGoalIndex(state, position, layout)
+  if not pointInside(position, layout.x, layout.gridTop,
+    layout.x + layout.columnWidth * COLUMNS,
+    layout.gridTop + LINE_HEIGHT * ROWS) then return nil end
+  local column = math.floor((position.X - layout.x) / layout.columnWidth)
+  local row = math.floor((position.Y - layout.gridTop) / LINE_HEIGHT)
+  local index = state.menu.offset + row * COLUMNS + column
+  local goals = state.menu.goals or {}
+  if index > #goals or index >= state.menu.offset + PAGE_SIZE then return nil end
+  return index
+end
+
+local function updateMouseSelection(state)
+  local position = Input.GetMousePosition(false)
+  local moved = state.menu.mouseX ~= position.X or state.menu.mouseY ~= position.Y
+  state.menu.mouseX, state.menu.mouseY = position.X, position.Y
+  local index = mouseGoalIndex(state, position, menuLayout())
+  if moved and index then state.menu.cursor = index end
+  local mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
+  local clicked = mouseDown and not state.menu.mouseDown
+  state.menu.mouseDown = mouseDown
+  if clicked and index then
+    state.menu.cursor = index
+    return index
+  end
+  return nil
+end
+
+local function toggleGoal(state, goal, save, context)
+  if not goal or not Tracker.toggle(state.tracker, goal.id) then return false end
+  state.settings.tracked = state.tracker.ids
+  save()
+  refreshGoals(state, context, true)
+  return true
+end
 
 local function typedSearchCharacter()
   for key = Keyboard.KEY_A, Keyboard.KEY_Z do
@@ -185,12 +294,18 @@ end
 
 function Menu.shouldBlockInput(state, entity, inputHook, buttonAction)
   if not state or not state.menu or not state.menu.open then return false end
+  local player = entity and entity:ToPlayer()
+  if not player or player.ControllerIndex ~= 0 then return false end
   if buttonAction == ButtonAction.ACTION_PAUSE
     or buttonAction == ButtonAction.ACTION_MAP then return true end
-  if not state.menu.searchFocused then return false end
-  local player = entity and entity:ToPlayer()
-  if player and player.ControllerIndex ~= 0 then return false end
-  return true
+  local shootKey = SHOOT_KEYS[buttonAction]
+  if shootKey and (Input.IsButtonPressed(shootKey, 0)
+    or mouseInsidePanel(Input.GetMousePosition(false), menuLayout())) then
+    return true
+  end
+  if buttonAction == ButtonAction.ACTION_ITEM
+    and Input.IsButtonPressed(Keyboard.KEY_SPACE, 0) then return true end
+  return state.menu.searchFocused
 end
 
 function Menu.update(state, save)
@@ -201,11 +316,18 @@ function Menu.update(state, save)
       state.menu.open = true
       state.menu.cursor, state.menu.offset, state.menu.filterIndex = 1, 1, 1
       state.menu.query, state.menu.searchFocused = "", false
+      resetRepeatKeys(state)
+      state.menu.mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
+      state.menu.mouseX, state.menu.mouseY = nil, nil
       refreshGoals(state, nil, false)
     end
   end
   if triggered(Keyboard.KEY_F4) then state.settings.hud.visible = not state.settings.hud.visible; save() end
-  if not state.menu.open then return end
+  if not state.menu.open then
+    resetRepeatKeys(state)
+    state.menu.mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
+    return
+  end
   local context = CharacterRelevance.buildContext(Game(), Catalog.goals)
   local completionSignature = completedSignature(state)
   if state.menu.relevanceSignature ~= context.signature
@@ -216,6 +338,7 @@ function Menu.update(state, save)
   local searchShortcut = triggered(Keyboard.KEY_SLASH)
   if searchShortcut then
     state.menu.searchFocused = true
+    resetRepeatKeys(state)
     searchConsumed = true
   elseif state.menu.searchFocused then
     local queryChanged
@@ -232,24 +355,43 @@ function Menu.update(state, save)
   end
   local goals = state.menu.goals or {}
   local count = #goals
+  local keyboardActivated = false
   if count > 0 then
     if not state.menu.searchFocused then
-      if triggered(Keyboard.KEY_LEFT) then state.menu.cursor = math.max(1, state.menu.cursor - 1) end
-      if triggered(Keyboard.KEY_RIGHT) then state.menu.cursor = math.min(count, state.menu.cursor + 1) end
-      if triggered(Keyboard.KEY_UP) then state.menu.cursor = math.max(1, state.menu.cursor - COLUMNS) end
-      if triggered(Keyboard.KEY_DOWN) then state.menu.cursor = math.min(count, state.menu.cursor + COLUMNS) end
-      if not searchConsumed
-        and (triggered(Keyboard.KEY_ENTER) or triggered(Keyboard.KEY_SPACE)) then
-        Tracker.toggle(state.tracker, goals[state.menu.cursor].id)
-        state.settings.tracked = state.tracker.ids
-        save()
+      local now = Isaac.GetTime()
+      if repeated(state, Keyboard.KEY_LEFT, now) then
+        state.menu.cursor = math.max(1, state.menu.cursor - 1)
       end
+      if repeated(state, Keyboard.KEY_RIGHT, now) then
+        state.menu.cursor = math.min(count, state.menu.cursor + 1)
+      end
+      if repeated(state, Keyboard.KEY_UP, now) then
+        state.menu.cursor = math.max(1, state.menu.cursor - COLUMNS)
+      end
+      if repeated(state, Keyboard.KEY_DOWN, now) then
+        state.menu.cursor = math.min(count, state.menu.cursor + COLUMNS)
+      end
+      keyboardActivated = not searchConsumed
+        and (triggered(Keyboard.KEY_ENTER) or triggered(Keyboard.KEY_SPACE))
+    else
+      resetRepeatKeys(state)
     end
     state.menu.offset = math.floor((state.menu.cursor - 1) / PAGE_SIZE) * PAGE_SIZE + 1
   else
     state.menu.cursor, state.menu.offset = 1, 1
   end
-  if not searchConsumed and triggered(Keyboard.KEY_ESCAPE) then state.menu.open = false end
+  local keyboardIndex = keyboardActivated and state.menu.cursor
+  local mouseIndex = updateMouseSelection(state)
+  local activatedIndex = mouseIndex or keyboardIndex
+  goals = state.menu.goals or {}
+  if #goals > 0 and activatedIndex then
+    state.menu.cursor = activatedIndex
+    toggleGoal(state, goals[activatedIndex], save, context)
+  end
+  if not searchConsumed and triggered(Keyboard.KEY_ESCAPE) then
+    state.menu.open = false
+    resetRepeatKeys(state)
+  end
 end
 
 local function filterLine(labels, active)
@@ -278,19 +420,13 @@ function Menu.render(state)
   local labels = Text.labels(language)
   local context = state.menu.relevanceContext
     or CharacterRelevance.buildContext(Game(), Catalog.goals)
-  local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
-  local panelWidth = math.min(MAX_PANEL_WIDTH,
-    math.max(MIN_PANEL_WIDTH, math.floor(screenWidth * PANEL_WIDTH_RATIO)))
-  panelWidth = math.min(panelWidth, screenWidth - 24)
-  local panelHeight = math.min(MAX_PANEL_HEIGHT, screenHeight - 28)
-  local panelX = math.floor((screenWidth - panelWidth) / 2)
-  local panelY = math.floor((screenHeight - panelHeight) / 2)
+  local layout = menuLayout()
+  local panelWidth, panelHeight = layout.panelWidth, layout.panelHeight
+  local panelX, panelY = layout.panelX, layout.panelY
   local typeScale = menuTypeScales(state.settings.hud.fontScale)
-  local lineHeight = 13
-  local x, top = panelX + 12, panelY + 10
-  local contentWidth = panelWidth - 24
-  local columnWidth = math.floor(contentWidth / COLUMNS)
-  local gridTop = top + 32
+  local x, top = layout.x, layout.top
+  local contentWidth, columnWidth = layout.contentWidth, layout.columnWidth
+  local gridTop = layout.gridTop
   RewardIcons.renderPaper(panelX, panelY, panelWidth, panelHeight)
 
   local title = labels.menuTitle
@@ -314,11 +450,13 @@ function Menu.render(state)
     local goal = goals[index]
     local localIndex = index - state.menu.offset
     local column, row = localIndex % COLUMNS, math.floor(localIndex / COLUMNS)
-    local tileX, tileY = x + column * columnWidth, gridTop + row * lineHeight
+    local tileX, tileY = x + column * columnWidth, gridTop + row * LINE_HEIGHT
     local selected = index == state.menu.cursor
     local completed = isCompleted(state, goal)
+    local completable = isCompletable(goal)
     local relevance = CharacterRelevance.classify(goal, context)
     local dimmed = not completed and relevance == "other"
+    dimmed = dimmed or (not completed and not completable)
     local convertible = not completed and relevance == "convertible"
     local tracked = Tracker.contains(state.tracker, goal.id)
     local reward = Rewards.display(goal)
@@ -327,7 +465,8 @@ function Menu.render(state)
     RewardIcons.render(reward, tileX + 8, tileY + 6, 12, dimmed and DIMMED_TINT or tint)
     local marker = selected and ">" or " "
     local tracking = tracked and "*" or " "
-    local status = completed and "+" or (convertible and "~" or "?")
+    local status = completed and "+" or (not completable and "!"
+      or (convertible and "~" or "?"))
     local name = Text.ellipsize(Catalog.text(goal, language).name,
       columnWidth - 35, typeScale.body)
     local color = dimmed and DIMMED_INK
@@ -337,13 +476,15 @@ function Menu.render(state)
       tileX + 15, tileY, typeScale.body, color, language)
   end
 
-  local detailY = gridTop + ROWS * lineHeight + 4
+  local detailY = gridTop + ROWS * LINE_HEIGHT + 4
   local selected = goals[state.menu.cursor]
   if selected then
     local reward = Rewards.display(selected)
     local completed = isCompleted(state, selected)
+    local completable = isCompletable(selected)
     local relevance = CharacterRelevance.classify(selected, context)
     local dimmed = not completed and relevance == "other"
+    dimmed = dimmed or (not completed and not completable)
     local convertible = not completed and relevance == "convertible"
     local detailInk = dimmed and DIMMED_INK
       or (convertible and CONVERTIBLE_INK or INK)
@@ -353,7 +494,8 @@ function Menu.render(state)
     local rewardX = x + leftWidth + 15
     Text.draw(labels.completionCondition, x, detailY, typeScale.label, DARK_INK, language)
     local statusLabel = completed and labels.completed
-      or (convertible and labels.availableAfterTransformation or labels.unconfirmed)
+      or (not completable and labels.unavailable
+        or (convertible and labels.availableAfterTransformation or labels.unconfirmed))
     local statusInk = completed and STAMP_INK
       or (convertible and CONVERTIBLE_INK or MUTED)
     Text.draw(statusLabel, x + 72, detailY, typeScale.small, statusInk, language)
