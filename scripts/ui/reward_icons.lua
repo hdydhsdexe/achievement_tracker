@@ -97,6 +97,43 @@ local nativeCardResources = {
   [97]="gfx/005.300.34_soul of jacob.anm2"
 }
 
+-- World entity actors are read from the active game resources so texture
+-- replacement mods remain visible. baseSize and offsets normalize actors whose
+-- world pivots are larger or lower than regular 32x32 pickups.
+local nativePickupResources = {
+  ["10:8"]={path="gfx/005.018_heart (halfsoul).anm2", animation="Idle", frame=0, baseSize=32},
+  ["10:7"]={path="gfx/005.017_goldheart.anm2", animation="Idle", frame=0, baseSize=32},
+  ["10:9"]={path="gfx/005.020_scared heart.anm2", animation="Idle", frame=0, baseSize=32},
+  ["10:11"]={path="gfx/005.01a_bone heart.anm2", animation="Idle", frame=0, baseSize=32},
+  ["10:12"]={path="gfx/005.01b_rotten heart.anm2", animation="Idle", frame=0, baseSize=32},
+  ["20:5"]={path="gfx/005.026_lucky penny.anm2", animation="Idle", frame=0, baseSize=32},
+  ["20:6"]={path="gfx/005.025_sticky nickel.anm2", animation="Idle", frame=0, baseSize=32},
+  ["20:7"]={path="gfx/005.027_golden penny.anm2", animation="Idle", frame=0, baseSize=32},
+  ["30:4"]={path="gfx/005.034_chargedkey.anm2", animation="Idle", frame=0, baseSize=32},
+  ["40:4"]={path="gfx/005.043_golden bomb.anm2", animation="Idle", frame=0, baseSize=32},
+  ["56:0"]={path="gfx/005.056_wooden chest.anm2", animation="Idle", frame=0, baseSize=48, offsetY=4},
+  ["57:0"]={path="gfx/005.057_mega chest.anm2", animation="Idle", frame=0, baseSize=80, offsetY=6},
+  ["58:0"]={path="gfx/005.058_haunted chest.anm2", animation="Idle", frame=0, baseSize=48, offsetY=4},
+  ["69:2"]={path="gfx/005.069_black sack.anm2", animation="Idle", frame=0, baseSize=32},
+  ["70:14"]={path="gfx/005.084_pill gold-gold.anm2", animation="Idle", frame=0, baseSize=32},
+  ["70:2049"]={path="gfx/005.071_horse pill blue-blue.anm2", animation="Idle", frame=0, baseSize=40},
+  ["90:4"]={path="gfx/005.090_golden battery.anm2", animation="Idle", frame=0, baseSize=32}
+}
+
+local nativeSlotResources = {
+  [15]={path="gfx/006.015_hell game.anm2", animation="Idle", frame=0, baseSize=64, offsetY=10},
+  [16]={path="gfx/006.016_crane game.anm2", animation="Idle", frame=0, baseSize=64, offsetY=10},
+  [17]={path="gfx/006.017_confessional.anm2", animation="Idle", frame=0, baseSize=64, offsetY=8},
+  [18]={path="gfx/006.018_rotten beggar.anm2", animation="Idle", frame=0, baseSize=64, offsetY=10}
+}
+
+local nativeGridResources = {
+  ["14:11"]={path="gfx/grid/grid_poop.anm2", animation="State1", frame=5,
+    spritesheet="gfx/grid/grid_poop_charming.png", baseSize=32},
+  ["27:0"]={path="gfx/grid/grid_rock.anm2", animation="foolsgold", frame=0,
+    baseSize=32}
+}
+
 local cardFrontSprite
 local cardSpillSprite
 local nativeCardSprites = {}
@@ -104,7 +141,9 @@ local backdropSprite
 local paperSprite
 
 local function cacheKey(reward)
-  return reward.kind .. ":" .. tostring(reward.id or reward.enum or "fallback")
+  return table.concat({ reward.kind, tostring(reward.id or reward.enum or ""),
+    tostring(reward.variant or ""), tostring(reward.subtype or ""),
+    tostring(reward.gridType or "") }, ":")
 end
 
 local function itemSprite(reward)
@@ -199,6 +238,40 @@ local function validFrame(sprite, animation, frame)
   return ok and valid == true
 end
 
+local function nativeEntityEntry(resource)
+  if not resource then return nil end
+  local ok, entry = pcall(function()
+    local sprite = Sprite()
+    sprite:Load(resource.path, false)
+    if resource.spritesheet then
+      sprite:ReplaceSpritesheet(0, resource.spritesheet)
+    end
+    sprite:LoadGraphics()
+    if not validFrame(sprite, resource.animation, resource.frame) then return nil end
+    return {
+      sprite=sprite, animation=resource.animation, frame=resource.frame,
+      baseSize=resource.baseSize or 32,
+      offsetX=resource.offsetX or 0, offsetY=resource.offsetY or 0
+    }
+  end)
+  return ok and entry or nil
+end
+
+local function worldEntityEntry(reward)
+  if reward.kind == "pickup" then
+    return nativeEntityEntry(nativePickupResources[
+      tostring(reward.variant) .. ":" .. tostring(reward.subtype)])
+  end
+  if reward.kind == "slot" then
+    return nativeEntityEntry(nativeSlotResources[reward.variant])
+  end
+  if reward.kind == "grid" then
+    return nativeEntityEntry(nativeGridResources[
+      tostring(reward.gridType) .. ":" .. tostring(reward.variant)])
+  end
+  return nil
+end
+
 local function setCardSpillFrame(sprite, frame)
   if not sprite or not sprite:IsLoaded() or type(frame) ~= "number" then return false end
   local ok, valid = pcall(function()
@@ -256,6 +329,9 @@ local function cached(reward)
   if reward.kind == "collectible" or reward.kind == "trinket" then entry = itemSprite(reward) end
   if reward.kind == "character" then entry = characterSprite(reward) end
   if reward.kind == "card" then entry = cardEntry(reward) end
+  if reward.kind == "pickup" or reward.kind == "slot" or reward.kind == "grid" then
+    entry = worldEntityEntry(reward)
+  end
   if not entry then entry = fallbackSprite(reward) end
   cache[key] = entry or false
   return entry
@@ -267,13 +343,16 @@ function RewardIcons.render(reward, x, y, size, tint)
   if not entry then return false end
   if entry.animation then entry.sprite:SetFrame(entry.animation, entry.frame) end
   if entry.layerFrame then entry.sprite:SetLayerFrame(entry.layer, entry.layerFrame) end
-  entry.sprite.Scale = Vector(size / entry.baseSize, size / entry.baseSize)
+  local scale = size / entry.baseSize
+  entry.sprite.Scale = Vector(scale, scale)
   entry.sprite.Color = tint or Color(1, 1, 1, 1)
-  entry.sprite:Render(Vector(x, y))
+  local position = Vector(x + (entry.offsetX or 0) * scale,
+    y + (entry.offsetY or 0) * scale)
+  entry.sprite:Render(position)
   if entry.overlay then
     entry.overlay.Scale = entry.sprite.Scale
     entry.overlay.Color = entry.sprite.Color
-    entry.overlay:Render(Vector(x, y))
+    entry.overlay:Render(position)
   end
   return true
 end

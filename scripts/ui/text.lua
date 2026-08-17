@@ -48,7 +48,7 @@ local ui = {
     controlsMenu = "方向键选择  Enter/Space追踪  /搜索  Esc关闭",
     controlsSearch = "输入英文/数字  Backspace删除  Enter完成  Esc清空",
     filterNames = { all="全部", collectible="道具", trinket="饰品", card="卡牌", other="其他" },
-    rewardKinds = { collectible="道具", trinket="饰品", card="卡牌", character="角色", area="区域", challenge="挑战", feature="机制", other="其他" }
+    rewardKinds = { collectible="道具", trinket="饰品", card="卡牌", pickup="掉落物", slot="机器/乞丐", grid="格子实体", character="角色", area="区域", challenge="挑战", feature="机制", other="其他" }
   },
   en = {
     title = "ACHIEVEMENT CONDITIONS", controls = "F3: goals  |  F4: hide",
@@ -63,7 +63,7 @@ local ui = {
     controlsMenu = "Arrows select  Enter/Space track  / search  Esc close",
     controlsSearch = "Type letters/numbers  Backspace delete  Enter done  Esc clear",
     filterNames = { all="All", collectible="Items", trinket="Trinkets", card="Cards", other="Other" },
-    rewardKinds = { collectible="Item", trinket="Trinket", card="Card", character="Character", area="Area", challenge="Challenge", feature="Feature", other="Other" }
+    rewardKinds = { collectible="Item", trinket="Trinket", card="Card", pickup="Pickup", slot="Machine", grid="Grid entity", character="Character", area="Area", challenge="Challenge", feature="Feature", other="Other" }
   }
 }
 

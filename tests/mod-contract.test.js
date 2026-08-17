@@ -434,7 +434,7 @@ test("character reward renderer loads cached vanilla portraits with safe fallbac
   assert.match(icons, /reward\.id == TAINTED_EDEN and taintedEdenOverlay\(\) or nil/);
   assert.match(icons, /if reward\.kind == "character" then entry = characterSprite\(reward\) end/);
   assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
-  assert.match(icons, /entry\.overlay:Render\(Vector\(x, y\)\)/);
+  assert.match(icons, /entry\.overlay:Render\(position\)/);
   assert.match(actor, /Animation Name="RewardPortrait"[\s\S]*?Width="144" Height="144"/);
   assert.match(actor, /Animation Name="RewardPortraitTall"[\s\S]*?Width="144" Height="166"/);
   const renderBody = icons.match(/function RewardIcons\.render[\s\S]*?\nend/)[0];

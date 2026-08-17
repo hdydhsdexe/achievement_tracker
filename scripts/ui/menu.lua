@@ -409,6 +409,17 @@ end
 
 local function rewardMeta(reward, labels)
   local kind = labels.rewardKinds[reward.kind] or labels.rewardKinds.other
+  if reward.kind == "pickup" then
+    return string.format("%s  ·  %s 5.%d.%d", kind, labels.rewardId,
+      reward.variant or 0, reward.subtype or 0)
+  end
+  if reward.kind == "slot" then
+    return string.format("%s  ·  %s 6.%d", kind, labels.rewardId, reward.variant or 0)
+  end
+  if reward.kind == "grid" then
+    return string.format("%s  ·  %s %d.%d", kind, labels.rewardId,
+      reward.gridType or 0, reward.variant or 0)
+  end
   if reward.id then return string.format("%s  ·  %s %d", kind, labels.rewardId, reward.id) end
   return kind
 end

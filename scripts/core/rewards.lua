@@ -2,6 +2,7 @@ local Rewards = {}
 
 local validKinds = {
   collectible=true, trinket=true, card=true,
+  pickup=true, slot=true, grid=true,
   character=true, area=true, challenge=true, feature=true, other=true
 }
 
@@ -46,7 +47,10 @@ end
 function Rewards.display(goal)
   local reward = goal and goal.reward
   if reward and validKinds[reward.kind] then
-    return { kind=reward.kind, id=Rewards.resolveId(reward), enum=reward.enum }
+    return {
+      kind=reward.kind, id=Rewards.resolveId(reward), enum=reward.enum,
+      variant=reward.variant, subtype=reward.subtype, gridType=reward.gridType
+    }
   end
   local kind = inferredKind(goal)
   local observation = goal and goal.observation
