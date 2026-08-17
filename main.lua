@@ -55,7 +55,7 @@ local function refreshCompletionFromMarks()
 end
 
 local function completionAllowed()
-  if GameInstance:GetChallenge() ~= 0 then return false end
+  if Isaac.GetChallenge() ~= 0 then return false end
   if GameInstance.AchievementUnlocksDisallowed then
     local ok, disallowed = pcall(function() return GameInstance:AchievementUnlocksDisallowed() end)
     if ok and disallowed then return false end
@@ -73,6 +73,25 @@ local function recordCompletionMark(mark)
   end
   if changed then refreshCompletionFromMarks(); save() end
   return changed
+end
+
+local function bossRushCompleted()
+  local ok, completed = pcall(function()
+    return GameInstance:GetStateFlag(GameStateFlag.STATE_BOSSRUSH_DONE)
+  end)
+  if ok and completed then return true end
+
+  -- Compatibility fallback for older API environments. The run-wide game
+  -- state flag above is authoritative and remains available after leaving.
+  local room = GameInstance:GetRoom()
+  return room:GetType() == RoomType.ROOM_BOSSRUSH
+    and room.IsAmbushDone and room:IsAmbushDone()
+end
+
+local function syncBossRushCompletion()
+  if State.settings and bossRushCompleted() then
+    recordCompletionMark("BOSS_RUSH")
+  end
 end
 
 local function refreshRouteFloor()
@@ -154,10 +173,7 @@ function AchievementTracker:onUpdate()
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
   if Routes.updateRun(State.run, routeContext) then save() end
-  local room = GameInstance:GetRoom()
-  if room:GetType() == RoomType.ROOM_BOSSRUSH and room.IsAmbushDone and room:IsAmbushDone() then
-    recordCompletionMark("BOSS_RUSH")
-  end
+  syncBossRushCompletion()
   for _, id in ipairs(State.tracker.ids) do
     local goal = Catalog.get(id)
     if goal then
@@ -224,9 +240,14 @@ function AchievementTracker:onPlayerInit(player)
 end
 
 function AchievementTracker:onNewLevel()
+  syncBossRushCompletion()
   refreshRouteFloor()
   observeAndSave("stage", GameInstance:GetLevel():GetStage())
   observeAndSave("stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
+end
+
+function AchievementTracker:onNewRoom()
+  syncBossRushCompletion()
 end
 
 function AchievementTracker:onNpcDeath(npc)
@@ -262,6 +283,7 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_RENDER, AchievementTracker.o
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, AchievementTracker.onPickupUpdate)
 AchievementTracker:AddCallback(ModCallbacks.MC_USE_PILL, AchievementTracker.onUsePill)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, AchievementTracker.onPlayerInit)
+AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, AchievementTracker.onNewRoom)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, AchievementTracker.onNewLevel)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_NPC_DEATH, AchievementTracker.onNpcDeath)
 AchievementTracker:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, AchievementTracker.onExit)

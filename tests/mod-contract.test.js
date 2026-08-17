@@ -558,6 +558,16 @@ test("completion-mark routes are parsed, persisted, and evaluated from live cont
   assert.match(hud, /route\.known, route\.required/);
 });
 
+test("Boss Rush completion uses the persistent game-state flag across room and floor transitions", () => {
+  const main = read("main.lua");
+  assert.match(main, /GameInstance:GetStateFlag\(GameStateFlag\.STATE_BOSSRUSH_DONE\)/);
+  assert.match(main, /Isaac\.GetChallenge\(\)/);
+  assert.doesNotMatch(main, /GameInstance:GetChallenge\(\)/);
+  assert.match(main, /function AchievementTracker:onNewRoom\(\)[\s\S]*?syncBossRushCompletion\(\)/);
+  assert.match(main, /function AchievementTracker:onNewLevel\(\)[\s\S]*?syncBossRushCompletion\(\)/);
+  assert.match(main, /MC_POST_NEW_ROOM/);
+});
+
 test("character relevance normalizes paired and transformed PlayerType variants", () => {
   const relevance = read("scripts/core/character_relevance.lua");
   for (const [variant, base] of [[11, 8], [12, 3], [17, 16], [20, 19], [38, 29], [39, 37], [40, 35]]) {
