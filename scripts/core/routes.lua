@@ -15,6 +15,12 @@ local STAGE = {
   CHAPTER6=enum(LevelStage,"STAGE6",11), VOID=enum(LevelStage,"STAGE7",12),
   HOME=enum(LevelStage,"STAGE8",13)
 }
+local GREED_STAGE = {
+  BASEMENT=enum(LevelStage,"STAGE1_GREED",1), CAVES=enum(LevelStage,"STAGE2_GREED",2),
+  DEPTHS=enum(LevelStage,"STAGE3_GREED",3), WOMB=enum(LevelStage,"STAGE4_GREED",4),
+  SHEOL=enum(LevelStage,"STAGE5_GREED",5), SHOP=enum(LevelStage,"STAGE6_GREED",6),
+  FINAL=enum(LevelStage,"STAGE7_GREED",7)
+}
 local REP_A = enum(StageType,"STAGETYPE_REPENTANCE",4)
 local REP_B = enum(StageType,"STAGETYPE_REPENTANCE_B",5)
 local ORIGINAL = enum(StageType,"STAGETYPE_ORIGINAL",0)
@@ -50,6 +56,106 @@ end
 
 local function message(zh, en) return {zh=zh, en=en} end
 
+local function combineMessages(first, second)
+  if not first then return second end
+  if not second then return first end
+  return message(first.zh .. " " .. second.zh, first.en .. " " .. second.en)
+end
+
+local MAIN_PATH_STEPS = {
+  [STAGE.BASEMENT1]={
+    current=message("击败本层头目后，进入地下室II/下水道I。","Defeat this floor's boss, then enter Basement II or Downpour I."),
+    next=message("地下室II：进入洞穴I/下水道II；下水道I：进入下水道II。","Basement II: enter Caves I/Downpour II; Downpour I: enter Downpour II."),
+    lockedCurrent=message("击败本层头目后，进入地下室II。","Defeat this floor's boss, then enter Basement II."),
+    lockedNext=message("地下室II：进入洞穴I。","Basement II: enter Caves I.")
+  },
+  [STAGE.BASEMENT2]={
+    current=message("击败本层头目后，进入洞穴I/下水道II。","Defeat this floor's boss, then enter Caves I or Downpour II."),
+    next=message("洞穴I：进入洞穴II/矿层I；下水道II：进入洞穴II/矿层I。","Caves I: enter Caves II/Mines I; Downpour II: enter Caves II/Mines I."),
+    lockedCurrent=message("击败本层头目后，进入洞穴I。","Defeat this floor's boss, then enter Caves I."),
+    lockedNext=message("洞穴I：进入洞穴II。","Caves I: enter Caves II.")
+  },
+  [STAGE.CAVES1]={
+    current=message("击败本层头目后，进入洞穴II/矿层I。","Defeat this floor's boss, then enter Caves II or Mines I."),
+    next=message("洞穴II：进入深牢I/矿层II；矿层I：进入矿层II。","Caves II: enter Depths I/Mines II; Mines I: enter Mines II."),
+    lockedCurrent=message("击败本层头目后，进入洞穴II。","Defeat this floor's boss, then enter Caves II."),
+    lockedNext=message("洞穴II：进入深牢I。","Caves II: enter Depths I.")
+  },
+  [STAGE.CAVES2]={
+    current=message("击败本层头目后，进入深牢I/矿层II。","Defeat this floor's boss, then enter Depths I or Mines II."),
+    next=message("深牢I：进入深牢II/陵墓I；矿层II：进入深牢II/陵墓I。","Depths I: enter Depths II/Mausoleum I; Mines II: enter Depths II/Mausoleum I."),
+    lockedCurrent=message("击败本层头目后，进入深牢I。","Defeat this floor's boss, then enter Depths I."),
+    lockedNext=message("深牢I：进入深牢II。","Depths I: enter Depths II.")
+  },
+  [STAGE.DEPTHS1]={
+    current=message("击败本层头目后，进入深牢II/陵墓I。","Defeat this floor's boss, then enter Depths II or Mausoleum I."),
+    next=message("深牢II：进入子宫I；陵墓I：进入陵墓II。","Depths II: enter Womb I; Mausoleum I: enter Mausoleum II."),
+    lockedCurrent=message("击败本层头目后，进入深牢II。","Defeat this floor's boss, then enter Depths II."),
+    lockedNext=message("深牢II：进入子宫I。","Depths II: enter Womb I."),
+    mainCurrent=message("击败本层头目后，进入普通深牢II。","Defeat this floor's boss, then enter normal Depths II."),
+    mainNext=message("在深牢II击败 Mom 后进入子宫I。","Defeat Mom in Depths II, then enter Womb I."),
+    altCurrent=message("击败本层头目后，进入陵墓I。","Defeat this floor's boss, then enter Mausoleum I."),
+    altNext=message("陵墓I：进入陵墓II。","Mausoleum I: enter Mausoleum II.")
+  },
+  [STAGE.DEPTHS2]={
+    current=message("击败 Mom 后，进入子宫I。","Defeat Mom, then enter Womb I."),
+    next=message("子宫I：进入子宫II。","Womb I: enter Womb II.")
+  },
+  [STAGE.WOMB1]={
+    current=message("击败本层头目后，进入子宫II。","Defeat this floor's boss, then enter Womb II."),
+    next=message("在子宫II击败 Mom's Heart/It Lives! 并选择目标入口。","Defeat Mom's Heart/It Lives! in Womb II and take the required exit.")
+  }
+}
+
+local ALT_PATH_STEPS = {
+  [STAGE.BASEMENT1]={
+    current=message("击败本层头目后，进入下水道II。","Defeat this floor's boss, then enter Downpour II."),
+    next=message("下水道II：进入洞穴II/矿层I。","Downpour II: enter Caves II/Mines I.")
+  },
+  [STAGE.BASEMENT2]={
+    current=message("击败本层头目后，进入洞穴II/矿层I。","Defeat this floor's boss, then enter Caves II or Mines I."),
+    next=message("洞穴II：进入深牢I/矿层II；矿层I：进入矿层II。","Caves II: enter Depths I/Mines II; Mines I: enter Mines II.")
+  },
+  [STAGE.CAVES1]={
+    current=message("击败本层头目后，进入矿层II。","Defeat this floor's boss, then enter Mines II."),
+    next=message("矿层II：进入深牢II/陵墓I。","Mines II: enter Depths II/Mausoleum I.")
+  },
+  [STAGE.CAVES2]={
+    current=message("击败本层头目后，进入深牢II/陵墓I。","Defeat this floor's boss, then enter Depths II or Mausoleum I."),
+    next=message("深牢II：进入子宫I；陵墓I：进入陵墓II。","Depths II: enter Womb I; Mausoleum I: enter Mausoleum II."),
+    mainCurrent=message("击败本层头目后，进入普通深牢II。","Defeat this floor's boss, then enter normal Depths II."),
+    mainNext=message("在深牢II击败 Mom 后进入子宫I。","Defeat Mom in Depths II, then enter Womb I."),
+    altCurrent=message("击败本层头目后，进入陵墓I。","Defeat this floor's boss, then enter Mausoleum I."),
+    altNext=message("陵墓I：进入陵墓II。","Mausoleum I: enter Mausoleum II.")
+  },
+  [STAGE.DEPTHS1]={
+    current=message("击败本层头目后，进入陵墓II。","Defeat this floor's boss, then enter Mausoleum II."),
+    next=message("在陵墓II击败强化 Mom 后进入子宫II。","Defeat the stronger Mom in Mausoleum II, then enter Womb II.")
+  },
+  [STAGE.DEPTHS2]={
+    current=message("击败强化 Mom 后，进入子宫II。","Defeat the stronger Mom, then enter Womb II."),
+    next=message("在子宫II击败 Mom's Heart/It Lives! 并选择目标入口。","Defeat Mom's Heart/It Lives! in Womb II and take the required exit.")
+  }
+}
+
+local GREED_PATH_STEPS = {
+  [GREED_STAGE.BASEMENT]=message("完成本层波次并进入洞穴。","Clear this floor's waves and enter Caves."),
+  [GREED_STAGE.CAVES]=message("完成本层波次并进入深牢。","Clear this floor's waves and enter Depths."),
+  [GREED_STAGE.DEPTHS]=message("完成本层波次并进入子宫。","Clear this floor's waves and enter Womb."),
+  [GREED_STAGE.WOMB]=message("完成本层波次并进入阴间。","Clear this floor's waves and enter Sheol."),
+  [GREED_STAGE.SHEOL]=message("完成本层波次并进入商店层。","Clear this floor's waves and enter The Shop."),
+  [GREED_STAGE.SHOP]=message("完成商店层并进入究极贪婪层。","Finish The Shop and enter the Ultra Greed floor.")
+}
+
+local function secretExitUnlocked()
+  if not Isaac or type(Isaac.GetPersistentGameData) ~= "function" then return nil end
+  local okData, persistentData = pcall(Isaac.GetPersistentGameData)
+  if not okData or not persistentData then return nil end
+  local okUnlock, unlocked = pcall(function() return persistentData:Unlocked(407) end)
+  if not okUnlock then return nil end
+  return unlocked == true
+end
+
 local function aidNames(context, keys, language)
   local result = {}
   for _, key in ipairs(keys or {}) do
@@ -73,6 +179,30 @@ end
 
 local function isRepentanceFloor(context)
   return context.stageType == REP_A or context.stageType == REP_B
+end
+
+local function mainPathStep(context, policy)
+  local alternate = isRepentanceFloor(context)
+  local step = (alternate and ALT_PATH_STEPS or MAIN_PATH_STEPS)[context.stage]
+  if not step then return nil end
+  if policy == "main" then
+    if alternate and context.stage == STAGE.DEPTHS1 then return nil end
+    return {current=step.mainCurrent or step.current, next=step.mainNext or step.next}
+  elseif policy == "alternate" then
+    if not alternate and context.secretExitUnlocked == false then return nil end
+    if step.altCurrent then return {current=step.altCurrent, next=step.altNext} end
+  end
+  if not alternate and context.secretExitUnlocked == false and step.lockedCurrent then
+    return {current=step.lockedCurrent, next=step.lockedNext}
+  end
+  return {current=step.current, next=step.next}
+end
+
+local function pathResult(context, severity, alternatives, currentExtra, nextExtra, policy)
+  local step = mainPathStep(context, policy)
+  if not step then return nil end
+  return routeResult(combineMessages(step.current, currentExtra),
+    combineMessages(step.next, nextExtra), severity, alternatives)
 end
 
 local function scanGroundAids(context)
@@ -106,8 +236,9 @@ function Routes.context(game, run)
   local level, room = game:GetLevel(), game:GetRoom()
   local context = {
     stage=level:GetStage(), stageType=level:GetStageType(), elapsed=math.floor(game.TimeCounter / 30),
-    roomType=room:GetType(), greed=game:IsGreedMode(), players={}, aids={}, voidPortal=false,
-    routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {}
+    roomType=room:GetType(), greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, voidPortal=false,
+    routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
+    secretExitUnlocked=secretExitUnlocked()
   }
   local ok, ascent = pcall(function() return level:IsAscent() end)
   context.ascent = ok and ascent == true
@@ -116,11 +247,17 @@ function Routes.context(game, run)
     local playerType = CharacterRelevance.normalize(player:GetPlayerType())
     context.players[playerType] = true
     for key, aid in pairs(AID_DEFS) do
-      if aid.kind == "collectible" and player.HasCollectible and player:HasCollectible(aid.id)
-        or aid.kind == "trinket" and player.HasTrinket and player:HasTrinket(aid.id) then
+      local held = aid.kind == "collectible" and player.HasCollectible
+          and player:HasCollectible(aid.id)
+        or aid.kind == "trinket" and player.HasTrinket and player:HasTrinket(aid.id)
+      if held then
         context.aids[key] = true
+        context.heldAids[key] = true
       elseif aid.kind == "card" and player.GetCard then
-        if player:GetCard(0) == aid.id or player:GetCard(1) == aid.id then context.aids[key] = true end
+        if player:GetCard(0) == aid.id or player:GetCard(1) == aid.id then
+          context.aids[key] = true
+          context.heldAids[key] = true
+        end
       end
     end
   end
@@ -155,46 +292,71 @@ local function motherRoute(context, language)
   local bypass = hasAny(context, bypassKeys)
   local alternatives = aidNames(context, bypassKeys, language)
   local stage, alt = context.stage, isRepentanceFloor(context)
-  if stage == STAGE.BASEMENT1 then
-    return routeResult(message("（可选）击败头目后进入水层。","(Optional) Enter Downpour/Dross after the boss."),
-      message("若仍未进入，地下室II是进入水层的最后机会。","Basement II is the final chance to enter the water path."))
+  if context.secretExitUnlocked == false and not alt then
+    return routeResult(message("尚未解锁秘密出口，当前无法进入 Mother 路线。","A Secret Exit is not unlocked, so the Mother route is unavailable."),
+      message("先击败死寂3次以解锁下水道、矿层和陵墓入口。","Defeat Hush three times to unlock Downpour, Mines, and Mausoleum."), "failed")
+  end
+  if stage == STAGE.BASEMENT1 and alt then
+    return routeResult(message("击败本层头目后，进入下水道II。","Defeat this floor's boss, then enter Downpour II."),
+      message("在下水道II的镜像世界拾取菜刀碎片1。","Take Knife Piece 1 from the mirrored world in Downpour II."))
+  elseif stage == STAGE.BASEMENT1 then
+    return routeResult(message("击败本层头目后，进入地下室II/下水道I。","Defeat this floor's boss, then enter Basement II or Downpour I."),
+      message("地下室II：进入下水道II（最后机会）；下水道I：进入下水道II。","Basement II: enter Downpour II (last chance); Downpour I: enter Downpour II."))
   elseif stage == STAGE.BASEMENT2 and not alt then
-    return routeResult(message("进入水层（最后机会）。","Enter Downpour/Dross now (last chance)."),
+    return routeResult(message("击败本层头目后，进入下水道II（最后机会）。","Defeat this floor's boss, then enter Downpour II (last chance)."),
       message("在镜像世界的宝箱房拾取菜刀碎片1。","Take Knife Piece 1 from the mirrored Treasure Room."), "warning")
   elseif stage == STAGE.BASEMENT2 and alt and not knife1 then
     return routeResult(message("触碰白火，以游魂形态穿过镜子并拾取菜刀碎片1。","Touch the white fire, enter the mirror as The Lost, and take Knife Piece 1."),
-      message("之后可进入矿层；未进入时洞穴II仍有最后机会。","Mines is optional next; Caves II is the final fallback entrance."))
+      message("击败本层头目后进入洞穴II/矿层I；洞穴II仍可进入矿层II。","After the boss, enter Caves II or Mines I; Caves II still leads to Mines II."))
+  elseif stage == STAGE.BASEMENT2 and alt then
+    return routeResult(message("已取得菜刀碎片1；击败本层头目后进入洞穴II/矿层I。","Knife Piece 1 is secured; defeat this floor's boss and enter Caves II or Mines I."),
+      message("洞穴II：进入矿层II（最后机会）；矿层I：进入矿层II。","Caves II: enter Mines II (last chance); Mines I: enter Mines II."))
   elseif stage == STAGE.CAVES1 then
     if not knife1 and not bypass then
       return routeResult(message("已错过菜刀碎片1，标准 Mother 路线失败。","Knife Piece 1 was missed; the standard Mother route has failed."),
         message("若之后遇到可开启肉门的道具，路线会自动恢复。","The route can recover if a flesh-door bypass appears later."), "failed")
     end
     if not knife1 and bypass then
-      return routeResult(message("标准菜刀路线已错过；保留当前肉门替代工具。","The knife route was missed; keep the current flesh-door bypass."),
-        message("在深牢I或矿层II后进入陵墓，并用替代工具开启肉门。","Enter Mausoleum after Depths I or Mines II and use the bypass on the flesh door."), "warning", alternatives)
+      if alt then
+        return routeResult(message("保留肉门替代工具；击败本层头目后进入矿层II。","Keep the flesh-door bypass; defeat this floor's boss and enter Mines II."),
+          message("矿层II：进入陵墓I，并用替代工具开启肉门。","Mines II: enter Mausoleum I; use the bypass on the flesh door."), "warning", alternatives)
+      end
+      return routeResult(message("保留肉门替代工具；击败本层头目后进入洞穴II/矿层I。","Keep the flesh-door bypass; defeat this floor's boss and enter Caves II or Mines I."),
+        message("洞穴II：进入深牢I/矿层II；之后进入陵墓I。","Caves II: enter Depths I/Mines II; then enter Mausoleum I."), "warning", alternatives)
     end
-    return routeResult(message("（可选）击败头目后进入矿层。","(Optional) Enter Mines/Ashpit after the boss."),
-      message("矿层II是最后入口；有碎片1时可取得碎片2。","Mines II is the final entrance and contains Knife Piece 2."), "normal", alternatives)
+    if alt then
+      return routeResult(message("击败本层头目后，进入矿层II。","Defeat this floor's boss, then enter Mines II."),
+        message("在矿层II取得菜刀碎片2，再进入陵墓I。","Take Knife Piece 2 in Mines II, then enter Mausoleum I."), "normal", alternatives)
+    end
+    return routeResult(message("击败本层头目后，进入洞穴II/矿层I。","Defeat this floor's boss, then enter Caves II or Mines I."),
+      message("洞穴II：进入矿层II（最后机会）；矿层I：进入矿层II。","Caves II: enter Mines II (last chance); Mines I: enter Mines II."), "normal", alternatives)
   elseif stage == STAGE.CAVES2 and not alt then
     if not knife1 and not bypass then
       return routeResult(message("已错过水层，且没有肉门替代工具。","The water path was missed and no flesh-door bypass is available."),
         message("遇到尖头钥匙、该隐魂石或碎裂宝珠可恢复。","Sharp Key, Soul of Cain, or Cracked Orb can recover the route."), "failed")
     end
-    return routeResult(message("进入矿层（最后机会）。","Enter Mines/Ashpit now (last chance)."),
+    if not knife1 and bypass then
+      return routeResult(message("保留肉门替代工具；击败本层头目后进入深牢I/矿层II。","Keep the flesh-door bypass; defeat this floor's boss and enter Depths I or Mines II."),
+        message("深牢I/矿层II：进入陵墓I，并用替代工具开启肉门。","From Depths I/Mines II, enter Mausoleum I and use the bypass on the flesh door."), "warning", alternatives)
+    end
+    return routeResult(message("击败本层头目后，进入矿层II（最后机会）。","Defeat this floor's boss, then enter Mines II (last chance)."),
       message("按下三枚黄色按钮，进入矿车区域拾取菜刀碎片2并逃生。","Press three yellow buttons, take Knife Piece 2, and escape the chase."), "warning", alternatives)
   elseif stage == STAGE.CAVES2 and alt and not knife2 then
     if not knife1 and bypass then
       return routeResult(message("保留肉门替代工具并击败本层头目。","Keep the flesh-door bypass and defeat this floor's boss."),
-        message("进入陵墓/炼狱，并用替代工具开启肉门。","Enter Mausoleum/Gehenna and use the bypass on the flesh door."), "warning", alternatives)
+        message("进入陵墓I；之后在陵墓II用替代工具开启肉门。","Enter Mausoleum I; use the bypass on the flesh door in Mausoleum II."), "warning", alternatives)
     end
     return routeResult(message("按下三枚黄色按钮，乘矿车取得菜刀碎片2并逃生。","Press three yellow buttons, ride the minecart, take Knife Piece 2, and escape."),
-      message("击败头目后进入陵墓/炼狱。","Enter Mausoleum/Gehenna after the boss."), "normal", alternatives)
+      message("击败本层头目后进入陵墓I。","Defeat this floor's boss, then enter Mausoleum I."), "normal", alternatives)
+  elseif stage == STAGE.CAVES2 and alt then
+    return routeResult(message("完整菜刀已取得；击败本层头目后进入陵墓I。","The knife is complete; defeat this floor's boss and enter Mausoleum I."),
+      message("陵墓I：进入陵墓II；在陵墓II开启红色肉门。","Mausoleum I: enter Mausoleum II; open the red flesh door in Mausoleum II."), "normal", alternatives)
   elseif stage == STAGE.DEPTHS1 and not alt then
     if not knife2 and not bypass then
       return routeResult(message("已错过完整菜刀，Mother 路线失败。","The completed knife was missed; the Mother route has failed."),
         message("若当前或之后遇到肉门替代工具，路线会恢复。","A flesh-door bypass can still recover the route."), "failed")
     end
-    return routeResult(message("击败头目后进入陵墓/炼狱（最后机会）。","Enter Mausoleum/Gehenna after the boss (last chance)."),
+    return routeResult(message("击败本层头目后进入陵墓I（最后机会）。","Defeat this floor's boss, then enter Mausoleum I (last chance)."),
       message("在陵墓II击败强化 Mom 并开启红色肉门。","In Mausoleum II, defeat Mom and open the red flesh door."), "warning", alternatives)
   elseif (stage == STAGE.DEPTHS1 or stage == STAGE.DEPTHS2) and alt then
     if stage == STAGE.DEPTHS2 and context.routeEvents.fleshHeartDefeated then
@@ -204,7 +366,9 @@ local function motherRoute(context, language)
       return routeResult(message("用完整菜刀或可用替代工具开启红色肉门。","Open the red flesh door with the knife or an available bypass."),
         message("进入肉门并击败特殊 Mom's Heart。","Enter the flesh door and defeat the special Mom's Heart."), "normal", alternatives)
     end
-    return routeResult(message("前往陵墓/炼狱II并击败强化 Mom。","Reach Mausoleum/Gehenna II and defeat the stronger Mom."),
+    return routeResult(stage == STAGE.DEPTHS1
+        and message("击败本层头目后进入陵墓II。","Defeat this floor's boss, then enter Mausoleum II.")
+        or message("在陵墓II击败强化 Mom。","Defeat the stronger Mom in Mausoleum II."),
       message("用完整菜刀或可用替代工具开启红色肉门。","Open the red flesh door with the knife or an available bypass."), "normal", alternatives)
   elseif stage == STAGE.DEPTHS2 and not alt then
     return routeResult(message("已进入普通深牢II，无法再进入 Mother 路线。","Normal Depths II was entered; the Mother route is no longer reachable."),
@@ -235,8 +399,12 @@ local function beastRoute(context, language)
     return routeResult(message("沿光柱逐层完成回溯。","Follow each beam of light through the Ascent."),
       message("从地下室I的光柱进入家。","Enter Home through the Basement I beam."))
   elseif context.stage < STAGE.DEPTHS2 then
-    return routeResult(message("前往普通深牢II；保留传送手段以离开 Mom 房。","Reach normal Depths II and keep a teleport to escape Mom's room."),
-      message("击败 Mom，取得全家福/底片，再返回起始房的奇怪门。","Defeat Mom, take a photo, then return to the Strange Door."), "normal", alternatives)
+    local result = pathResult(context, "normal", alternatives,
+      message("保留传送手段，以便离开 Mom 房。","Keep a teleport ready to leave Mom's room."),
+      message("目标是进入普通深牢II并返回奇怪门。","The route must reach normal Depths II and return to the Strange Door."), "main")
+    if result then return result end
+    return routeResult(message("已进入陵墓I，无法返回普通深牢II开启奇怪门。","Mausoleum I was entered, so normal Depths II and the Strange Door are no longer reachable."),
+      message("使用 R Key 或路线重置后重新选择普通深牢II。","Use R Key or reset the route, then choose normal Depths II."), "failed")
   elseif context.stage == STAGE.DEPTHS2 and not isRepentanceFloor(context) then
     return routeResult(message("击败 Mom，取得照片并传送回起始房开启奇怪门。","Defeat Mom, take a photo, teleport out, and open the Strange Door."),
       message("在特殊陵墓II的 Boss 房拾取爸爸的便条。","Take Dad's Note from the special Mausoleum II boss room."), "warning", alternatives)
@@ -260,12 +428,26 @@ local function bossRushRoute(context, language)
       message("使用 R Key 后可重新尝试。","Use R Key to try again."), "failed")
   end
   local canStillChooseMausoleum = context.stage < STAGE.DEPTHS2
+    and context.secretExitUnlocked ~= false and context.elapsed < 1500
   local severity = context.elapsed >= deadline and ((#alternatives == 0 and not canStillChooseMausoleum)
       and "failed" or "warning")
     or deadline - context.elapsed <= 300 and "warning" or "normal"
-  local current = canStillChooseMausoleum and context.elapsed >= 1200
-    and message("普通 Mom 的20分钟时限已过；可改走陵墓II争取25分钟入口。","The normal 20-minute limit passed; Mausoleum II remains available until 25:00.")
-    or message("在时限内击败 Mom 并进入墙上的头目车轮战入口。","Defeat Mom before the deadline and enter the Boss Rush opening.")
+  local current
+  if canStillChooseMausoleum and context.elapsed >= 1200 then
+    current = message("普通 Mom 的20分钟时限已过；改走陵墓II争取25分钟入口。","The normal 20-minute limit passed; use Mausoleum II's 25-minute entrance.")
+  elseif context.elapsed >= deadline and #alternatives > 0 then
+    current = message("时限已过；使用当前补救手段开启头目车轮战入口。","The deadline passed; use the available recovery method to open Boss Rush.")
+  elseif context.elapsed >= deadline then
+    current = message("头目车轮战时限已过，且没有可用补救手段。","The Boss Rush deadline passed with no available recovery method.")
+  else
+    current = message("在时限内击败 Mom 并进入墙上的头目车轮战入口。","Defeat Mom before the deadline and enter the Boss Rush opening.")
+  end
+  if context.stage < STAGE.DEPTHS2 then
+    local policy = canStillChooseMausoleum and context.elapsed >= 1200 and "alternate" or nil
+    local result = pathResult(context, severity, alternatives, current,
+      message("抵达 Mom 所在楼层后进入头目车轮战入口。","Enter the Boss Rush opening after reaching Mom's floor."), policy)
+    if result then return result end
+  end
   return routeResult(current,
     message("拾取一个奖励开始战斗并完成全部15波。","Take one reward to start and clear all 15 waves."), severity, alternatives)
 end
@@ -279,23 +461,67 @@ local function hushRoute(context, language)
   elseif context.stage > STAGE.WOMB2 then
     return routeResult(message("已错过蓝色子宫入口，死寂路线失败。","The Blue Womb entrance was missed; the Hush route has failed."),
       message("使用 R Key 后可重新尝试。","Use R Key to try again."), "failed")
+  elseif isRepentanceFloor(context) and context.stage >= STAGE.WOMB1 then
+    return routeResult(message("已进入尸宫，无法前往蓝色子宫。","Corpse was entered, so Blue Womb is no longer reachable."),
+      message("使用 R Key 后重新前往普通子宫II。","Use R Key and return to normal Womb II."), "failed")
   end
   local severity = context.elapsed >= 1800 and (#alternatives == 0 and "failed" or "warning")
     or 1800 - context.elapsed <= 300 and "warning" or "normal"
+  local deadlineStep = context.elapsed >= 1800
+    and (#alternatives > 0
+      and message("30分钟时限已过；保留当前补救手段。","The 30-minute limit passed; keep the available recovery method.")
+      or message("30分钟时限已过。","The 30-minute limit has passed."))
+    or message("保持30分钟时限。","Stay within the 30-minute limit.")
+  local result = pathResult(context, severity, alternatives, deadlineStep,
+    message("抵达子宫II后击败 Mom's Heart/It Lives! 并进入蓝色裂口。","In Womb II, defeat Mom's Heart/It Lives! and enter the blue opening."))
+  if result then return result end
   return routeResult(message("30分钟内击败 Mom's Heart/It Lives! 并进入蓝色裂口。","Defeat Mom's Heart/It Lives! within 30 minutes and enter the blue opening."),
     message("在蓝色子宫击败死寂。","Defeat Hush in Blue Womb."), severity, alternatives)
 end
 
 local function branchRoute(mark, context, language)
   local stage = context.stage
+  local heldAids = context.heldAids or {}
   if mark == "MOMS_HEART" then
-    if stage < STAGE.WOMB2 then return routeResult(message("沿主线前往子宫II。","Follow the main path to Womb II."), message("击败 Mom's Heart/It Lives!。","Defeat Mom's Heart/It Lives!.")) end
-    return routeResult(message("在本层击败 Mom's Heart/It Lives!。","Defeat Mom's Heart/It Lives! on this floor."), message("击败后即取得该通关标记。","The mark is awarded on defeat."))
+    if stage < STAGE.WOMB2 then
+      local result = pathResult(context, "normal", nil, nil,
+        message("最终在子宫II击败 Mom's Heart/It Lives!。","Ultimately defeat Mom's Heart/It Lives! in Womb II."))
+      if result then return result end
+    elseif stage == STAGE.WOMB2 and not isRepentanceFloor(context) then
+      return routeResult(message("在本层击败 Mom's Heart/It Lives!。","Defeat Mom's Heart/It Lives! on this floor."),
+        message("击败后即取得该通关标记。","The mark is awarded on defeat."))
+    end
   elseif mark == "ISAAC" or mark == "BLUE_BABY" then
     if stage < STAGE.CHAPTER5 then
-      local nextText = mark == "BLUE_BABY" and message("击败 Mom 时取得全家福，之后进入教堂。","Take The Polaroid from Mom, then enter Cathedral.")
+      if mark == "BLUE_BABY" and stage == STAGE.DEPTHS2
+        and context.routeEvents.momDefeated and not heldAids.polaroid then
+        return routeResult(message("Mom 已击败：拾取全家福。","Mom is defeated: take The Polaroid."),
+          message("之后击败 Mom's Heart/It Lives!，进入教堂。","Then defeat Mom's Heart/It Lives! and enter Cathedral."))
+      elseif mark == "BLUE_BABY" and stage > STAGE.DEPTHS2 and not heldAids.polaroid then
+        return routeResult(message("离开 Mom 所在楼层前未拾取全家福，无法进入宝箱层。","The Polaroid was not taken before leaving Mom's floor, so Chest cannot be reached."),
+          message("使用 R Key 后重新击败 Mom 并拾取全家福。","Use R Key, defeat Mom again, and take The Polaroid."), "failed")
+      end
+      if stage == STAGE.WOMB2 and not isRepentanceFloor(context) then
+        return routeResult(message("击败 Mom's Heart/It Lives! 后进入教堂光柱。","Defeat Mom's Heart/It Lives!, then enter the Cathedral beam."),
+          mark == "BLUE_BABY" and message("在教堂击败以撒，并用全家福进入宝箱层。","Defeat Isaac in Cathedral and use The Polaroid to enter Chest.")
+            or message("在教堂击败以撒。","Defeat Isaac in Cathedral."))
+      elseif mark == "BLUE_BABY" and stage == STAGE.DEPTHS2
+        and context.routeEvents.momDefeated and heldAids.polaroid then
+        if isRepentanceFloor(context) then
+          return routeResult(message("已取得全家福；进入子宫II。","The Polaroid is secured; enter Womb II."),
+            message("击败 It Lives! 后进入教堂，再前往宝箱层。","Defeat It Lives!, enter Cathedral, then continue to Chest."))
+        end
+        return routeResult(message("已取得全家福；进入子宫I。","The Polaroid is secured; enter Womb I."),
+          message("子宫I：进入子宫II；击败 It Lives! 后进入教堂。","Womb I: enter Womb II; defeat It Lives!, then enter Cathedral."))
+      end
+      local nextText = mark == "BLUE_BABY" and heldAids.polaroid
+          and message("保留全家福，最终从教堂进入宝箱层。","Keep The Polaroid and enter Chest from Cathedral.")
+        or mark == "BLUE_BABY" and message("击败 Mom 后拾取全家福，之后进入教堂。","Take The Polaroid after defeating Mom, then enter Cathedral.")
         or message("击败 It Lives! 后进入通往教堂的光柱。","Enter the Cathedral beam after It Lives!.")
-      return routeResult(message("沿主线推进并选择教堂分支。","Follow the main path and choose Cathedral."), nextText, "normal", aidNames(context,{"polaroid"},language))
+      local result = pathResult(context, "normal", aidNames(context,{"polaroid"},language),
+        mark == "BLUE_BABY" and heldAids.polaroid
+          and message("已取得全家福。","The Polaroid is secured.") or nil, nextText)
+      if result then return result end
     elseif stage == STAGE.CHAPTER5 and context.stageType == WOTL then
       if mark == "BLUE_BABY" and not context.aids.polaroid then
         return routeResult(message("未携带全家福，无法从教堂进入宝箱层。","The Polaroid is missing, so Chest cannot be reached from Cathedral."),
@@ -307,9 +533,35 @@ local function branchRoute(mark, context, language)
     end
   elseif mark == "SATAN" or mark == "LAMB" then
     if stage < STAGE.CHAPTER5 then
-      local nextText = mark == "LAMB" and message("击败 Mom 时取得底片，之后进入阴间。","Take The Negative from Mom, then enter Sheol.")
+      if mark == "LAMB" and stage == STAGE.DEPTHS2
+        and context.routeEvents.momDefeated and not heldAids.negative then
+        return routeResult(message("Mom 已击败：拾取底片。","Mom is defeated: take The Negative."),
+          message("之后击败 Mom's Heart/It Lives!，进入阴间。","Then defeat Mom's Heart/It Lives! and enter Sheol."))
+      elseif mark == "LAMB" and stage > STAGE.DEPTHS2 and not heldAids.negative then
+        return routeResult(message("离开 Mom 所在楼层前未拾取底片，无法进入暗室。","The Negative was not taken before leaving Mom's floor, so Dark Room cannot be reached."),
+          message("使用 R Key 后重新击败 Mom 并拾取底片。","Use R Key, defeat Mom again, and take The Negative."), "failed")
+      end
+      if stage == STAGE.WOMB2 and not isRepentanceFloor(context) then
+        return routeResult(message("击败 Mom's Heart/It Lives! 后进入阴间活板门。","Defeat Mom's Heart/It Lives!, then take the Sheol trapdoor."),
+          mark == "LAMB" and message("在阴间击败撒但，并用底片进入暗室。","Defeat Satan in Sheol and use The Negative to enter Dark Room.")
+            or message("在阴间击败撒但。","Defeat Satan in Sheol."))
+      elseif mark == "LAMB" and stage == STAGE.DEPTHS2
+        and context.routeEvents.momDefeated and heldAids.negative then
+        if isRepentanceFloor(context) then
+          return routeResult(message("已取得底片；进入子宫II。","The Negative is secured; enter Womb II."),
+            message("击败 It Lives! 后进入阴间，再前往暗室。","Defeat It Lives!, enter Sheol, then continue to Dark Room."))
+        end
+        return routeResult(message("已取得底片；进入子宫I。","The Negative is secured; enter Womb I."),
+          message("子宫I：进入子宫II；击败 It Lives! 后进入阴间。","Womb I: enter Womb II; defeat It Lives!, then enter Sheol."))
+      end
+      local nextText = mark == "LAMB" and heldAids.negative
+          and message("保留底片，最终从阴间进入暗室。","Keep The Negative and enter Dark Room from Sheol.")
+        or mark == "LAMB" and message("击败 Mom 后拾取底片，之后进入阴间。","Take The Negative after defeating Mom, then enter Sheol.")
         or message("击败 It Lives! 后进入通往阴间的活板门。","Take the Sheol trapdoor after It Lives!.")
-      return routeResult(message("沿主线推进并选择阴间分支。","Follow the main path and choose Sheol."), nextText, "normal", aidNames(context,{"negative","deeper","ehwaz"},language))
+      local result = pathResult(context, "normal", aidNames(context,{"negative","deeper","ehwaz"},language),
+        mark == "LAMB" and heldAids.negative
+          and message("已取得底片。","The Negative is secured.") or nil, nextText)
+      if result then return result end
     elseif stage == STAGE.CHAPTER5 and context.stageType == ORIGINAL then
       if mark == "LAMB" and not context.aids.negative then
         return routeResult(message("未携带底片，无法从阴间进入暗室。","The Negative is missing, so Dark Room cannot be reached from Sheol."),
@@ -320,8 +572,15 @@ local function branchRoute(mark, context, language)
       return routeResult(message("探索暗室并击败羔羊。","Explore Dark Room and defeat The Lamb."), message("击败后取得羔羊标记。","The Lamb mark is awarded on defeat."))
     end
   elseif mark == "ULTRA_GREED" then
-    return routeResult(message("完成当前贪婪楼层的波次并进入下一层。","Clear the current Greed floor waves and continue."),
-      message("在商店层击败究极贪婪；困难贪婪需击败贪婪形态。","Defeat Ultra Greed; Greedier requires the harder phase."))
+    if stage == GREED_STAGE.FINAL then
+      return routeResult(message("进入最终房间并击败究极贪婪。","Enter the final room and defeat Ultra Greed."),
+        message("困难贪婪模式还需击败究极贪婪形态。","Greedier Mode also requires defeating the Ultra Greedier phase."))
+    end
+    local current = GREED_PATH_STEPS[stage]
+    if current then
+      return routeResult(current, GREED_PATH_STEPS[stage + 1]
+        or message("进入最终房间并击败究极贪婪。","Enter the final room and defeat Ultra Greed."))
+    end
   end
   return routeResult(message("当前已偏离所需 Boss 分支。","The run is on the wrong boss branch."),
     message("使用 R Key 后可重新选择路线。","Use R Key to choose the route again."), "failed")
@@ -337,11 +596,26 @@ local function megaSatanRoute(context, language)
   end
   local hasGate = (context.aids.key1 and context.aids.key2) or #alternatives > 0
   if context.stage < STAGE.CHAPTER5 then
-    return routeResult(message("优先进入天使房，炸毁雕像并收集两枚钥匙碎片。","Prefer Angel Rooms; bomb statues and collect both Key Pieces."),
-      message("击败 Mom 时选择全家福或底片，前往宝箱层/暗室。","Take The Polaroid or Negative from Mom and reach Chest/Dark Room."), hasGate and "normal" or "warning", alternatives)
-  elseif context.stage < STAGE.CHAPTER6 then
-    return routeResult(message("击败以撒或撒但，并用对应照片进入第六章。","Defeat Isaac or Satan and use the matching photo to enter Chapter 6."),
-      message("在起始房开启金门。","Open the Golden Gate in the starting room."), hasGate and "normal" or "warning", alternatives)
+    local heldAids = context.heldAids or {}
+    if context.stage == STAGE.DEPTHS2 and context.routeEvents.momDefeated
+      and not heldAids.polaroid and not heldAids.negative then
+      return routeResult(message("Mom 已击败：拾取全家福或底片。","Mom is defeated: take The Polaroid or The Negative."),
+        message("按所选照片进入教堂/阴间，再前往宝箱层/暗室。","Follow the chosen photo through Cathedral/Sheol to Chest/Dark Room."), hasGate and "normal" or "warning", alternatives)
+    elseif context.stage == STAGE.WOMB2 and not isRepentanceFloor(context) then
+      return routeResult(message("击败 Mom's Heart/It Lives!，按照片进入教堂/阴间。","Defeat Mom's Heart/It Lives! and take the branch matching the photo."),
+        message("击败以撒/撒但并进入宝箱层/暗室。","Defeat Isaac/Satan and enter Chest/Dark Room."), hasGate and "normal" or "warning", alternatives)
+    end
+    local currentExtra = message("优先进入天使房，炸毁雕像并收集两枚钥匙碎片。","Prefer Angel Rooms; bomb statues and collect both Key Pieces.")
+    local nextExtra = message("击败 Mom 后选择全家福或底片，前往宝箱层/暗室。","Take The Polaroid or Negative after defeating Mom and reach Chest/Dark Room.")
+    local result = pathResult(context, hasGate and "normal" or "warning", alternatives,
+      currentExtra, nextExtra)
+    if result then return result end
+  elseif context.stage == STAGE.CHAPTER5 and context.stageType == WOTL then
+    return routeResult(message("在教堂击败以撒，并用全家福进入宝箱层。","Defeat Isaac in Cathedral and use The Polaroid to enter Chest."),
+      message("在宝箱层起始房开启金门。","Open the Golden Gate in Chest's starting room."), hasGate and "normal" or "warning", alternatives)
+  elseif context.stage == STAGE.CHAPTER5 and context.stageType == ORIGINAL then
+    return routeResult(message("在阴间击败撒但，并用底片进入暗室。","Defeat Satan in Sheol and use The Negative to enter Dark Room."),
+      message("在暗室起始房开启金门。","Open the Golden Gate in Dark Room's starting room."), hasGate and "normal" or "warning", alternatives)
   elseif context.stage == STAGE.CHAPTER6 then
     return routeResult(message("在起始房用金钥匙或可用工具开启金门。","Use the golden key or an available tool on the starting-room gate."),
       message("进入五芒星并击败超级撒但两个阶段。","Step onto the pentagram and defeat both Mega Satan phases."), hasGate and "normal" or "failed", alternatives)
@@ -357,10 +631,28 @@ local function deliriumRoute(context, language)
   elseif context.voidPortal then
     return routeResult(message("当前房间已出现虚空传送门，立即进入。","A Void portal is present in this room; enter it now."),
       message("在虚空中寻找并击败精神错乱。","Find and defeat Delirium in The Void."), "warning")
+  elseif isRepentanceFloor(context) and context.stage == STAGE.WOMB1 then
+    return routeResult(message("击败本层头目后，进入尸宫II。","Defeat this floor's boss, then enter Corpse II."),
+      message("在尸宫II击败 Mother，并检查虚空传送门。","Defeat Mother in Corpse II and check for a Void portal."), "warning")
+  elseif isRepentanceFloor(context) and context.stage == STAGE.WOMB2 then
+    return routeResult(message("在尸宫II击败 Mother。","Defeat Mother in Corpse II."),
+      message("若生成虚空传送门，立即进入。","Enter the Void portal immediately if it appears."), "warning")
   elseif context.stage <= STAGE.WOMB2 then
     local hush = hushRoute(context, language)
     hush.next = message("击败死寂后进入保证生成的虚空传送门。","After Hush, enter the guaranteed Void portal.")
     return hush
+  elseif context.stage == STAGE.CHAPTER5 and context.stageType == WOTL then
+    return routeResult(message("在教堂击败以撒，并检查虚空传送门。","Defeat Isaac in Cathedral and check for a Void portal."),
+      message("若未生成，使用全家福进入宝箱层。","If none appears, use The Polaroid to enter Chest."), "warning")
+  elseif context.stage == STAGE.CHAPTER5 and context.stageType == ORIGINAL then
+    return routeResult(message("在阴间击败撒但，并检查虚空传送门。","Defeat Satan in Sheol and check for a Void portal."),
+      message("若未生成，使用底片进入暗室。","If none appears, use The Negative to enter Dark Room."), "warning")
+  elseif context.stage == STAGE.CHAPTER6 and context.stageType == WOTL then
+    return routeResult(message("在宝箱层击败???，并检查虚空传送门。","Defeat ??? in Chest and check for a Void portal."),
+      message("若传送门出现，立即进入。","Enter the portal immediately if it appears."), "warning")
+  elseif context.stage == STAGE.CHAPTER6 and context.stageType == ORIGINAL then
+    return routeResult(message("在暗室击败羔羊，并检查虚空传送门。","Defeat The Lamb in Dark Room and check for a Void portal."),
+      message("若传送门出现，立即进入。","Enter the portal immediately if it appears."), "warning")
   end
   return routeResult(message("击败当前主要 Boss，并检查是否生成虚空传送门。","Defeat the current major boss and check for a Void portal."),
     message("若未生成，继续前往更深层的主要 Boss。","If none appears, continue to a later major boss."), "warning")
@@ -458,13 +750,21 @@ function Routes.observeNpc(run, npc, game)
   if not run or not npc or not game then return false end
   run.routeEvents = run.routeEvents or {}
   local level = game:GetLevel()
-  if level:GetStage() ~= STAGE.DEPTHS2
-    or (level:GetStageType() ~= REP_A and level:GetStageType() ~= REP_B) then return false end
-  local key
-  if npc.Type == enum(EntityType,"ENTITY_MOM",45) then key = "mausoleumMomDefeated" end
-  if npc.Type == enum(EntityType,"ENTITY_MOMS_HEART",78) then key = "fleshHeartDefeated" end
-  if key and not run.routeEvents[key] then run.routeEvents[key] = true; return true end
-  return false
+  if level:GetStage() ~= STAGE.DEPTHS2 then return false end
+  local repentanceFloor = level:GetStageType() == REP_A or level:GetStageType() == REP_B
+  local changed = false
+  if npc.Type == enum(EntityType,"ENTITY_MOM",45) then
+    if not run.routeEvents.momDefeated then run.routeEvents.momDefeated = true; changed = true end
+    if repentanceFloor and not run.routeEvents.mausoleumMomDefeated then
+      run.routeEvents.mausoleumMomDefeated = true
+      changed = true
+    end
+  elseif repentanceFloor and npc.Type == enum(EntityType,"ENTITY_MOMS_HEART",78)
+    and not run.routeEvents.fleshHeartDefeated then
+    run.routeEvents.fleshHeartDefeated = true
+    changed = true
+  end
+  return changed
 end
 
 return Routes

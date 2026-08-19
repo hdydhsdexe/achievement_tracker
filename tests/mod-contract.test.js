@@ -721,6 +721,51 @@ test("Boss Rush completion uses the persistent game-state flag across room and f
   assert.match(main, /MC_POST_NEW_ROOM/);
 });
 
+test("Chest and Dark Room routes prompt for the correct photo after Mom dies", () => {
+  const routes = read("scripts/core/routes.lua");
+  assert.match(routes, /heldAids=\{\}/);
+  assert.match(routes, /run\.routeEvents\.momDefeated = true/);
+  assert.match(routes, /context\.routeEvents\.momDefeated and not heldAids\.polaroid/);
+  assert.match(routes, /Mom 已击败：拾取全家福。/);
+  assert.match(routes, /context\.routeEvents\.momDefeated and not heldAids\.negative/);
+  assert.match(routes, /Mom 已击败：拾取底片。/);
+});
+
+test("dynamic boss routes provide concrete bilingual exits for every main-path floor", () => {
+  const routes = read("scripts/core/routes.lua");
+  for (const text of [
+    "地下室II/下水道I", "洞穴I/下水道II", "下水道II：进入洞穴II/矿层I",
+    "洞穴II/矿层I", "深牢I/矿层II", "深牢II/陵墓I", "陵墓I：进入陵墓II",
+    "深牢II：进入子宫I", "陵墓II", "子宫I：进入子宫II",
+    "Basement II or Downpour I", "Caves I or Downpour II",
+    "Downpour II: enter Caves II/Mines I", "Depths I or Mines II",
+    "Depths II or Mausoleum I", "Womb I: enter Womb II"
+  ]) {
+    assert.match(routes, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(routes, /沿主线(?:推进|前往)|Follow the main path/);
+  assert.match(routes, /persistentData:Unlocked\(407\)/);
+  assert.match(routes, /context\.secretExitUnlocked == false/,
+    "unknown unlock state must continue to expose possible alternate exits");
+  assert.match(routes, /policy == "main"/);
+  assert.match(routes, /policy == "alternate"/);
+});
+
+test("special routes compose floor exits without losing constraints or Greed progression", () => {
+  const routes = read("scripts/core/routes.lua");
+  assert.match(routes, /pathResult\(context,[\s\S]*?"main"\)/,
+    "Beast must force the last transition into normal Depths II");
+  assert.match(routes, /context\.elapsed >= 1200 and "alternate"/,
+    "late Boss Rush runs must force the Mausoleum branch at the final fork");
+  assert.match(routes, /保持30分钟时限。/);
+  assert.match(routes, /优先进入天使房，炸毁雕像并收集两枚钥匙碎片。/);
+  for (const floor of ["进入洞穴", "进入深牢", "进入子宫", "进入阴间", "进入商店层", "进入究极贪婪层"]) {
+    assert.match(routes, new RegExp(floor));
+  }
+  assert.match(routes, /isRepentanceFloor\(context\) and context\.stage >= STAGE\.WOMB1/,
+    "Corpse must not be treated as a route to Blue Womb");
+});
+
 test("challenge runs show only their unlock while F3 marks challenge-only unlocks unavailable elsewhere", () => {
   const goals = read("scripts/data/goals.lua");
   const hud = read("scripts/ui/hud.lua");
