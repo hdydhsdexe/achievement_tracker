@@ -158,3 +158,34 @@ is rendered as one compact localized label with its position in the cycle.
 The repository already contained uncommitted F3 untracking changes, so no TDD
 checkpoint commits were created. Live-game confirmation remains for both
 languages, narrow internal resolutions, empty filters, and the full Tab cycle.
+
+## 2026-08-22 mixed-font glyph coverage
+
+The bundled font now keeps LanaPixel as its primary face and uses Source Han
+Sans SC only for runtime characters that resolve to LanaPixel's missing-glyph
+box. The approved journey is that every Chinese HUD and F3 string renders from
+one self-contained BMFont without silently substituting a square.
+
+- RED: `node --test tests/font-assets.test.js` ran 2 tests with 2 intended
+  failures. The pixel audit identified all 39 affected runtime characters,
+  including `羔`, as byte-identical to `□`; the generator contract also lacked
+  fallback parameters and a source manifest.
+- GREEN: the same focused command passed both tests after generating 1,163
+  glyphs, 39 from the fallback font, on one atlas page.
+- Error path: running the generator with LanaPixel as both primary and fallback
+  exited nonzero and listed every unresolved character and Unicode codepoint.
+- Regression: `npm.cmd test` passed all 93 tests.
+- Coverage: `npm.cmd run test:coverage` passed all 93 tests and reported 94.77%
+  lines, 82.61% branches, and 90.32% functions for executable JavaScript.
+
+| Guarantee | Test or command | Type | Result |
+|---|---|---|---|
+| Every character collected from `main.lua` and `scripts/**/*.lua` has a BMFont record and the 39 audited gaps no longer share the `□` pixels | `bundled font contains real glyphs for every runtime character` | resource integration | PASS |
+| Fallback glyphs keep the primary CJK advance and remain inside its vertical line box | `bundled font contains real glyphs for every runtime character` | layout contract | PASS |
+| Font dependencies are version-locked and the generated manifest records 1,163 resolved glyphs with the expected 39 fallbacks | `font generation declares primary and fallback sources without unresolved glyphs` | generation contract | PASS |
+| A character missing from both sources aborts generation instead of producing a box | negative `tools/generate_font.py` invocation | error path | PASS |
+| Existing F3, HUD, tracking, import, and catalog behavior remains intact | complete `npm.cmd test` suite | regression | PASS |
+
+Live-game confirmation remains for representative fallback words, HUD/F3 font
+scales, narrow internal resolutions, and English rendering. The RED checkpoint
+is commit `565d361`; the GREEN checkpoint follows the completed implementation.

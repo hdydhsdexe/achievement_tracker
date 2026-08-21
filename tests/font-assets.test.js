@@ -129,6 +129,16 @@ test("bundled font contains real glyphs for every runtime character", () => {
       && glyphPixels(record, decodedPages[record.page]).equals(squarePixels);
   });
   assert.deepEqual(boxed, [], `runtime glyphs still render as boxes: ${boxed.join("")}`);
+
+  const reference = records.get("羊".codePointAt(0));
+  for (const character of missingFromLanaPixel) {
+    const record = records.get(character.codePointAt(0));
+    assert.equal(record.xadvance, reference.xadvance, `${character} must keep the primary CJK advance`);
+    assert.ok(record.yoffset >= reference.yoffset - 2,
+      `${character} must not extend above the primary CJK line box`);
+    assert.ok(record.yoffset + record.height <= reference.yoffset + reference.height + 2,
+      `${character} must not extend below the primary CJK line box`);
+  }
 });
 
 test("font generation declares primary and fallback sources without unresolved glyphs", () => {
@@ -138,10 +148,12 @@ test("font generation declares primary and fallback sources without unresolved g
   assert.match(generator, /--fallback-font/);
   assert.match(generator, /--fallback-size/);
   assert.match(generator, /unresolved/i);
-  assert.equal(packageJson.devDependencies["@fontpkg/lana-pixel"], "001.003.0");
+  assert.equal(packageJson.devDependencies["@fontpkg/lana-pixel"], "1.3.0");
   assert.equal(packageJson.devDependencies["@fontpkg/source-han-sans-sc"], "2.5.3");
   assert.equal(fs.existsSync(sourcePath), true, "generated glyph source manifest must exist");
   const sources = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
+  assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", size: 16});
+  assert.deepEqual(sources.fallbackFont, {file: "SourceHanSansSC-Regular.otf", size: 15});
   assert.equal(sources.glyphCount, runtimeCharacters().size);
   assert.deepEqual(sources.unresolvedGlyphs, []);
   assert.deepEqual(sources.fallbackGlyphs.map((entry) => entry.character), missingFromLanaPixel);

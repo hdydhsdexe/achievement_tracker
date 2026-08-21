@@ -21,7 +21,7 @@
 
 ## 中文字体
 
-Mod 使用由 LanaPixel 生成的自带中文位图字体，只包含当前界面和成就条件实际使用的字形。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。字体资源遵循 SIL Open Font License 1.1，许可证位于 `resources/font/LANAPIXEL_OFL.txt`。
+Mod 使用由 LanaPixel 生成的自带中文位图字体；LanaPixel 缺少的字符会在生成时由 Source Han Sans SC 补齐，游戏仍只加载一套合并后的字体。字库只包含当前界面和成就条件实际使用的字形，生成器会拒绝任何两套源字体都无法显示的字符。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。两套字体均遵循 SIL Open Font License 1.1，许可证分别位于 `resources/font/LANAPIXEL_OFL.txt` 和 `resources/font/OFL.txt`。
 
 ## 安装
 
@@ -50,5 +50,5 @@ Mod 使用由 LanaPixel 生成的自带中文位图字体，只包含当前界�
 - `npm.cmd test`：运行零依赖合约测试。
 - `一键导入成就.cmd`：Windows 一键发现、备份并导入全部有效存档槽。
 - `tools/save_importer/index.html`：离线解析游戏存档并生成 Achievement Tracker 导入文件。
-- `tools/generate_font.py`：从 Lua 中文文本重新生成精简字体；可通过 `--name` 指定独立输出名，新增中文文案后应重新运行。
+- `tools/generate_font.py`：从 Lua 文本重新生成精简字体，并输出每个后备字形的来源清单。先运行 `npm.cmd install`，再使用 `--font node_modules/@fontpkg/lana-pixel/LanaPixel.ttf --fallback-font node_modules/@fontpkg/source-han-sans-sc/SourceHanSansSC-Regular.otf --fallback-size 15 --name achievement_lanapixel`；新增文案后应重新生成并运行测试。
 - `tools/generate_reward_type_icons.py`：重新生成非标准奖励的五格像素图集。

@@ -5,5 +5,9 @@
     "generate:achievement-icons": "node tools/generate_achievement_icons.mjs",
     "test": "node --test tests/*.test.js",
     "test:coverage": "node --experimental-test-coverage --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "@fontpkg/lana-pixel": "1.3.0",
+    "@fontpkg/source-han-sans-sc": "2.5.3"
   }
 }
