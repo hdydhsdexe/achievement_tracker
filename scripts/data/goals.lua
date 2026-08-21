@@ -19,9 +19,72 @@ local trackingMetadata = {
   achievement_386 = { progressKey="gulp", target=5 }
 }
 
--- Generated catalog rows only encode collectibles, trinkets, and cards. These
--- overrides describe unlockable world entities without editing generated data.
+-- Generated catalog rows only encode standard reward types. These overrides
+-- describe non-standard unlockable rewards without editing generated data.
 local rewardOverrides = {
+  -- Non-standard unlocks use explicit reward semantics. Completion-condition
+  -- text is intentionally not used because it describes how to unlock the
+  -- reward, not what the reward is.
+  achievement_142 = {kind="monster"},
+  achievement_155 = {kind="monster"},
+  achievement_346 = {kind="monster"},
+  achievement_347 = {kind="monster"},
+  achievement_348 = {kind="monster"},
+  achievement_234 = {kind="area"},
+  achievement_320 = {kind="area"},
+  achievement_342 = {kind="area"},
+  achievement_343 = {kind="area"},
+  achievement_344 = {kind="area"},
+  achievement_345 = {kind="area"},
+  achievement_406 = {kind="area"},
+  achievement_407 = {kind="area"},
+  achievement_412 = {kind="area"},
+  achievement_413 = {kind="area"},
+  achievement_414 = {kind="area"},
+  achievement_635 = {kind="area"},
+  achievement_157 = {kind="challenge"},
+  achievement_158 = {kind="challenge"},
+  achievement_160 = {kind="challenge"},
+  achievement_163 = {kind="challenge"},
+  achievement_166 = {kind="challenge"},
+  achievement_265 = {kind="challenge"},
+  achievement_266 = {kind="challenge"},
+  achievement_269 = {kind="challenge"},
+  achievement_270 = {kind="challenge"},
+  achievement_272 = {kind="challenge"},
+  achievement_273 = {kind="challenge"},
+  achievement_274 = {kind="challenge"},
+  achievement_277 = {kind="challenge"},
+  achievement_278 = {kind="challenge"},
+  achievement_279 = {kind="challenge"},
+  achievement_510 = {kind="challenge"},
+  achievement_511 = {kind="challenge"},
+  achievement_513 = {kind="challenge"},
+  achievement_514 = {kind="challenge"},
+  achievement_515 = {kind="challenge"},
+  achievement_516 = {kind="challenge"},
+  achievement_151 = {kind="feature"},
+  achievement_152 = {kind="feature"},
+  achievement_153 = {kind="feature"},
+  achievement_154 = {kind="feature"},
+  achievement_178 = {kind="feature"},
+  achievement_191 = {kind="feature"},
+  achievement_243 = {kind="feature"},
+  achievement_246 = {kind="feature"},
+  achievement_247 = {kind="feature"},
+  achievement_275 = {kind="feature"},
+  achievement_323 = {kind="feature"},
+  achievement_337 = {kind="feature"},
+  achievement_341 = {kind="feature"},
+  achievement_593 = {kind="feature"},
+  achievement_617 = {kind="feature"},
+  achievement_638 = {kind="feature"},
+  achievement_639 = {kind="feature"},
+  achievement_640 = {kind="feature"},
+  achievement_641 = {kind="feature"},
+  achievement_227 = {kind="pickup"},
+  achievement_228 = {kind="pickup"},
+  achievement_332 = {kind="pickup"},
   achievement_33 = {kind="pickup", variant=10, subtype=8},
   achievement_224 = {kind="pickup", variant=10, subtype=7},
   achievement_226 = {kind="pickup", variant=40, subtype=4},
@@ -99,17 +162,18 @@ function Catalog.text(goal, language)
 end
 
 local SEARCH_KIND_ALIASES = {
-  collectible="item collectible active passive familiar",
-  trinket="trinket",
-  card="card rune soul",
+  collectible="item collectible active passive familiar 道具",
+  trinket="trinket 饰品",
+  card="card rune soul 卡牌 符文 魂石",
   pickup="pickup consumable heart coin key bomb pill chest sack battery 掉落物",
-  slot="machine beggar slot arcade 机器 乞丐",
-  grid="grid obstacle poop rock 大便 石头 愚人金",
-  character="character player",
-  area="area location floor room route",
-  challenge="challenge",
-  feature="feature mechanic",
-  other="other reward"
+  slot="machine beggar slot arcade scenery world 机器 乞丐 场景 机器与场景",
+  grid="grid obstacle poop rock scenery world 大便 石头 愚人金 场景 机器与场景",
+  character="character player 人物 角色",
+  monster="monster enemy boss 怪物 敌人 头目",
+  area="area location floor room route 地点 区域 楼层 房间 路线",
+  challenge="challenge 挑战",
+  feature="feature mechanic mode 机制 功能 模式",
+  other="other reward 其他"
 }
 
 local function normalizeSearch(value)

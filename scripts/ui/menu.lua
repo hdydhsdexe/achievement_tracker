@@ -9,7 +9,9 @@ local Menu = {}
 local COLUMNS = 3
 local ROWS = 9
 local PAGE_SIZE = COLUMNS * ROWS
-local FILTERS = { "all", "collectible", "trinket", "card", "other" }
+local FILTERS = { "all", "collectible", "trinket", "card",
+  "character", "monster", "area", "challenge", "pickup", "world",
+  "feature", "other" }
 local MAX_SEARCH_LENGTH = 48
 local HOLD_DELAY_MS = 300
 local HOLD_REPEAT_MS = 90
@@ -224,10 +226,12 @@ local function updateMouseSelection(state)
 end
 
 local function toggleGoal(state, goal, save, context)
-  if not goal or not Tracker.toggle(state.tracker, goal.id) then return false end
+  if not goal then return false end
+  local wasTracked = Tracker.contains(state.tracker, goal.id)
+  if not Tracker.toggle(state.tracker, goal.id) then return false end
   state.settings.tracked = state.tracker.ids
   save()
-  refreshGoals(state, context, true)
+  if not wasTracked then refreshGoals(state, context, true) end
   return true
 end
 
@@ -395,12 +399,9 @@ function Menu.update(state, save)
 end
 
 local function filterLine(labels, active)
-  local parts = {}
-  for index, filter in ipairs(FILTERS) do
-    local name = labels.filterNames[filter]
-    table.insert(parts, index == active and ("[" .. name .. "]") or name)
-  end
-  return table.concat(parts, "  ")
+  local filter = FILTERS[active] or "all"
+  local name = labels.filterNames[filter] or filter
+  return string.format(labels.filterStatus, name, active, #FILTERS)
 end
 
 local function rewardName(goal, language)
@@ -409,16 +410,16 @@ end
 
 local function rewardMeta(reward, labels)
   local kind = labels.rewardKinds[reward.kind] or labels.rewardKinds.other
-  if reward.kind == "pickup" then
+  if reward.kind == "pickup" and reward.variant ~= nil and reward.subtype ~= nil then
     return string.format("%s  ·  %s 5.%d.%d", kind, labels.rewardId,
-      reward.variant or 0, reward.subtype or 0)
+      reward.variant, reward.subtype)
   end
-  if reward.kind == "slot" then
-    return string.format("%s  ·  %s 6.%d", kind, labels.rewardId, reward.variant or 0)
+  if reward.kind == "slot" and reward.variant ~= nil then
+    return string.format("%s  ·  %s 6.%d", kind, labels.rewardId, reward.variant)
   end
-  if reward.kind == "grid" then
+  if reward.kind == "grid" and reward.gridType ~= nil and reward.variant ~= nil then
     return string.format("%s  ·  %s %d.%d", kind, labels.rewardId,
-      reward.gridType or 0, reward.variant or 0)
+      reward.gridType, reward.variant)
   end
   if reward.id then return string.format("%s  ·  %s %d", kind, labels.rewardId, reward.id) end
   return kind

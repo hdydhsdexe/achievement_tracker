@@ -3,10 +3,16 @@ local Rewards = {}
 local validKinds = {
   collectible=true, trinket=true, card=true,
   pickup=true, slot=true, grid=true,
-  character=true, area=true, challenge=true, feature=true, other=true
+  character=true, monster=true, area=true, challenge=true, feature=true, other=true
 }
 
 local standardKinds = { collectible=true, trinket=true, card=true }
+local filterKinds = {
+  collectible="collectible", trinket="trinket", card="card",
+  pickup="pickup", slot="world", grid="world",
+  character="character", monster="monster", area="area",
+  challenge="challenge", feature="feature", other="other"
+}
 
 local function enumTable(kind)
   if kind == "collectible" then return CollectibleType end
@@ -37,9 +43,8 @@ end
 local function inferredKind(goal)
   local observation = goal and goal.observation
   if observation and observation.kind == "player" then return "character" end
+  if observation and observation.kind == "boss" then return "monster" end
   if observation and (observation.kind == "stage" or observation.kind == "stage_type") then return "area" end
-  local english = goal and goal.en and goal.en.detail or ""
-  if string.find(string.lower(english), "challenge #", 1, true) then return "challenge" end
   if goal and goal.category and goal.category ~= "achievement" then return "feature" end
   return "other"
 end
@@ -64,8 +69,7 @@ function Rewards.display(goal)
 end
 
 function Rewards.filterKind(reward)
-  if reward and standardKinds[reward.kind] then return reward.kind end
-  return "other"
+  return reward and filterKinds[reward.kind] or "other"
 end
 
 function Rewards.isValidKind(kind) return validKinds[kind] == true end

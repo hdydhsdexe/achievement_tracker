@@ -22,3 +22,10 @@ The guarantees were derived from the approved F3 entity-icon plan. A player brow
 ## Known gap
 
 Automated tests cannot render Isaac's virtual resources. Final visual confirmation of actor pivots, texture-replacement compatibility, and status tinting still requires opening F3 in Repentance and checking the 23 achievement IDs at both icon sizes.
+
+## Superseded filter placement
+
+The 2026-08-22 semantic-filter update supersedes the original “remain in Other”
+guarantees above: pickups now have a dedicated filter, while machines and grid
+entities share the Machines & Scenery filter. Their native icon behavior is
+unchanged.

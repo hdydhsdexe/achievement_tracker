@@ -139,6 +139,27 @@ test("F3 mouse hover selects visible tiles and a left-click edge toggles trackin
     "blocked mouse shooting must return the correct value for analog input hooks");
 });
 
+test("F3 untracking keeps the current list position until the next refresh", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const toggle = menu.match(/local function toggleGoal[\s\S]*?\nend\n\nlocal function typedSearchCharacter/);
+  assert.ok(toggle, "toggleGoal must remain the shared keyboard and mouse tracking path");
+  assert.match(toggle[0], /local wasTracked = Tracker\.contains\(state\.tracker, goal\.id\)/);
+  assert.match(toggle[0], /Tracker\.toggle\(state\.tracker, goal\.id\)/);
+  assert.match(toggle[0], /state\.settings\.tracked = state\.tracker\.ids[\s\S]*?save\(\)/,
+    "both tracking directions must persist immediately");
+  assert.match(toggle[0], /if not wasTracked then refreshGoals\(state, context, true\) end/,
+    "only newly tracked goals should trigger an immediate reorder");
+  assert.equal((toggle[0].match(/refreshGoals\(/g) || []).length, 1,
+    "untracking must not have a second unconditional refresh path");
+  assert.doesNotMatch(toggle[0], /state\.menu\.(?:cursor|offset)\s*=/,
+    "untracking must leave the current selection and page untouched");
+  assert.match(menu, /if queryChanged then[\s\S]*?refreshGoals\(state, context, false\)/);
+  assert.match(menu, /Keyboard\.KEY_TAB[\s\S]*?refreshGoals\(state, context, false\)/);
+  assert.match(menu, /Keyboard\.KEY_F3[\s\S]*?refreshGoals\(state, nil, false\)/);
+  assert.match(menu, /toggleGoal\(state, goals\[activatedIndex\], save, context\)/,
+    "keyboard and mouse activation must share the delayed-untracking behavior");
+});
+
 test("F3 consumes only controller-zero gameplay actions owned by menu keys", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /local SHOOT_KEYS = \{/);
@@ -185,7 +206,7 @@ test("reward metadata is normalized once for completion detection and display", 
   assert.match(rewards, /function Rewards\.config/);
   assert.match(rewards, /function Rewards\.display/);
   for (const kind of ["collectible", "trinket", "card", "pickup", "slot", "grid",
-    "character", "area", "challenge", "feature", "other"]) {
+    "character", "monster", "area", "challenge", "feature", "other"]) {
     assert.match(rewards, new RegExp(`\\b${kind}\\b`));
   }
   assert.doesNotMatch(unlocks, /local rewards\s*=\s*{/);
@@ -234,8 +255,9 @@ test("F3 maps achievement-unlocked world entities to semantic reward metadata", 
   assert.match(rewards, /variant=reward\.variant/);
   assert.match(rewards, /subtype=reward\.subtype/);
   assert.match(rewards, /gridType=reward\.gridType/);
-  assert.match(rewards, /return "other"/,
-    "world entity rewards must remain in the existing Other filter");
+  assert.match(rewards, /pickup="pickup"/);
+  assert.match(rewards, /slot="world"/);
+  assert.match(rewards, /grid="world"/);
 });
 
 test("F3 world entity icons use native game actors with static frames and fallback", () => {
@@ -282,17 +304,120 @@ test("F3 world entity icons use native game actors with static frames and fallba
   }
 });
 
-test("F3 localizes and searches world entity reward kinds without adding filters", () => {
+test("F3 exposes every semantic reward group as a single-level filter", () => {
   const goals = read("scripts/data/goals.lua");
+  const rewards = read("scripts/core/rewards.lua");
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
-  for (const kind of ["pickup", "slot", "grid"]) {
+  for (const [kind, labelCount] of [["pickup", 4], ["slot", 2], ["grid", 2]]) {
     assert.match(goals, new RegExp(`${kind}="[^"]+"`));
-    assert.equal((text.match(new RegExp(`${kind}="`, "g")) || []).length, 2,
+    assert.equal((text.match(new RegExp(`${kind}="`, "g")) || []).length, labelCount,
       `${kind} must have Chinese and English labels`);
   }
-  assert.match(menu, /local FILTERS = \{ "all", "collectible", "trinket", "card", "other" \}/);
-  assert.doesNotMatch(menu, /local FILTERS = \{[^\n]*"pickup"/);
+  assert.match(menu, /local FILTERS = \{ "all", "collectible", "trinket", "card",\s*\n\s*"character", "monster", "area", "challenge", "pickup", "world",\s*\n\s*"feature", "other" \}/);
+  for (const [filter, labelCount] of [
+    ["character", 4], ["monster", 4], ["area", 4], ["challenge", 4],
+    ["pickup", 4], ["world", 2], ["feature", 4]
+  ]) {
+    assert.equal((text.match(new RegExp(`${filter}="`, "g")) || []).length, labelCount,
+      `${filter} must have Chinese and English filter labels`);
+  }
+  for (const [kind, filter] of [
+    ["collectible", "collectible"], ["trinket", "trinket"], ["card", "card"],
+    ["pickup", "pickup"], ["slot", "world"], ["grid", "world"],
+    ["character", "character"], ["monster", "monster"], ["area", "area"],
+    ["challenge", "challenge"], ["feature", "feature"], ["other", "other"]
+  ]) assert.match(rewards, new RegExp(`${kind}="${filter}"`));
+  for (const aliases of [
+    /collectible="[^"]*item[^"]*道具/, /trinket="[^"]*饰品/,
+    /card="[^"]*卡牌/, /character="[^"]*人物/,
+    /monster="[^"]*monster[^"]*怪物/, /area="[^"]*location[^"]*地点/,
+    /challenge="[^"]*挑战/, /pickup="[^"]*掉落物/,
+    /slot="[^"]*scenery[^"]*机器与场景/, /grid="[^"]*scenery[^"]*机器与场景/,
+    /feature="[^"]*mechanic[^"]*机制/, /other="[^"]*其他/
+  ]) assert.match(goals, aliases);
+  assert.match(menu, /string\.format\(labels\.filterStatus, name, active, #FILTERS\)/);
+});
+
+test("non-standard achievement rewards use explicit semantic metadata", () => {
+  const goals = read("scripts/data/goals.lua");
+  const rewards = read("scripts/core/rewards.lua");
+  const overrides = goals.match(/local rewardOverrides\s*=\s*\{[\s\S]*?\n\}/);
+  assert.ok(overrides, "reward overrides must remain a single auditable table");
+  for (const [kind, ids] of Object.entries({
+    monster: [142, 155, 346, 347, 348],
+    area: [234, 320, 342, 343, 344, 345, 406, 407, 412, 413, 414, 635],
+    challenge: [157, 158, 160, 163, 166, 265, 266, 269, 270, 272, 273, 274,
+      277, 278, 279, 510, 511, 513, 514, 515, 516],
+    feature: [151, 152, 153, 154, 178, 191, 243, 246, 247, 275, 323, 337,
+      341, 593, 617, 638, 639, 640, 641],
+    pickup: [227, 228, 332]
+  })) {
+    for (const id of ids) assert.match(overrides[0],
+      new RegExp(`achievement_${id}\\s*=\\s*\\{kind="${kind}"`),
+      `achievement ${id} must be classified as ${kind}`);
+  }
+  for (const id of [167, 69]) assert.doesNotMatch(overrides[0],
+    new RegExp(`achievement_${id}\\s*=`),
+    `achievement ${id} must remain in the residual Other group`);
+  assert.match(rewards, /observation\.kind == "boss"[\s\S]*?return "monster"/);
+  assert.doesNotMatch(rewards, /challenge #/i,
+    "completion-condition text must not determine the unlocked reward category");
+});
+
+test("all 641 achievements have one audited filter including representative rewards", () => {
+  const dataDir = path.join(root, "scripts/data");
+  const batches = fs.readdirSync(dataDir)
+    .filter((file) => /^achievements_\d+_\d+\.lua$/.test(file));
+  const goals = read("scripts/data/goals.lua");
+  const overrideBlock = goals.match(/local rewardOverrides\s*=\s*\{([\s\S]*?)\n\}/)[1];
+  const overrides = new Map([...overrideBlock.matchAll(
+    /achievement_(\d+)\s*=\s*\{kind="([^"]+)"/g
+  )].map((match) => [Number(match[1]), match[2]]));
+  const observations = new Map();
+  const achievements = new Map();
+
+  for (const file of batches) {
+    const source = read(`scripts/data/${file}`);
+    for (const match of source.matchAll(/achievement_(\d+)\s*=\s*\{kind="([^"]+)"/g))
+      observations.set(Number(match[1]), match[2]);
+    for (const line of source.split(/\r?\n/)) {
+      const row = line.match(/^\s*a\((\d+),/);
+      if (!row) continue;
+      const id = Number(row[1]);
+      const reward = line.match(/reward\("([^"]+)"/);
+      const observation = line.match(/observe\("([^"]+)"/);
+      achievements.set(id, {
+        reward: reward && reward[1] || (/",\s*\d+\s*\),?\s*$/.test(line) ? "collectible" : null),
+        observation: observation && observation[1]
+      });
+    }
+  }
+
+  const filterFor = (id) => {
+    const row = achievements.get(id);
+    const kind = overrides.get(id) || row.reward || row.observation || observations.get(id) || "other";
+    return ({slot: "world", grid: "world", player: "character", boss: "monster",
+      stage: "area", stage_type: "area"})[kind] || kind;
+  };
+  const expected = {
+    1: "character", 474: "character", 5: "monster", 16: "monster",
+    4: "area", 86: "area", 320: "area", 412: "area",
+    166: "challenge", 265: "challenge", 510: "challenge", 33: "pickup",
+    605: "world", 607: "world", 151: "feature", 337: "feature",
+    167: "other", 69: "other"
+  };
+  for (const [id, filter] of Object.entries(expected))
+    assert.equal(filterFor(Number(id)), filter, `achievement ${id} must be ${filter}`);
+
+  assert.equal(achievements.size, 641);
+  const counts = {};
+  for (const id of achievements.keys()) counts[filterFor(id)] = (counts[filterFor(id)] || 0) + 1;
+  assert.deepEqual(counts, {
+    character: 33, collectible: 286, area: 16, monster: 12, other: 65,
+    pickup: 20, trinket: 99, card: 64, feature: 19, challenge: 21, world: 6
+  });
+  assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0), 641);
 });
 
 test("reward icon renderer uses vanilla graphics with cached sprites", () => {
@@ -445,7 +570,7 @@ test("character reward renderer loads cached vanilla portraits with safe fallbac
 test("F3 visual menu filters rewards and renders condition-to-reward details", () => {
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
-  assert.match(menu, /local FILTERS\s*=\s*{\s*"all",\s*"collectible",\s*"trinket",\s*"card",\s*"other"\s*}/);
+  assert.match(menu, /local FILTERS\s*=\s*{\s*"all",\s*"collectible",\s*"trinket",\s*"card",\s*"character",\s*"monster",\s*"area",\s*"challenge",\s*"pickup",\s*"world",\s*"feature",\s*"other"\s*}/);
   assert.match(menu, /Keyboard\.KEY_TAB/);
   assert.match(menu, /filterIndex/);
   assert.match(menu, /RewardIcons\.render/);

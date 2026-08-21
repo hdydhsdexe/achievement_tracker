@@ -12,7 +12,8 @@
 ## Journeys covered
 
 1. Open F3 and see 27 reward-oriented entries per page.
-2. Press Tab through All, Items, Trinkets, Cards, and Other; selection resets.
+2. Press Tab through the twelve reward categories; the compact active label and
+   selection reset together.
 3. Move with arrow keys and toggle tracking with Enter or Space.
 4. Read the selected achievement's condition, confirmation state, reward icon,
    type, and ID.
@@ -101,3 +102,59 @@ Isaac. Live-game checks remain for paused and real-time menus, multiple internal
 resolutions, held-key cadence, click-to-track reordering, and multiplayer input
 isolation. No checkpoint commits were created because the approved plan requires
 review before any commit.
+
+## 2026-08-19 stable untracking order
+
+The approved interaction change keeps an achievement at its current list
+position when tracking is removed. Its tracking marker and persisted state
+update immediately, while any later list rebuild restores the current priority
+order. Newly tracked achievements still refresh immediately and move into the
+tracked group.
+
+- RED: `npm.cmd test` ran 78 tests with 77 passing and 1 intended failure for
+  the unconditional `toggleGoal` refresh.
+- GREEN: after separating the track and untrack refresh paths, the same 78 tests
+  all passed.
+- Coverage: `npm.cmd run test:coverage` passed all 78 tests and reported 92.45%
+  lines, 89.87% branches, and 100% functions for the executable JavaScript suite.
+
+| Guarantee | Test | Type | Result |
+|---|---|---|---|
+| Untracking saves immediately without rebuilding the list; tracking still refreshes and both keyboard and mouse use the same path | `F3 untracking keeps the current list position until the next refresh` | contract | PASS |
+| Reopening F3, search changes, Tab filtering, relevance/completion changes, or another successful track may rebuild the list normally | complete F3 contract suite | regression | PASS |
+
+Live-game confirmation remains for keyboard and mouse untracking on both paused
+and real-time F3 menus. No checkpoint commits were created because the approved
+plan requires review before any commit.
+
+## 2026-08-22 semantic reward filters
+
+The former catch-all Other filter is split into a single Tab cycle covering All,
+Items, Trinkets, Cards, Characters, Monsters, Locations, Challenges, Pickups,
+Machines & Scenery, Features, and the residual Other group. The active category
+is rendered as one compact localized label with its position in the cycle.
+
+- RED: the focused contract run executed 6 relevant tests with 5 intended
+  failures for the missing kind, filter map, metadata overrides, and compact UI.
+- GREEN: the same focused run passed all 6 tests after the implementation.
+- Search-alias review RED/GREEN: the focused filter contract first failed on
+  missing localized category aliases, then passed after all twelve category
+  names were made searchable in English and Chinese.
+- Regression: `npm.cmd test` passed all 91 tests.
+- Coverage: `npm.cmd run test:coverage` passed all 91 tests and reported 94.77%
+  lines, 82.61% branches, and 90.32% functions.
+- Catalog audit: all 641 achievements resolve to exactly one concrete filter;
+  33 playable characters are in Characters while co-player babies remain Other.
+
+| Guarantee | Test | Type | Result |
+|---|---|---|---|
+| Tab cycles the twelve filters while search still composes with the active filter | `F3 exposes every semantic reward group as a single-level filter` | contract | PASS |
+| Boss observations and audited non-standard rewards resolve to monster, location, challenge, pickup, or feature metadata without condition-text guessing | `non-standard achievement rewards use explicit semantic metadata` | contract | PASS |
+| All 641 achievements enter exactly one concrete group, including every representative ID in the approved plan | `all 641 achievements have one audited filter including representative rewards` | catalog audit | PASS |
+| Pickups have their own filter while machines and grid entities share Machines & Scenery | `F3 maps achievement-unlocked world entities to semantic reward metadata` | contract | PASS |
+| New Chinese labels are present in the regenerated bundled font | `bundled LanaPixel assets are complete` | resource | PASS |
+| Existing search, tracking, icon, pause, import, and HUD behavior remains intact | complete `npm.cmd test` suite | regression | PASS |
+
+The repository already contained uncommitted F3 untracking changes, so no TDD
+checkpoint commits were created. Live-game confirmation remains for both
+languages, narrow internal resolutions, empty filters, and the full Tab cycle.
