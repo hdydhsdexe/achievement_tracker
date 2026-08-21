@@ -2,6 +2,7 @@
   "name": "isaac-achievement-tracker-tests",
   "private": true,
   "scripts": {
+    "generate:achievement-icons": "node tools/generate_achievement_icons.mjs",
     "test": "node --test tests/*.test.js",
     "test:coverage": "node --experimental-test-coverage --test tests/*.test.js"
   }

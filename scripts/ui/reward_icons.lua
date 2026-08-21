@@ -141,7 +141,8 @@ local backdropSprite
 local paperSprite
 
 local function cacheKey(reward)
-  return table.concat({ reward.kind, tostring(reward.id or reward.enum or ""),
+  return table.concat({ reward.kind, tostring(reward.achievementId or ""),
+    tostring(reward.id or reward.enum or ""),
     tostring(reward.variant or ""), tostring(reward.subtype or ""),
     tostring(reward.gridType or "") }, ":")
 end
@@ -238,6 +239,22 @@ local function validFrame(sprite, animation, frame)
   return ok and valid == true
 end
 
+local function achievementIconEntry(reward)
+  local achievementId = tonumber(reward.achievementId)
+  if not achievementId or achievementId < 1 or achievementId > 641
+    or achievementId ~= math.floor(achievementId) then return nil end
+  local ok, entry = pcall(function()
+    local sprite = Sprite()
+    sprite:Load("gfx/ui/achievement_icons.anm2", false)
+    sprite:ReplaceSpritesheet(0, string.format(
+      "gfx/ui/achievement_icons/achievement_%03d.png", achievementId))
+    sprite:LoadGraphics()
+    if not validFrame(sprite, "AchievementIcon", 0) then return nil end
+    return { sprite=sprite, animation="AchievementIcon", frame=0, baseSize=64 }
+  end)
+  return ok and entry or nil
+end
+
 local function nativeEntityEntry(resource)
   if not resource then return nil end
   local ok, entry = pcall(function()
@@ -325,11 +342,13 @@ end
 local function cached(reward)
   local key = cacheKey(reward)
   if cache[key] ~= nil then return cache[key] or nil end
-  local entry
-  if reward.kind == "collectible" or reward.kind == "trinket" then entry = itemSprite(reward) end
-  if reward.kind == "character" then entry = characterSprite(reward) end
-  if reward.kind == "card" then entry = cardEntry(reward) end
-  if reward.kind == "pickup" or reward.kind == "slot" or reward.kind == "grid" then
+  local entry = achievementIconEntry(reward)
+  if not entry and (reward.kind == "collectible" or reward.kind == "trinket") then
+    entry = itemSprite(reward)
+  end
+  if not entry and reward.kind == "character" then entry = characterSprite(reward) end
+  if not entry and reward.kind == "card" then entry = cardEntry(reward) end
+  if not entry and (reward.kind == "pickup" or reward.kind == "slot" or reward.kind == "grid") then
     entry = worldEntityEntry(reward)
   end
   if not entry then entry = fallbackSprite(reward) end

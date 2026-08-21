@@ -397,7 +397,7 @@ test("character rewards retain PlayerType ids inferred from achievement observat
   const early = read("scripts/data/achievements_1_50.lua");
   const repentance = read("scripts/data/achievements_401_500.lua");
   assert.match(rewards, /kind == "character"[\s\S]*?observation\.values\[1\]/);
-  assert.match(rewards, /return \{ kind=kind, id=id \}/);
+  assert.match(rewards, /return \{ kind=kind, id=id, achievementId=goal and goal\.achievementId \}/);
   assert.match(early, /achievement_1=\{kind="player", values=\{1\}\}/);
   assert.match(repentance, /a\(474,[^\n]+observe\("player",21\)/);
 });
@@ -432,7 +432,7 @@ test("character reward renderer loads cached vanilla portraits with safe fallbac
   assert.match(icons, /local function taintedEdenOverlay\(\)[\s\S]*?edenHead:Load\("gfx\/ui\/stage\/eden_b_head\.anm2", true\)/);
   assert.match(icons, /edenHead:GetDefaultAnimation\(\)/);
   assert.match(icons, /reward\.id == TAINTED_EDEN and taintedEdenOverlay\(\) or nil/);
-  assert.match(icons, /if reward\.kind == "character" then entry = characterSprite\(reward\) end/);
+  assert.match(icons, /if not entry and reward\.kind == "character" then entry = characterSprite\(reward\) end/);
   assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
   assert.match(icons, /entry\.overlay:Render\(position\)/);
   assert.match(actor, /Animation Name="RewardPortrait"[\s\S]*?Width="144" Height="144"/);
