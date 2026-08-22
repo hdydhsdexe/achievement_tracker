@@ -34,6 +34,7 @@ local AID_DEFS = {
   polaroid={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_POLAROID",327), zh="全家福", en="The Polaroid"},
   negative={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_NEGATIVE",328), zh="底片", en="The Negative"},
   dads_note={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_DADS_NOTE",668), zh="爸爸的便条", en="Dad's Note"},
+  red_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_RED_KEY",580), zh="红钥匙", en="Red Key"},
   sharp_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_SHARP_KEY",623), zh="尖头钥匙", en="Sharp Key"},
   cracked_orb={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_CRACKED_ORB",675), zh="碎裂的宝珠", en="Cracked Orb"},
   mama_mega={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_MAMA_MEGA",483), zh="超级妈妈！", en="Mama Mega!"},
@@ -46,6 +47,7 @@ local AID_DEFS = {
   faded_polaroid={kind="trinket", id=enum(TrinketType,"TRINKET_FADED_POLAROID",69), zh="褪色的全家福", en="Faded Polaroid"},
   broken_padlock={kind="trinket", id=enum(TrinketType,"TRINKET_BROKEN_PADLOCK",136), zh="坏掉的挂锁", en="Broken Padlock"},
   soul_cain={kind="card", id=enum(Card,"CARD_SOUL_CAIN",83), zh="该隐的魂石", en="Soul of Cain"},
+  cracked_key={kind="card", id=enum(Card,"CARD_CRACKED_KEY",78), zh="红钥匙碎片", en="Cracked Key"},
   jail_free={kind="card", id=enum(Card,"CARD_GET_OUT_OF_JAIL",47), zh="免费出狱卡", en="Get Out of Jail Free"},
   ehwaz={kind="card", id=enum(Card,"RUNE_EHWAZ",34), zh="黑符文·艾瓦兹", en="Ehwaz"}
 }
@@ -220,6 +222,21 @@ local function scanGroundAids(context)
   end
 end
 
+local function scanGroundTrinkets(context)
+  if not Isaac or type(Isaac.GetRoomEntities) ~= "function" then return end
+  local trinketVariant = enum(PickupVariant,"PICKUP_TRINKET",350)
+  for _, entity in ipairs(Isaac.GetRoomEntities()) do
+    local pickup = entity.ToPickup and entity:ToPickup() or nil
+    local collecting = pickup and pickup.GetSprite
+      and pickup:GetSprite():IsPlaying("Collect")
+    if pickup and not collecting and pickup.Variant == trinketVariant and pickup.SubType > 0 then
+      table.insert(context.groundTrinkets, {
+        pickupSeed=tostring(pickup.InitSeed), subtype=pickup.SubType
+      })
+    end
+  end
+end
+
 local function scanVoidPortal(context, room)
   if not room or type(room.GetGridSize) ~= "function" then return end
   for index = 0, room:GetGridSize() - 1 do
@@ -236,7 +253,8 @@ function Routes.context(game, run)
   local level, room = game:GetLevel(), game:GetRoom()
   local context = {
     stage=level:GetStage(), stageType=level:GetStageType(), elapsed=math.floor(game.TimeCounter / 30),
-    roomType=room:GetType(), greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, voidPortal=false,
+    roomType=room:GetType(), roomIndex=level:GetCurrentRoomIndex(),
+    greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, groundTrinkets={}, voidPortal=false,
     routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
     secretExitUnlocked=secretExitUnlocked()
   }
@@ -262,6 +280,7 @@ function Routes.context(game, run)
     end
   end
   scanGroundAids(context)
+  scanGroundTrinkets(context)
   scanVoidPortal(context, room)
   for _, key in ipairs({"knife1","knife2","key1","key2","dads_note"}) do
     if context.routeItems[key] then context.aids[key] = true end
@@ -269,8 +288,28 @@ function Routes.context(game, run)
   return context
 end
 
-function Routes.updateRun(run, context)
+local function isCrackedKeyRoom(roomType)
+  return roomType == enum(RoomType,"ROOM_TREASURE",4)
+    or roomType == enum(RoomType,"ROOM_BOSS",5)
+end
+
+local function sameRecordedRoom(record, context)
+  return record and record.stage == context.stage and record.stageType == context.stageType
+    and record.roomIndex == context.roomIndex
+end
+
+local function groundTrinketSeeds(context)
+  local seeds = {}
+  for _, trinket in ipairs(context.groundTrinkets or {}) do
+    seeds[trinket.pickupSeed] = true
+  end
+  return seeds
+end
+
+function Routes.updateRun(run, context, trackTaintedUnlock)
   run.routeItems = run.routeItems or {}
+  run.routeEvents = run.routeEvents or {}
+  local heldAids = context.heldAids or {}
   local changed = false
   for _, key in ipairs({"knife1","knife2","key1","key2","dads_note"}) do
     if context.aids[key] and not run.routeItems[key] then
@@ -278,7 +317,122 @@ function Routes.updateRun(run, context)
       changed = true
     end
   end
+  local routeEvents = run.routeEvents
+  local ground = context.groundTrinkets or {}
+  local candidate = routeEvents.crackedKeyCandidate
+  local maintainTaintedState = trackTaintedUnlock or candidate ~= nil
+    or routeEvents.crackedKeyPrepared ~= nil or routeEvents.taintedTrinketPending ~= nil
+  if maintainTaintedState then
+    if candidate and (context.ascent or context.stage == STAGE.HOME
+      or not sameRecordedRoom(candidate, context)) then
+      routeEvents.crackedKeyPrepared = {
+        stage=candidate.stage, stageType=candidate.stageType,
+        roomType=candidate.roomType, roomIndex=candidate.roomIndex,
+        pickupSeed=candidate.pickupSeed
+      }
+      routeEvents.crackedKeyCandidate = nil
+      routeEvents.taintedTrinketPending = nil
+      candidate = nil
+      changed = true
+    end
+
+    if context.ascent or context.stage == STAGE.HOME then
+      if routeEvents.taintedTrinketPending ~= nil then
+        routeEvents.taintedTrinketPending = nil
+        changed = true
+      end
+    else
+      if candidate and sameRecordedRoom(candidate, context) and #ground == 0 then
+        routeEvents.crackedKeyCandidate = nil
+        routeEvents.taintedTrinketPending = true
+        candidate = nil
+        changed = true
+      end
+
+      if trackTaintedUnlock and not heldAids.red_key and not heldAids.cracked_key
+        and isCrackedKeyRoom(context.roomType) and #ground > 0 then
+        local seeds = groundTrinketSeeds(context)
+        local first = ground[1]
+        local sameCandidate = candidate and sameRecordedRoom(candidate, context)
+          and candidate.pickupSeeds and candidate.pickupSeeds[first.pickupSeed]
+        if not sameCandidate then
+          routeEvents.crackedKeyCandidate = {
+            stage=context.stage, stageType=context.stageType,
+            roomType=context.roomType, roomIndex=context.roomIndex,
+            pickupSeed=first.pickupSeed, pickupSeeds=seeds
+          }
+          changed = true
+        else
+          candidate.pickupSeeds = seeds
+        end
+        if routeEvents.taintedTrinketPending ~= nil then
+          routeEvents.taintedTrinketPending = nil
+          changed = true
+        end
+      elseif trackTaintedUnlock and not heldAids.red_key and not heldAids.cracked_key
+        and #ground > 0 and not routeEvents.crackedKeyPrepared
+        and routeEvents.taintedTrinketPending ~= true then
+        routeEvents.taintedTrinketPending = true
+        changed = true
+      end
+    end
+  end
   return changed
+end
+
+function Routes.observePickup(run, pickup, game, trackTaintedUnlock)
+  if not run or not pickup or not game
+    or pickup.Variant ~= enum(PickupVariant,"PICKUP_TRINKET",350)
+    or pickup.SubType <= 0 then return false end
+  run.routeEvents = run.routeEvents or {}
+  local routeEvents = run.routeEvents
+  local candidate = routeEvents.crackedKeyCandidate
+  local prepared = routeEvents.crackedKeyPrepared
+  if not trackTaintedUnlock and not candidate and not prepared then return false end
+  local level, room = game:GetLevel(), game:GetRoom()
+  local seed = tostring(pickup.InitSeed)
+  local collecting = pickup.GetSprite and pickup:GetSprite():IsPlaying("Collect")
+  if collecting then
+    if candidate and candidate.pickupSeeds and candidate.pickupSeeds[seed] then
+      candidate.pickupSeeds[seed] = nil
+      if next(candidate.pickupSeeds) == nil then
+        routeEvents.crackedKeyCandidate = nil
+        routeEvents.taintedTrinketPending = true
+      else
+        candidate.pickupSeed = next(candidate.pickupSeeds)
+      end
+      return true
+    end
+    if prepared and prepared.pickupSeed == seed then
+      routeEvents.crackedKeyPrepared = nil
+      routeEvents.taintedTrinketPending = true
+      return true
+    end
+    return false
+  end
+  local okAscent, ascent = pcall(function() return level:IsAscent() end)
+  if okAscent and ascent or level:GetStage() == STAGE.HOME then return false end
+  if not trackTaintedUnlock then return false end
+  if isCrackedKeyRoom(room:GetType()) then
+    local sameRoom = candidate and candidate.stage == level:GetStage()
+      and candidate.stageType == level:GetStageType()
+      and candidate.roomIndex == level:GetCurrentRoomIndex()
+    if sameRoom and candidate.pickupSeeds and not candidate.pickupSeeds[seed] then
+      candidate.pickupSeeds[seed] = true
+      return true
+    elseif not sameRoom or not candidate.pickupSeeds then
+      routeEvents.crackedKeyCandidate = {
+        stage=level:GetStage(), stageType=level:GetStageType(), roomType=room:GetType(),
+        roomIndex=level:GetCurrentRoomIndex(), pickupSeed=seed, pickupSeeds={[seed]=true}
+      }
+      routeEvents.taintedTrinketPending = nil
+      return true
+    end
+  elseif not routeEvents.crackedKeyPrepared and routeEvents.taintedTrinketPending ~= true then
+    routeEvents.taintedTrinketPending = true
+    return true
+  end
+  return false
 end
 
 function Routes.resetAttempt(run)
@@ -414,6 +568,146 @@ local function beastRoute(context, language)
   end
   return routeResult(message("已错过奇怪门，祸兽路线失败。","The Strange Door was missed; the Beast route has failed."),
     message("使用 R Key 或路线重置后可重新尝试。","Use R Key or reset the route to try again."), "failed")
+end
+
+local function taintedUnlockRoute(goal, context, language)
+  local requiredTypes = CharacterRelevance.requiredPlayerTypes(goal)
+  local requiredType, matchingPlayer = next(requiredTypes), next(requiredTypes) == nil
+  for playerType in pairs(requiredTypes) do
+    requiredType = requiredType or playerType
+    if context.players[playerType] then matchingPlayer = true end
+  end
+  if not matchingPlayer then
+    local name = CharacterRelevance.characterName(requiredType) or tostring(requiredType)
+    local zhDetail = goal.zh and goal.zh.detail or ""
+    local zhName = zhDetail:match("^用(.-)在家") or name
+    return routeResult(
+      message("当前队伍没有" .. zhName .. "，无法解锁对应堕化角色。",
+        "The current team does not include " .. name .. ", so this tainted character cannot be unlocked."),
+      message("请使用" .. zhName .. "进入家并开启隐藏衣柜。",
+        "Reach Home as " .. name .. " and open the hidden closet."), "failed")
+  end
+
+  local routeEvents = context.routeEvents or {}
+  local prepared = routeEvents.crackedKeyPrepared
+  local candidate = routeEvents.crackedKeyCandidate
+  local heldAids = context.heldAids or {}
+  local heldKey = heldAids.red_key or heldAids.cracked_key
+  local availableKey = context.aids.red_key or context.aids.cracked_key
+  if context.stage == STAGE.HOME then
+    if heldKey then
+      return routeResult(
+        message("在妈妈卧室外的走廊使用红钥匙或红钥匙碎片，开启隐藏衣柜。",
+          "Use Red Key or Cracked Key in the hallway outside Mom's bedroom to open the hidden closet."),
+        message("进入衣柜并触碰里面的角色以完成解锁。",
+          "Enter the closet and touch the character inside to complete the unlock."))
+    elseif availableKey then
+      return routeResult(
+        message("拾取当前房间的红钥匙或红钥匙碎片。",
+          "Pick up the Red Key or Cracked Key in the current room."),
+        message("在妈妈卧室外的走廊使用它开启隐藏衣柜。",
+          "Use it in the hallway outside Mom's bedroom to open the hidden closet."), "warning")
+    end
+    return routeResult(
+      message("打开妈妈的箱子寻找红钥匙；当前没有可用的钥匙来源。",
+        "Open Mom's Chest and look for Red Key; no key source is currently available."),
+      message("若未获得红钥匙，本次将无法保证开启隐藏衣柜。",
+        "Without Red Key, opening the hidden closet cannot be guaranteed this run."), "warning")
+  elseif context.ascent then
+    if heldKey then
+      return routeResult(
+        message("沿光柱逐层完成回溯，并保留红钥匙或红钥匙碎片。",
+          "Follow each beam through the Ascent and keep Red Key or Cracked Key."),
+        message("进入家后，在妈妈卧室外开启隐藏衣柜。",
+          "At Home, open the hidden closet outside Mom's bedroom."))
+    elseif availableKey then
+      return routeResult(
+        message("拾取当前房间的红钥匙或红钥匙碎片并带回家。",
+          "Pick up the Red Key or Cracked Key in this room and carry it to Home."),
+        message("在妈妈卧室外使用它开启隐藏衣柜。",
+          "Use it outside Mom's bedroom to open the hidden closet."), "warning")
+    elseif prepared then
+      local roomNameZh = prepared.roomType == enum(RoomType,"ROOM_BOSS",5) and "头目房" or "宝箱房"
+      local roomNameEn = prepared.roomType == enum(RoomType,"ROOM_BOSS",5) and "Boss Room" or "Treasure Room"
+      if context.stage > prepared.stage then
+        return routeResult(
+          message("继续沿光柱回溯；尚未到达存放饰品的楼层。",
+            "Continue through the Ascent; the floor with the stored trinket is still ahead."),
+          message("到达对应楼层后进入" .. roomNameZh .. "拾取红钥匙碎片。",
+            "On that floor, enter the " .. roomNameEn .. " and collect Cracked Key."))
+      elseif context.stage == prepared.stage then
+        return routeResult(
+          message("本层进入之前存放饰品的" .. roomNameZh .. "，拾取红钥匙碎片。",
+            "Enter the " .. roomNameEn .. " where the trinket was stored and collect Cracked Key."),
+          message("取得碎片后继续回溯并将其带到家。",
+            "After taking it, continue the Ascent and carry it to Home."), "warning")
+      end
+      return routeResult(
+        message("已经越过存放饰品的楼层，当前没有红钥匙碎片。",
+          "The floor with the stored trinket has been passed without collecting Cracked Key."),
+        message("继续前往家并检查妈妈的箱子，但本次解锁已无法保证。",
+          "Continue to Home and check Mom's Chest, but the unlock is no longer guaranteed."), "warning")
+    end
+    return routeResult(
+      message("继续沿光柱回溯；当前没有已准备的红钥匙碎片。",
+        "Continue through the Ascent; no Cracked Key has been prepared."),
+      message("进入家后检查妈妈的箱子，但本次解锁无法保证。",
+        "Check Mom's Chest at Home, but the unlock cannot be guaranteed."), "warning")
+  end
+
+  local prepCurrent, prepNext, severity
+  if heldKey then
+    prepNext = message("保留红钥匙或红钥匙碎片，进入家后用于开启隐藏衣柜。",
+      "Keep Red Key or Cracked Key for the hidden closet at Home.")
+  elseif availableKey then
+    prepCurrent = message("拾取当前房间的红钥匙或红钥匙碎片并保留到家。",
+      "Pick up the Red Key or Cracked Key in this room and keep it for Home.")
+    severity = "warning"
+  elseif routeEvents.taintedTrinketPending then
+    prepCurrent = message("发现了多余饰品：回溯开始前将一枚留在头目房或宝箱房。",
+      "A spare trinket was found: leave one in a Boss Room or Treasure Room before the Ascent.")
+    severity = "warning"
+  elseif candidate then
+    prepCurrent = message("当前房间已有用于转化的饰品；离开前不要将它拾回。",
+      "A trinket is ready in this room; leave without picking it back up.")
+    severity = "warning"
+  elseif prepared then
+    prepNext = message("饰品已留好；回溯到对应楼层时进入原房间拾取红钥匙碎片。",
+      "A trinket is prepared; revisit that room during the Ascent to collect Cracked Key.")
+  end
+
+  if context.stage < STAGE.DEPTHS2 then
+    local result = pathResult(context, severity or "normal", {},
+      combineMessages(message("保留传送手段，以便离开 Mom 房。",
+        "Keep a teleport ready to leave Mom's room."), prepCurrent),
+      combineMessages(message("目标是进入普通深牢II并返回奇怪门。",
+        "Reach normal Depths II and return to the Strange Door."), prepNext), "main")
+    if result then return result end
+    return routeResult(
+      message("已进入陵墓I，无法返回普通深牢II开启奇怪门。",
+        "Mausoleum I was entered, so normal Depths II and the Strange Door are no longer reachable."),
+      message("使用 R Key 或路线重置后重新选择普通深牢II。",
+        "Use R Key or reset the route, then choose normal Depths II."), "failed")
+  elseif context.stage == STAGE.DEPTHS2 and not isRepentanceFloor(context) then
+    return routeResult(combineMessages(
+      message("击败 Mom，取得照片并传送回起始房开启奇怪门。",
+        "Defeat Mom, take a photo, teleport out, and open the Strange Door."), prepCurrent),
+      combineMessages(message("在特殊陵墓II的头目房拾取爸爸的便条。",
+        "Take Dad's Note from the special Mausoleum II boss room."), prepNext),
+      severity or "warning")
+  elseif context.stage == STAGE.DEPTHS2 and isRepentanceFloor(context) then
+    return routeResult(combineMessages(
+      message("前往头目房拾取爸爸的便条。",
+        "Reach the boss room and take Dad's Note."), prepCurrent),
+      combineMessages(message("拾取便条后沿光柱开始回溯。",
+        "Take the note, then begin the Ascent through the beam."), prepNext),
+      severity or "normal")
+  end
+  return routeResult(
+    message("已错过奇怪门，当前回溯路线失败。",
+      "The Strange Door was missed, so the Ascent route has failed."),
+    message("使用 R Key 或路线重置后可重新尝试。",
+      "Use R Key or reset the route to try again."), "failed")
 end
 
 local function bossRushRoute(context, language)
@@ -691,7 +985,15 @@ local function mismatchSuffix(goal, requirement, language)
 end
 
 function Routes.evaluate(goal, context, completionStore, language)
-  if not goal or not goal.completionRequirements then return nil end
+  if not goal then return nil end
+  if goal.routeKind == "tainted_unlock" then
+    local result = taintedUnlockRoute(goal, context, language)
+    result.current = result.current and (result.current[language] or result.current.en) or nil
+    result.next = result.next and (result.next[language] or result.next.en) or nil
+    result.known, result.required, result.mark = 0, 1, "TAINTED_UNLOCK"
+    return result
+  end
+  if not goal.completionRequirements then return nil end
   local known, required, remaining = CompletionMarks.progress(goal, completionStore, context.players)
   if required == 0 then return nil end
   if #remaining == 0 then

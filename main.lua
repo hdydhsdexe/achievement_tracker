@@ -54,6 +54,15 @@ local function refreshCompletionFromMarks()
   end
 end
 
+local function trackingTaintedUnlock()
+  if not State.tracker then return false end
+  for _, id in ipairs(State.tracker.ids) do
+    local goal = Catalog.get(id)
+    if goal and goal.routeKind == "tainted_unlock" then return true end
+  end
+  return false
+end
+
 local function completionAllowed()
   if Isaac.GetChallenge() ~= 0 then return false end
   if GameInstance.AchievementUnlocksDisallowed then
@@ -172,7 +181,7 @@ function AchievementTracker:onUpdate()
   State.lastEvaluation = second
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
-  if Routes.updateRun(State.run, routeContext) then save() end
+  if Routes.updateRun(State.run, routeContext, trackingTaintedUnlock()) then save() end
   syncBossRushCompletion()
   for _, id in ipairs(State.tracker.ids) do
     local goal = Catalog.get(id)
@@ -222,7 +231,9 @@ function AchievementTracker:onRender()
 end
 
 function AchievementTracker:onPickupUpdate(pickup)
-  if State.settings then Sensors.onPickupUpdate(State.run, pickup) end
+  if not State.settings then return end
+  Sensors.onPickupUpdate(State.run, pickup)
+  if Routes.observePickup(State.run, pickup, GameInstance, trackingTaintedUnlock()) then save() end
 end
 
 function AchievementTracker:onUsePill(pillEffect)
