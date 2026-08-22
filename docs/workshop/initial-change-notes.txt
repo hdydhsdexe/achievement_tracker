@@ -1,0 +1,13 @@
+Initial release / 首次发布 — v0.7.1
+
+- Added the bilingual achievement condition tracker and F3 visual goal menu.
+- Added route-aware guidance, warnings, and tainted-character unlock routing.
+- Added bundled achievement icons and a self-contained Chinese bitmap font.
+- Added optional Mod Config Menu Pure and REPENTOGON integration.
+- Added the local achievement save importer for Windows.
+
+- 发布中英双语成就条件追踪器和 F3 可视化目标菜单。
+- 加入路线感知提示、临界警告与堕化角色解锁路线。
+- 内置成就图标与独立中文位图字体。
+- 可选适配 Mod Config Menu Pure 与 REPENTOGON。
+- 提供 Windows 本地成就存档导入器。

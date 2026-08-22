@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
-  <name>Achievement Tracker</name>
+  <name>Achievement Tracker / 成就条件追踪器</name>
   <directory>achievement_tracker</directory>
-  <id>achievement-tracker-local</id>
-  <description>在游戏中持续显示成就完成条件并提供临界提醒。支持中文和 Mod Config Menu。</description>
-  <version>0.5.0</version>
+  <id></id>
+  <description>Track achievement requirements, routes, and warnings in-game. 支持中英文、忏悔与忏悔+。</description>
+  <version>0.7.1</version>
 </metadata>

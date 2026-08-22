@@ -1,0 +1,75 @@
+[h1]Achievement Tracker / 成就条件追踪器[/h1]
+
+Track the requirements behind Isaac achievements directly in-game instead of constantly checking a wiki. The HUD shows concrete conditions, route steps, counters, and warnings, while the F3 menu lets you browse and track up to three goals.
+
+在游戏内直接查看成就的具体完成条件、路线步骤、计数进度与临界提醒，无需频繁切出游戏查询 Wiki。F3 菜单可浏览全部目标，并同时追踪最多三个成就。
+
+[h1]Main Features / 主要功能[/h1]
+
+[list]
+[*]Persistent HUD with concrete achievement conditions, progress, route steps, and failure warnings.
+[*]F3 visual goal menu with mouse and keyboard controls, category filters, and bilingual fuzzy search.
+[*]Detailed completion-mark routes covering the main path, alternate path, Mother, Beast, Greed Mode, Boss Rush, Hush, Delirium, Mega Satan, and tainted-character unlocks.
+[*]Context-aware route alternatives for relevant items, cards, trinkets, transformations, and multiplayer characters.
+[*]Chinese and English interfaces with a bundled Chinese bitmap font; no EID or language resource pack required.
+[*]Persistent settings and confirmed completion evidence are separated by Isaac save slot.
+[*]Optional integration with Mod Config Menu Pure and REPENTOGON.
+[/list]
+
+[list]
+[*]HUD 持续显示具体成就条件、进度、路线步骤与失败警告。
+[*]F3 可打开可视化目标菜单，支持键鼠操作、分类筛选和中英双语模糊搜索。
+[*]覆盖主线、支线、Mother、祸兽、贪婪模式、Boss Rush、死寂、精神错乱、超级撒但和堕化角色解锁路线。
+[*]根据当前角色、多人状态以及持有或房间中出现的关键道具、卡牌和饰品提供路线替代提示。
+[*]内置中文位图字体，不依赖 EID、中文补丁或游戏语言资源包。
+[*]设置和已确认的完成证据按游戏存档槽分别保存。
+[*]可选适配 Mod Config Menu Pure 与 REPENTOGON。
+[/list]
+
+[h1]Controls / 操作[/h1]
+
+[list]
+[*][b]F3[/b]: Open or close the achievement menu / 打开或关闭成就菜单
+[*][b]F4[/b]: Show or hide the tracker HUD / 显示或隐藏追踪 HUD
+[*][b]Arrow keys or mouse[/b]: Select a goal / 选择目标
+[*][b]Enter, Space, or left click[/b]: Track or untrack / 开始或取消追踪
+[*][b]Tab[/b]: Cycle reward filters / 切换奖励分类
+[*][b]/[/b]: Search by English text, numbers, or abbreviations / 使用英文、数字或缩写搜索
+[/list]
+
+[h1]Compatibility / 兼容性[/h1]
+
+[list]
+[*]The Binding of Isaac: Repentance
+[*]The Binding of Isaac: Repentance+
+[*]Mod Config Menu Pure: optional / 可选
+[*]REPENTOGON: optional; enables more exact native completion data and single-player menu pausing / 可选，可提供更准确的原生完成数据与单人菜单暂停
+[/list]
+
+Mod Config Menu and REPENTOGON are [b]not required[/b]. The tracker remains usable without either one.
+
+Mod Config Menu 和 REPENTOGON 均[b]不是必需依赖[/b]，未安装时追踪器仍可正常使用。
+
+[h1]Import Existing Achievement Progress / 导入现有成就进度[/h1]
+
+The standard Lua API cannot reliably read every vanilla achievement. Windows users can completely close the game and run [b]一键导入成就.cmd[/b] from the mod folder. The local importer reads supported Isaac backup saves, validates all files, backs up existing mod data, and never modifies the original game save.
+
+原版 Lua API 无法可靠读取全部原版成就。Windows 用户可完全关闭游戏，然后运行 Mod 根目录中的 [b]一键导入成就.cmd[/b]。导入器只在本机读取受支持的以撒备份存档，写入前会完成验证并备份已有 Mod 数据，不会修改游戏原始存档。
+
+[h1]Known Limitations / 已知限制[/h1]
+
+Without an imported snapshot or REPENTOGON, some achievements and old completion marks may remain “unconfirmed.” The tracker deliberately avoids guessing missing progress. Search input accepts English letters, numbers, and spaces, but searches both Chinese and English catalog data.
+
+未导入快照且未安装 REPENTOGON 时，部分成就与旧通关标记可能显示为“未确认”；追踪器不会猜测缺失进度。搜索输入仅接受英文字母、数字和空格，但会同时检索中英文资料。
+
+[h1]Credits and Licenses / 致谢与许可[/h1]
+
+The bundled bitmap font combines glyphs generated from LanaPixel and Source Han Sans SC under the SIL Open Font License 1.1. Achievement icons are attributed to the English The Binding of Isaac: Rebirth Wiki under CC BY-SA 4.0. Full notices and license texts are included with the mod in [b]THIRD_PARTY_NOTICES.md[/b] and the font resource directory.
+
+内置位图字体使用依据 SIL Open Font License 1.1 授权的 LanaPixel 与 Source Han Sans SC 生成。成就图标来源归属英文 The Binding of Isaac: Rebirth Wiki，并依据 CC BY-SA 4.0 使用。完整声明和许可证随 Mod 一并提供。
+
+[h1]Version 0.7.1[/h1]
+
+Initial Steam Workshop release. Includes the full bilingual achievement catalog, bundled achievement art, route-aware HUD guidance, tainted-character unlock routing, the F3 visual menu, and the local save importer.
+
+Steam 创意工坊首次发布版本。包含完整双语成就目录、内置成就图标、路线感知 HUD、堕化角色解锁路线、F3 可视化菜单和本地存档导入器。
