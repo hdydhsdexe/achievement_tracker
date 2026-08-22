@@ -11,7 +11,7 @@ test("mod has v0.7.1 Workshop metadata and registers gameplay callbacks", () => 
   const main = read("main.lua");
   assert.match(metadata, /<name>Achievement Tracker \/ 成就条件追踪器<\/name>/);
   assert.match(metadata, /<directory>achievement_tracker<\/directory>/);
-  assert.match(metadata, /<id><\/id>/);
+  assert.match(metadata, /<id>3788047099<\/id>/);
   assert.match(metadata, /<version>0\.7\.1<\/version>/);
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
   for (const callback of ["MC_POST_GAME_STARTED", "MC_POST_UPDATE", "MC_POST_RENDER", "MC_POST_PICKUP_UPDATE", "MC_PRE_GAME_EXIT"]) {

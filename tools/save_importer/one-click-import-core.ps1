@@ -421,9 +421,9 @@ function Invoke-OneClickAchievementImport {
         [scriptblock] $AfterReplace = $null
     )
     $canonicalModRoot = Get-CanonicalPath $ModRoot
-    if ([System.IO.Path]::GetFileName($canonicalModRoot) -ne 'achievement_tracker' -or
+    if ([System.IO.Path]::GetFileName($canonicalModRoot) -ne 'achievement_tracker_3788047099' -or
         [System.IO.Path]::GetFileName([System.IO.Path]::GetDirectoryName($canonicalModRoot)) -ne 'mods') {
-        throw "脚本位置无效：必须位于 mods\achievement_tracker。"
+        throw "脚本位置无效：必须位于 mods\achievement_tracker_3788047099。"
     }
     $gameRoot = Get-CanonicalPath (Split-Path (Split-Path $canonicalModRoot -Parent) -Parent)
     $dataDirectory = Get-CanonicalPath (Join-Path $gameRoot 'data\achievement_tracker')

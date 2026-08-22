@@ -28,7 +28,7 @@ function Text.GetCurrentModPath()
       return path
     end
   end
-  return "../mods/achievement_tracker/"
+  return "../mods/achievement_tracker_3788047099/"
 end
 
 local modPath = Text.GetCurrentModPath()

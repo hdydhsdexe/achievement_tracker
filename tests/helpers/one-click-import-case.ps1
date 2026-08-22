@@ -54,7 +54,7 @@ function New-Layout {
     $base = New-Directory (Join-Path $FixtureRoot $Name)
     $game = New-Directory (Join-Path $base 'game')
     [System.IO.File]::WriteAllBytes((Join-Path $game 'isaac-ng.exe'), (New-Object byte[] 0))
-    $modRoot = New-Directory (Join-Path $game 'mods\achievement_tracker')
+    $modRoot = New-Directory (Join-Path $game 'mods\achievement_tracker_3788047099')
     $documents = New-Directory (Join-Path $base 'Documents')
     $steam = New-Directory (Join-Path $base 'Steam')
     return [pscustomobject]@{

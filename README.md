@@ -25,7 +25,7 @@ Mod 使用由 LanaPixel 生成的自带中文位图字体；LanaPixel 缺少的�
 
 ## 安装
 
-将本目录放入 `The Binding of Isaac Rebirth/mods/achievement_tracker`，在 Mods 菜单启用后开始一局游戏。
+将本目录放入 `The Binding of Isaac Rebirth/mods/achievement_tracker_3788047099`，在 Mods 菜单启用后开始一局游戏。
 
 ## 从游戏存档导入准确成就状态
 
