@@ -39,6 +39,14 @@ HUD coverage verifies native 11/22/33px selection, automatic downgrade at the sa
 position, left shift only at the 11px floor, complete target coverage through pagination
 at 320×180, safe Y bounds, 0/4/8px line spacing, and all bilingual warning conditions.
 
+## Release verification
+
+- The installation and release mirror contain the same 694 public files with matching SHA-256 hashes.
+- `AchievementTracker-v0.8.1.zip` contains the single `achievement_tracker/` root and the same 694 files; every extracted hash matches the release mirror.
+- The archive contains no tests, development documentation, `node_modules`, package-manager files, legacy 16px font, or 8/10/12px font assets.
+- Archive SHA-256: `7BF04D5C53AA35D5489F043563DD084005B5911EC17A8CF07A5E5B0567200661`.
+- The Workshop description is 4869 characters, the cover is 933339 bytes, and the v0.7.1 rollback archive remains present.
+
 ## Manual verification still required
 
 Automated tests cannot reproduce the game's final display pipeline. Before Workshop
