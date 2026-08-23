@@ -6,17 +6,16 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v6 validates achievements, F3 text settings, and persistent completion marks", () => {
+test("storage schema v7 migrates legacy F3 sizes to native 11px and validates new tiers", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*6/);
-  assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*10\s*\}/);
-  assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[8\]=true,\s*\[10\]=true,\s*\[12\]=true\s*\}/);
+  assert.match(storage, /schemaVersion\s*=\s*7/);
+  assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
+  assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
   assert.match(storage, /local function migrateF3FontPixels/);
-  assert.match(storage, /if oldPixels == 8 then return 8 end/);
-  assert.match(storage, /if oldPixels == 11 then return 12 end/);
-  assert.match(storage, /return 10/,
-    "legacy 9px and 10px F3 text must migrate to the native 10px font");
+  assert.match(storage, /decoded\.schemaVersion\s*==\s*6[\s\S]*?return 11/,
+    "every schema 6 F3 tier must migrate to the safe native 11px font");
+  assert.match(storage, /F3_FONT_PIXELS\[decoded\.f3\.fontPixels\][\s\S]*?return decoded\.f3\.fontPixels/);
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);

@@ -20,6 +20,11 @@ test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => 
   assert.doesNotMatch(mcm, /Achievement Tracker v0\.2\.0/);
   assert.match(description, /Version 0\.7\.2/);
   assert.match(changeNotes, /v0\.7\.2/);
+  for (const document of [description, changeNotes, read("README.md")]) {
+    assert.match(document, /11[^\n]*22[^\n]*33|11\/22\/33/,
+      "release copy must describe the native integer-multiple F3 tiers");
+    assert.doesNotMatch(document, /native 8\/10\/12|原生 8、10、12|8\/10\/12px/);
+  }
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
   for (const callback of ["MC_POST_GAME_STARTED", "MC_POST_UPDATE", "MC_POST_RENDER", "MC_POST_PICKUP_UPDATE", "MC_PRE_GAME_EXIT"]) {
     assert.match(main, new RegExp(callback));
@@ -612,7 +617,9 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /local PANEL_WIDTH_RATIO = 0\.64/);
   assert.match(menu, /local MIN_PANEL_WIDTH = 270/);
   assert.match(menu, /local MAX_PANEL_WIDTH = 340/);
-  assert.match(menu, /local MAX_PANEL_HEIGHT = 250/);
+  assert.match(menu, /local BASE_PANEL_HEIGHT = 250/);
+  assert.match(menu, /local SCREEN_VERTICAL_MARGIN = 6/);
+  assert.match(menu, /local SCREEN_HORIZONTAL_MARGIN = 12/);
   assert.match(menu, /panelX = math\.floor\(\(screenWidth - panelWidth\) \/ 2\)/);
   assert.match(menu, /panelY = math\.floor\(\(screenHeight - panelHeight\) \/ 2\)/);
   assert.match(menu, /RewardIcons\.renderPaper\(panelX, panelY, panelWidth, panelHeight\)/);
@@ -624,12 +631,24 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(text, /function Text\.snapScale/);
   assert.match(text, /Text\.pixel\(x\)/);
   assert.match(text, /Text\.pixel\(y\)/);
-  assert.match(menu, /local MENU_FONT_PIXELS = \{\s*\[8\]/);
+  assert.match(text, /local PIXEL_FONT_SIZES = \{ 11, 22, 33 \}/);
+  assert.match(text, /drawWithFont\(pixelFonts\[size\],[\s\S]*?1, color, boxWidth, center\)/,
+    "F3 native atlases must render at 1:1 scale");
+  assert.doesNotMatch(text, /achievement_lanapixel_(?:8|10|12)/);
+  assert.match(menu, /local F3_FONT_PIXELS = \{\s*11,\s*22,\s*33\s*\}/);
+  assert.match(menu, /local function fitMenuLayout/);
+  assert.match(menu, /maximumPanelHeight/);
+  assert.match(menu, /maximumPanelWidth/);
+  assert.match(menu, /for panelWidth = basePanelWidth \+ 1, maximumPanelWidth/,
+    "layout must exhaust vertical growth before widening");
+  assert.match(menu, /for tierIndex = requestedIndex, 1, -1/,
+    "requested F3 size must act as an upper bound");
   assert.match(menu, /Text\.lineHeightPixels/);
   assert.match(menu, /Text\.wrapPixels/);
   assert.match(menu, /Text\.drawPixels/);
   assert.match(menu, /maxDetailLines/);
   assert.match(menu, /contentBottom/);
+  assert.doesNotMatch(menu, /MENU_FONT_PIXELS|Text\.scaleForPixels\(.*f3/);
   assert.doesNotMatch(menu, /Text\.draw\(Catalog\.text\(selected, language\)\.detail/);
 });
 
@@ -782,7 +801,11 @@ test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position s
   assert.match(mcm, /HUD font size \/ HUD 字体大小/);
   assert.match(mcm, /F3 font size \/ F3 字体大小/);
   assert.match(mcm, /state\.settings\.f3\.fontPixels/);
-  assert.match(mcm, /\[1\]=8,\s*\[2\]=10,\s*\[3\]=12/);
+  assert.match(mcm, /\[1\]=11,\s*\[2\]=22,\s*\[3\]=33/);
+  assert.match(mcm, /Small \/ 小/);
+  assert.match(mcm, /Standard \/ 标准/);
+  assert.match(mcm, /Large \/ 大/);
+  assert.doesNotMatch(mcm, /tostring\(pixels\).*px/);
   assert.match(mcm, /HUD X/);
   assert.match(mcm, /HUD Y/);
   assert.match(mcm, /Minimum/);

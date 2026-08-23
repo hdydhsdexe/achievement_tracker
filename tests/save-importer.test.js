@@ -168,7 +168,7 @@ test("merges an import snapshot while preserving existing Mod fields", () => {
 
   assert.deepEqual(merged, {
     ...existing,
-    schemaVersion: 6,
+    schemaVersion: 7,
     achievementImport: {
       formatVersion: 1,
       saveSlot: 2,
@@ -179,7 +179,7 @@ test("merges an import snapshot while preserving existing Mod fields", () => {
   assert.notEqual(merged, existing);
 });
 
-test("creates a minimal schema v6 Mod save when no existing JSON is supplied", () => {
+test("creates a minimal schema v7 Mod save when no existing JSON is supplied", () => {
   const merged = mergeModSaveData(null, {
     saveSlot: 1,
     achievementCount: 3,
@@ -187,7 +187,7 @@ test("creates a minimal schema v6 Mod save when no existing JSON is supplied", (
   });
 
   assert.deepEqual(merged, {
-    schemaVersion: 6,
+    schemaVersion: 7,
     achievementImport: {
       formatVersion: 1,
       saveSlot: 1,
@@ -225,7 +225,7 @@ test("parses optional existing JSON and returns stable pretty JSON", () => {
   assert.equal(result.json.endsWith("\n"), true);
   assert.deepEqual(JSON.parse(result.json), {
     language: "en",
-    schemaVersion: 6,
+    schemaVersion: 7,
     achievementImport: {
       formatVersion: 1,
       saveSlot: 3,

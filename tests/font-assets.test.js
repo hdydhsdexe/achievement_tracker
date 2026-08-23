@@ -155,6 +155,9 @@ test("font generation declares primary and fallback sources without unresolved g
   const sourcePath = path.join(fontDir, "achievement_lanapixel.sources.json");
   assert.match(generator, /--fallback-font/);
   assert.match(generator, /--fallback-size/);
+  assert.match(generator, /--pixel-base-size/);
+  assert.match(generator, /Image\.Resampling\.NEAREST/);
+  assert.match(generator, /rendering.*binary-nearest/);
   assert.match(generator, /unresolved/i);
   assert.equal(packageJson.devDependencies["@fontpkg/lana-pixel"], "1.3.0");
   assert.equal(packageJson.devDependencies["@fontpkg/source-han-sans-sc"], "2.5.3");
@@ -167,23 +170,90 @@ test("font generation declares primary and fallback sources without unresolved g
   assert.deepEqual(sources.fallbackGlyphs.map((entry) => entry.character), missingFromLanaPixel);
 });
 
-test("F3 ships native unsmoothed 8, 10, and 12 pixel fonts with complete glyph coverage", () => {
-  for (const pixelSize of [8, 10, 12]) {
+test("F3 ships hard-edged native 11px glyphs and exact 2x/3x integer atlases", () => {
+  const decoded = new Map();
+  const parsedFonts = new Map();
+  for (const [pixelSize, multiplier] of [[11, 1], [22, 2], [33, 3]]) {
     const name = `achievement_lanapixel_${pixelSize}`;
     const parsed = parseBmFont(read(`resources/font/${name}.fnt`));
+    parsedFonts.set(pixelSize, parsed);
     assert.equal(parsed.fontSize, pixelSize);
     assert.equal(parsed.smooth, false, `${name} must disable BMFont smoothing`);
-    assert.ok(parsed.lineHeight >= pixelSize, `${name} must expose a usable native line height`);
+    assert.equal(parsed.lineHeight % multiplier, 0,
+      `${name} line height must preserve its integer design grid`);
     for (const character of runtimeCharacters())
       assert.ok(parsed.records.has(character.codePointAt(0)), `${name} missing ${character}`);
-    for (const page of parsed.pages)
+    const pages = parsed.pages.map((page) => {
       assert.equal(fs.existsSync(path.join(fontDir, page)), true, `${name} missing page ${page}`);
+      return decodeRgbaPng(fs.readFileSync(path.join(fontDir, page)));
+    });
+    decoded.set(pixelSize, pages);
 
     const sources = JSON.parse(fs.readFileSync(path.join(fontDir, `${name}.sources.json`), "utf8"));
-    assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", size: pixelSize});
-    assert.deepEqual(sources.fallbackFont,
-      {file: "SourceHanSansSC-Regular.otf", size: pixelSize - 1});
+    assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", designSize: 11,
+      outputSize: pixelSize, scale: multiplier, rendering: "binary-nearest"});
+    assert.deepEqual(sources.fallbackFont, {file: "SourceHanSansSC-Regular.otf",
+      size: 10 * multiplier, rendering: "antialiased"});
     assert.equal(sources.glyphCount, runtimeCharacters().size);
     assert.deepEqual(sources.unresolvedGlyphs, []);
+    assert.deepEqual(sources.fallbackGlyphs.map((entry) => entry.character), missingFromLanaPixel);
   }
+
+  const base = parsedFonts.get(11);
+  const basePages = decoded.get(11);
+  for (const [codepoint, record] of base.records) {
+    if (missingFromLanaPixel.includes(String.fromCodePoint(codepoint))) continue;
+    const pixels = glyphPixels(record, basePages[record.page]);
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      const rgba = [...pixels.subarray(offset, offset + 4)];
+      assert.ok(rgba[3] === 0 || (rgba[3] === 255
+        && (rgba.slice(0, 3).every((value) => value === 0)
+          || rgba.slice(0, 3).every((value) => value === 255))),
+      `primary U+${codepoint.toString(16)} contains baked antialiasing`);
+    }
+  }
+
+  for (const [pixelSize, multiplier] of [[22, 2], [33, 3]]) {
+    const target = parsedFonts.get(pixelSize);
+    const targetPages = decoded.get(pixelSize);
+    assert.equal(target.lineHeight, base.lineHeight * multiplier);
+    for (const [codepoint, baseRecord] of base.records) {
+      if (missingFromLanaPixel.includes(String.fromCodePoint(codepoint))) continue;
+      const targetRecord = target.records.get(codepoint);
+      for (const metric of ["width", "height", "xoffset", "yoffset", "xadvance"])
+        assert.equal(targetRecord[metric], baseRecord[metric] * multiplier,
+          `U+${codepoint.toString(16)} ${metric} must scale ${multiplier}x`);
+      const basePixels = glyphPixels(baseRecord, basePages[baseRecord.page]);
+      const targetPixels = glyphPixels(targetRecord, targetPages[targetRecord.page]);
+      const expected = Buffer.alloc(targetPixels.length);
+      for (let y = 0; y < targetRecord.height; y += 1) {
+        for (let x = 0; x < targetRecord.width; x += 1) {
+          const source = (Math.floor(y / multiplier) * baseRecord.width
+            + Math.floor(x / multiplier)) * 4;
+          const destination = (y * targetRecord.width + x) * 4;
+          basePixels.copy(expected, destination, source, source + 4);
+        }
+      }
+      assert.equal(targetPixels.equals(expected), true,
+        `U+${codepoint.toString(16)} must be nearest-neighbor scaled`);
+    }
+  }
+
+  const fallbackHasAntialiasing = missingFromLanaPixel.some((character) => {
+    const record = base.records.get(character.codePointAt(0));
+    const pixels = glyphPixels(record, basePages[record.page]);
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      const [red, green, blue, alpha] = pixels.subarray(offset, offset + 4);
+      if ((alpha > 0 && alpha < 255)
+        || (alpha > 0 && !([red, green, blue].every((value) => value === 0)
+          || [red, green, blue].every((value) => value === 255)))) return true;
+    }
+    return false;
+  });
+  assert.equal(fallbackHasAntialiasing, true,
+    "Source Han fallback glyphs must retain antialiasing");
+
+  for (const obsolete of fs.readdirSync(fontDir)
+    .filter((file) => /^achievement_lanapixel_(?:8|10|12)(?:[_.]|$)/.test(file)))
+    assert.fail(`obsolete F3 font asset still ships: ${obsolete}`);
 });

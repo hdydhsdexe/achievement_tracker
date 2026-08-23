@@ -26,6 +26,52 @@ function parseFont(pixelSize) {
   return {lineHeight, records};
 }
 
+const F3_PIXEL_TIERS = [11, 22, 33];
+
+function fitF3Layout(requestedPixels, language, screenWidth, screenHeight, rows, fonts) {
+  const maximumPanelWidth = screenWidth - 24;
+  const maximumPanelHeight = screenHeight - 12;
+  let basePanelWidth = Math.min(340,
+    Math.max(270, Math.floor(screenWidth * 0.64)));
+  basePanelWidth = Math.min(basePanelWidth, maximumPanelWidth);
+  const basePanelHeight = Math.min(250, maximumPanelHeight);
+  const requestedIndex = F3_PIXEL_TIERS.indexOf(requestedPixels);
+  for (let tierIndex = requestedIndex; tierIndex >= 0; tierIndex -= 1) {
+    const pixelSize = F3_PIXEL_TIERS[tierIndex];
+    const font = fonts.get(pixelSize);
+    const measure = (panelWidth) => {
+      const contentWidth = panelWidth - 24;
+      const maxDetailLines = Math.max(...rows.map((row) =>
+        wrap(row[language], contentWidth, font.records).length));
+      const requiredHeight = 42 + font.lineHeight + 4
+        + (maxDetailLines + 1) * font.lineHeight + 18;
+      return {contentWidth, maxDetailLines, requiredHeight};
+    };
+
+    let panelWidth = basePanelWidth;
+    let measured = measure(panelWidth);
+    if (measured.requiredHeight > maximumPanelHeight) {
+      for (panelWidth = basePanelWidth + 1;
+        panelWidth <= maximumPanelWidth; panelWidth += 1) {
+        measured = measure(panelWidth);
+        if (measured.requiredHeight <= maximumPanelHeight) break;
+      }
+    }
+    if (measured.requiredHeight > maximumPanelHeight
+      || panelWidth > maximumPanelWidth) continue;
+
+    const panelHeight = Math.max(basePanelHeight, measured.requiredHeight);
+    const contentBottom = panelHeight - 18;
+    const detailHeight = (measured.maxDetailLines + 1) * font.lineHeight;
+    const gridRows = Math.max(1, Math.min(9,
+      Math.floor((contentBottom - 42 - 4 - detailHeight) / font.lineHeight)));
+    return {pixelSize, font, panelWidth, panelHeight, contentBottom,
+      contentWidth: measured.contentWidth, maxDetailLines: measured.maxDetailLines,
+      gridRows};
+  }
+  throw new Error("11px must fit the supported minimum resolution");
+}
+
 function catalogRows() {
   const rows = [];
   for (const file of fs.readdirSync(path.join(root, "scripts/data"))) {
@@ -90,43 +136,50 @@ function wrap(value, maxWidth, records) {
   return lines;
 }
 
-test("every catalog condition reflows inside the adaptive F3 detail area", () => {
+test("every catalog condition fits after height-first panel growth and native-tier fallback", () => {
   const rows = catalogRows();
-  const screens = [[320, 180], [408, 270], [480, 270], [640, 360], [854, 480]];
+  const screens = [[320, 180], [408, 270], [480, 270], [640, 360],
+    [854, 480], [1280, 360]];
+  const fonts = new Map(F3_PIXEL_TIERS.map((pixelSize) =>
+    [pixelSize, parseFont(pixelSize)]));
 
-  for (const pixelSize of [8, 10, 12]) {
-    const font = parseFont(pixelSize);
+  for (const requestedPixels of F3_PIXEL_TIERS) {
     for (const language of ["zh", "en"]) {
       for (const [screenWidth, screenHeight] of screens) {
-        let panelWidth = Math.min(340, Math.max(270, Math.floor(screenWidth * 0.64)));
-        panelWidth = Math.min(panelWidth, screenWidth - 24);
-        const panelHeight = Math.min(250, screenHeight - 12);
-        const contentWidth = panelWidth - 24;
-        const maxDetailLines = Math.max(...rows.map((row) => {
-          const lines = wrap(row[language], contentWidth, font.records);
+        const layout = fitF3Layout(requestedPixels, language,
+          screenWidth, screenHeight, rows, fonts);
+        assert.ok(layout.pixelSize <= requestedPixels);
+        assert.ok(layout.panelWidth <= screenWidth - 24);
+        assert.ok(layout.panelHeight <= screenHeight - 12);
+        for (const row of rows) {
+          const lines = wrap(row[language], layout.contentWidth, layout.font.records);
           for (const line of lines)
-            assert.ok(textWidth(line, font.records) <= contentWidth);
-          return lines.length;
-        }));
-        const gridTop = 42;
-        const contentBottom = panelHeight - 18;
-        const detailHeight = (maxDetailLines + 1) * font.lineHeight;
-        const availableGridHeight = contentBottom - gridTop - 4 - detailHeight;
-        const gridRows = Math.min(9, Math.floor(availableGridHeight / font.lineHeight));
-        assert.ok(gridRows >= 1,
-          `${screenWidth}x${screenHeight} ${language} ${pixelSize}px must retain a grid row`);
-        const detailBottom = gridTop + gridRows * font.lineHeight + 4 + detailHeight;
-        assert.ok(detailBottom <= contentBottom,
-          `${screenWidth}x${screenHeight} ${language} ${pixelSize}px detail overlaps footer`);
+            assert.ok(textWidth(line, layout.font.records) <= layout.contentWidth);
+        }
+        assert.ok(layout.gridRows >= 1,
+          `${screenWidth}x${screenHeight} ${language} requested ${requestedPixels}px must retain a grid row`);
+        const detailHeight = (layout.maxDetailLines + 1) * layout.font.lineHeight;
+        const detailBottom = 42 + layout.gridRows * layout.font.lineHeight
+          + 4 + detailHeight;
+        assert.ok(detailBottom <= layout.contentBottom,
+          `${screenWidth}x${screenHeight} ${language} effective ${layout.pixelSize}px overlaps footer`);
       }
     }
   }
+
+  for (const requestedPixels of [22, 33])
+    assert.equal(fitF3Layout(requestedPixels, "en", 320, 180, rows, fonts).pixelSize, 11);
+  assert.equal(fitF3Layout(22, "en", 480, 270, rows, fonts).pixelSize, 22);
+  assert.equal(fitF3Layout(33, "en", 854, 480, rows, fonts).pixelSize, 33);
+  const tallFirst = fitF3Layout(22, "en", 640, 360, rows, fonts);
+  assert.equal(tallFirst.panelWidth, 340, "height must grow before width");
+  assert.ok(tallFirst.panelHeight > 250);
 });
 
 test("the longest bilingual conditions wrap without losing content", () => {
   const rows = catalogRows();
   const cases = [[324, "en"], [235, "zh"]];
-  for (const pixelSize of [8, 10, 12]) {
+  for (const pixelSize of F3_PIXEL_TIERS) {
     const font = parseFont(pixelSize);
     for (const [id, language] of cases) {
       const value = rows.find((row) => row.id === id)[language];
