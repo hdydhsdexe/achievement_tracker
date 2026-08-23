@@ -25,7 +25,7 @@ The focused regression suite was run before implementation:
 - JavaScript tool coverage: 94.77% lines, 82.61% branches, and 90.32% functions.
 
 The layout regression measures all 641 Chinese and English conditions at 320×180,
-408×270, 480×270, 640×360, and 854×480 for all three F3 sizes. It also checks
+408×270, 480×270, 640×360, 854×480, and 1280×360 ultrawide for all three F3 sizes. It also checks
 the longest English condition (#324), the representative long Chinese condition
 (#235), glyph coverage, line widths, at least one three-item row, and footer clearance.
 

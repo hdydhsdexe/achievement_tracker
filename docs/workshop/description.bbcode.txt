@@ -60,7 +60,11 @@ The standard Lua API cannot reliably read every vanilla achievement. Windows use
 
 Without an imported snapshot or REPENTOGON, some achievements and old completion marks may remain “unconfirmed.” The tracker deliberately avoids guessing missing progress. Search input accepts English letters, numbers, and spaces, but searches both Chinese and English catalog data.
 
+Native F3 atlases avoid fractional scaling inside the glyph textures, but the game's global Filter setting, GPU scaling, or display post-processing may still soften the final image. The mod does not override the user's Filter setting.
+
 未导入快照且未安装 REPENTOGON 时，部分成就与旧通关标记可能显示为“未确认”；追踪器不会猜测缺失进度。搜索输入仅接受英文字母、数字和空格，但会同时检索中英文资料。
+
+F3 原生字库可避免字形纹理内部的分数缩放，但游戏全局 Filter、显卡缩放或显示器后处理仍可能使最终画面变软；本 Mod 不会覆盖用户的 Filter 设置。
 
 [h1]Credits and Licenses / 致谢与许可[/h1]
 

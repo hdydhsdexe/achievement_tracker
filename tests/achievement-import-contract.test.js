@@ -10,6 +10,7 @@ test("storage schema v7 migrates legacy F3 sizes to native 11px and validates ne
   const storage = read("scripts/core/storage.lua");
 
   assert.match(storage, /schemaVersion\s*=\s*7/);
+  assert.doesNotMatch(storage, /schemaVersion\s*=\s*6/);
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
   assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
   assert.match(storage, /local function migrateF3FontPixels/);

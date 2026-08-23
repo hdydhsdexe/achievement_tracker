@@ -5,9 +5,11 @@ Text display robustness update / 文字显示鲁棒性更新 — v0.7.2
 - Reflowed full bilingual conditions, expanded the panel height-first, and automatically downgraded oversized tiers.
 - Separated HUD and F3 text settings; HUD now auto-fits and stays inside safe bounds.
 - Migrated saved settings to schema 7 without overwriting position preferences.
+- Global game, GPU, or display filtering may still soften the final image; the mod does not override Filter.
 
 - 新增关闭纹理平滑并按 1:1 绘制的 F3 原生 11/22/33px 字库。
 - LanaPixel 以 11px 设计栅格生成，22/33px 为精确 2×/3× 最近邻版本；中文后备字形保留抗锯齿。
 - 完整换行中英成就条件，面板先增高、再加宽，并在字号过大时自动降档。
 - 分离 HUD 与 F3 字号设置；HUD 会自动缩小并保持在安全区域内。
 - 存档升级到 schema 7，保留用户原始位置偏好。
+- 游戏、显卡或显示器的全局滤波仍可能使最终画面变软；本 Mod 不覆盖 Filter 设置。
