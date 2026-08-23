@@ -1,6 +1,4 @@
 local Text = {}
-local bundledFont = Font()
-local FONT_NATIVE_PIXELS = 16
 local pixelFonts = {}
 local PIXEL_FONT_SIZES = { 11, 22, 33 }
 
@@ -34,7 +32,6 @@ function Text.GetCurrentModPath()
 end
 
 local modPath = Text.GetCurrentModPath()
-bundledFont:Load(modPath .. "resources/font/achievement_lanapixel.fnt", "")
 for _, pixelSize in ipairs(PIXEL_FONT_SIZES) do
   local font = Font()
   font:Load(modPath .. "resources/font/achievement_lanapixel_" .. tostring(pixelSize) .. ".fnt", "")
@@ -94,47 +91,11 @@ function Text.pixel(value)
   return roundPixel(tonumber(value) or 0)
 end
 
-function Text.scaleForPixels(pixelSize)
-  return math.max(1, Text.pixel(pixelSize)) / FONT_NATIVE_PIXELS
-end
-
-function Text.snapScale(scale)
-  return Text.scaleForPixels((tonumber(scale) or 1) * FONT_NATIVE_PIXELS)
-end
-
 local function drawWithFont(font, value, x, y, scale, color, boxWidth, center)
   local tint = color or KColor(1, 1, 1, 1)
   local drawWidth = boxWidth and Text.pixel(boxWidth) or 0
   font:DrawStringScaledUTF8(tostring(value), Text.pixel(x), Text.pixel(y),
     scale, scale, tint, drawWidth, center == true)
-end
-
-function Text.draw(value, x, y, scale, color, language, boxWidth, center)
-  local tint = color or KColor(1, 1, 1, 1)
-  local drawWidth = boxWidth and Text.pixel(boxWidth) or 0
-  local drawScale = Text.snapScale(scale)
-  bundledFont:DrawStringScaledUTF8(tostring(value), Text.pixel(x), Text.pixel(y),
-    drawScale, drawScale, tint, drawWidth, center == true)
-end
-
-function Text.width(value, scale)
-  return bundledFont:GetStringWidthUTF8(tostring(value)) * Text.snapScale(scale)
-end
-
-function Text.ellipsize(value, maxWidth, scale)
-  local text = tostring(value or "")
-  if Text.width(text, scale) <= maxWidth then return text end
-  local glyphs = {}
-  if utf8 and utf8.codes then
-    for _, codepoint in utf8.codes(text) do table.insert(glyphs, utf8.char(codepoint)) end
-  else
-    for index = 1, #text do table.insert(glyphs, string.sub(text, index, index)) end
-  end
-  local suffix = "..."
-  while #glyphs > 0 and Text.width(table.concat(glyphs) .. suffix, scale) > maxWidth do
-    table.remove(glyphs)
-  end
-  return table.concat(glyphs) .. suffix
 end
 
 local function nativePixelSize(pixelSize)
@@ -206,10 +167,6 @@ local function wrapWithWidth(value, maxWidth, measure)
   end
   if current ~= "" or #lines == 0 then table.insert(lines, current) end
   return lines
-end
-
-function Text.wrap(value, maxWidth, scale)
-  return wrapWithWidth(value, maxWidth, function(text) return Text.width(text, scale) end)
 end
 
 function Text.wrapPixels(value, maxWidth, pixelSize)

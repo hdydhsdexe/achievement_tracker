@@ -21,7 +21,7 @@ test("storage schema v8 migrates legacy HUD scaling and preserves native tiers",
   assert.match(storage, /data\.hud\.fontPixels\s*=\s*migrateHudFontPixels\(decoded\)/);
   assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /local function migrateF3FontPixels/);
-  assert.match(storage, /decoded\.schemaVersion\s*>=\s*7[\s\S]*?return decoded\.f3\.fontPixels/,
+  assert.match(storage, /schemaVersion\s*>=\s*7[\s\S]*?return decoded\.f3\.fontPixels/,
     "schema 7 F3 native tiers must survive the schema 8 upgrade");
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);

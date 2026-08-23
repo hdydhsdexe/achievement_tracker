@@ -13,8 +13,10 @@ local HUD_WARNING = KColor(1.00, 0.84, 0.28, 1)
 local HUD_FAILED = KColor(1.00, 0.38, 0.34, 1)
 local SCREEN_MARGIN = 8
 local MIN_HUD_WIDTH = 120
-local MIN_FONT_PIXELS = 8
-local MAX_FONT_PIXELS = 32
+local HUD_FONT_PIXELS = { 11, 22, 33 }
+local PAGE_ROTATION_FRAMES = 150
+local currentLayoutSignature = nil
+local pageStartedFrame = 0
 
 local function progressText(value, target)
   local ratio = target > 0 and math.min(1, value / target) or 0
@@ -28,23 +30,26 @@ local function formatTime(seconds)
   return string.format("%02d:%02d", math.floor(value / 60), value % 60)
 end
 
-local function buildRows(state, pixelSize, x, screenWidth)
+local function wrappedRows(value, indent, color, maxWidth, fontPixels)
+  local rows = {}
+  for _, line in ipairs(Text.wrapPixels(value, math.max(1, maxWidth - indent), fontPixels)) do
+    table.insert(rows, { text=line, indent=indent, color=color })
+  end
+  return rows
+end
+
+local function appendRows(target, source)
+  for _, row in ipairs(source) do table.insert(target, row) end
+end
+
+local function buildBlocks(state, fontPixels, x, screenWidth)
   local settings = state.settings
   local language = Text.resolveLanguage(settings.language)
   local labels = Text.labels(language)
-  local rows = {}
   local maxWidth = math.max(1, screenWidth - SCREEN_MARGIN - x)
+  local headerRows = wrappedRows(labels.title, 0, HUD_TITLE, maxWidth, fontPixels)
+  local blocks = {}
   local routeContext = state.routeContext or Routes.context(Game(), state.run)
-  local function addWrapped(value, indent, color, factor)
-    local rowPixels = math.max(MIN_FONT_PIXELS,
-      Text.pixel(pixelSize * (factor or 1)))
-    local actualScale = Text.scaleForPixels(rowPixels)
-    for _, line in ipairs(Text.wrap(value, maxWidth - indent, actualScale)) do
-      table.insert(rows, { text=line, indent=indent, color=color, scale=actualScale,
-        height=math.max(8, Text.pixel(12 * actualScale)) })
-    end
-  end
-  addWrapped(labels.title, 0, HUD_TITLE, 1)
   local trackedIds = state.tracker.ids
   local challengeId = Isaac.GetChallenge()
   if challengeId ~= 0 then
@@ -54,6 +59,7 @@ local function buildRows(state, pixelSize, x, screenWidth)
   for _, id in ipairs(trackedIds) do
     local goal = Catalog.get(id)
     if goal then
+      local block = {}
       local text = Catalog.text(goal, language)
       local route = Routes.evaluate(goal, routeContext, settings.completionMarks, language)
       local suffix = goal.deadline and ("  < " .. formatTime(goal.deadline)) or ""
@@ -73,22 +79,115 @@ local function buildRows(state, pixelSize, x, screenWidth)
           or color
         local markProgress = route.required > 1
           and string.format("  [%d/%d]", route.known, route.required) or ""
-        addWrapped("- " .. text.name .. markProgress, 0, routeColor, 1)
+        appendRows(block, wrappedRows("- " .. text.name .. markProgress,
+          0, routeColor, maxWidth, fontPixels))
         local currentPrefix = language == "zh" and "当前：" or "NOW: "
         local nextPrefix = language == "zh" and "下一步：" or "NEXT: "
-        addWrapped(currentPrefix .. route.current, 8, routeColor, 0.9)
-        if route.next then addWrapped(nextPrefix .. route.next, 8, HUD_MUTED, 0.85) end
+        appendRows(block, wrappedRows(currentPrefix .. route.current,
+          8, routeColor, maxWidth, fontPixels))
+        if route.next then
+          appendRows(block, wrappedRows(nextPrefix .. route.next,
+            8, HUD_MUTED, maxWidth, fontPixels))
+        end
       else
-        -- Non-route goals retain the original compact completion-condition HUD.
-        addWrapped("- " .. text.detail .. suffix, 0, color, 1)
+        appendRows(block, wrappedRows("- " .. text.detail .. suffix,
+          0, color, maxWidth, fontPixels))
+        if progress then
+          appendRows(block, wrappedRows(progressText(progress, target),
+            8, color, maxWidth, fontPixels))
+        end
       end
-      if progress and not route then
-        addWrapped(progressText(progress, target), 8, color, 0.8)
-      end
+      table.insert(blocks, block)
     end
   end
-  addWrapped(labels.controls, 0, HUD_MUTED, 0.8)
-  return rows, language
+  return {
+    headerRows=headerRows, blocks=blocks, controls=labels.controls,
+    language=language, maxWidth=maxWidth, fontPixels=fontPixels
+  }
+end
+
+local function footerRows(content, page, pages)
+  local label = content.controls .. string.format("  [%d/%d]", page, pages)
+  return wrappedRows(label, 0, HUD_MUTED, content.maxWidth, content.fontPixels)
+end
+
+local function allBlockRows(blocks)
+  local rows = {}
+  for _, block in ipairs(blocks) do appendRows(rows, block) end
+  return rows
+end
+
+local function pageLineCount(content, rows, page, pages)
+  return #content.headerRows + #rows + #footerRows(content, page, pages)
+end
+
+local function staticLayout(state, fontPixels, x, screenWidth)
+  local content = buildBlocks(state, fontPixels, x, screenWidth)
+  local rows = allBlockRows(content.blocks)
+  local lines = pageLineCount(content, rows, 1, 1)
+  return { content=content, pages={ rows }, lines=lines,
+    totalHeight=lines * Text.lineHeightPixels(fontPixels), x=x, fontPixels=fontPixels }
+end
+
+local function paginateBlocks(content, availableLines)
+  local fixedLines = #content.headerRows + #footerRows(content, 99, 99)
+  local capacity = math.max(1, availableLines - fixedLines)
+  local pages, page, split = {}, {}, false
+  local function flush()
+    if #page > 0 then table.insert(pages, page) end
+    page = {}
+  end
+  for _, block in ipairs(content.blocks) do
+    if #block > capacity then
+      flush()
+      split = true
+      local offset = 1
+      while offset <= #block do
+        local chunk = {}
+        for index = offset, math.min(#block, offset + capacity - 1) do
+          table.insert(chunk, block[index])
+        end
+        table.insert(pages, chunk)
+        offset = offset + capacity
+      end
+    else
+      if #page + #block > capacity then flush() end
+      appendRows(page, block)
+    end
+  end
+  flush()
+  if #pages == 0 then table.insert(pages, {}) end
+  return pages, split
+end
+
+local function pagedLayout(state, x, screenWidth, availableHeight)
+  local fontPixels = 11
+  local content = buildBlocks(state, fontPixels, x, screenWidth)
+  local availableLines = math.max(1,
+    math.floor(availableHeight / Text.lineHeightPixels(fontPixels)))
+  local pages, split = paginateBlocks(content, availableLines)
+  local maximumLines = 1
+  for page, rows in ipairs(pages) do
+    maximumLines = math.max(maximumLines,
+      pageLineCount(content, rows, page, #pages))
+  end
+  return { content=content, pages=pages, split=split, lines=maximumLines,
+    totalHeight=maximumLines * Text.lineHeightPixels(fontPixels),
+    x=x, fontPixels=fontPixels }
+end
+
+local function requestedTierIndex(fontPixels)
+  for index, pixels in ipairs(HUD_FONT_PIXELS) do
+    if pixels == fontPixels then return index end
+  end
+  return 1
+end
+
+local function placeVertically(layout, preferredY, screenHeight)
+  local totalHeight = layout.totalHeight
+  layout.y = math.max(SCREEN_MARGIN, math.min(preferredY,
+    screenHeight - SCREEN_MARGIN - totalHeight))
+  return layout
 end
 
 local function fitLayout(state)
@@ -97,32 +196,65 @@ local function fitLayout(state)
   local maximumX = math.max(SCREEN_MARGIN,
     screenWidth - SCREEN_MARGIN - MIN_HUD_WIDTH)
   local x = math.max(SCREEN_MARGIN, math.min(maximumX, preferredX))
-  local requestedPixels = math.max(MIN_FONT_PIXELS, math.min(MAX_FONT_PIXELS,
-    Text.pixel((tonumber(state.settings.hud.fontScale) or 1) * 16)))
-  local chosenRows, language, totalHeight
-  for pixelSize = requestedPixels, MIN_FONT_PIXELS, -1 do
-    local rows
-    rows, language = buildRows(state, pixelSize, x, screenWidth)
-    local height = 0
-    for _, row in ipairs(rows) do height = height + row.height end
-    chosenRows, totalHeight = rows, height
-    if totalHeight <= screenHeight - SCREEN_MARGIN * 2 then break end
-  end
   local preferredY = tonumber(state.settings.hud.y) or SCREEN_MARGIN
-  local y = math.max(SCREEN_MARGIN, math.min(preferredY,
-    screenHeight - SCREEN_MARGIN - totalHeight))
-  return { x=Text.pixel(x), y=Text.pixel(y), rows=chosenRows,
-    language=language, totalHeight=totalHeight }
+  local availableHeight = screenHeight - SCREEN_MARGIN * 2
+  local requestedPixels = state.settings.hud.fontPixels or 11
+  local requestedIndex = requestedTierIndex(requestedPixels)
+  for tierIndex = requestedIndex, 1, -1 do
+    local layout = staticLayout(state, HUD_FONT_PIXELS[tierIndex], x, screenWidth)
+    if layout.totalHeight <= availableHeight then
+      return placeVertically(layout, preferredY, screenHeight)
+    end
+  end
+  for candidateX = x - 1, SCREEN_MARGIN, -1 do
+    local layout = staticLayout(state, 11, candidateX, screenWidth)
+    if layout.totalHeight <= availableHeight then
+      return placeVertically(layout, preferredY, screenHeight)
+    end
+  end
+  local fallback
+  for candidateX = x, SCREEN_MARGIN, -1 do
+    fallback = pagedLayout(state, candidateX, screenWidth, availableHeight)
+    if not fallback.split then break end
+  end
+  return placeVertically(fallback, preferredY, screenHeight)
+end
+
+local function layoutSignature(layout)
+  local parts = { layout.content.language, tostring(layout.x), tostring(layout.y),
+    tostring(layout.fontPixels), tostring(#layout.pages) }
+  for _, page in ipairs(layout.pages) do
+    for _, row in ipairs(page) do table.insert(parts, row.text) end
+    table.insert(parts, "|")
+  end
+  return table.concat(parts, "\31")
+end
+
+local function activePage(layout)
+  local signature = layoutSignature(layout)
+  local now = Isaac.GetFrameCount()
+  if signature ~= currentLayoutSignature then
+    currentLayoutSignature = signature
+    pageStartedFrame = now
+  end
+  return math.floor((now - pageStartedFrame) / PAGE_ROTATION_FRAMES)
+    % #layout.pages + 1
 end
 
 function Hud.render(state)
   if not state.settings.hud.visible or state.menu.open then return end
   local layout = fitLayout(state)
+  local page = activePage(layout)
+  local rows = {}
+  appendRows(rows, layout.content.headerRows)
+  appendRows(rows, layout.pages[page])
+  appendRows(rows, footerRows(layout.content, page, #layout.pages))
   local y = layout.y
-  for _, row in ipairs(layout.rows) do
-    Text.draw(row.text, layout.x + row.indent, y, row.scale,
-      row.color, layout.language)
-    y = y + row.height
+  local lineHeight = Text.lineHeightPixels(layout.fontPixels)
+  for _, row in ipairs(rows) do
+    Text.drawPixels(row.text, layout.x + row.indent, y, layout.fontPixels,
+      row.color, layout.content.language)
+    y = y + lineHeight
   end
 end
 
@@ -139,19 +271,20 @@ function Hud.renderWarning(state)
     or (detail .. "：" .. labels.failed .. " (" .. tostring(warning.reason or warning.kind) .. ")")
   local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
   local maxWidth = screenWidth - SCREEN_MARGIN * 2
-  local requestedPixels = math.max(MIN_FONT_PIXELS, math.min(MAX_FONT_PIXELS,
-    Text.pixel((tonumber(state.settings.hud.fontScale) or 1) * 16)))
-  local lines, scale, lineHeight
-  for pixelSize = requestedPixels, MIN_FONT_PIXELS, -1 do
-    scale = Text.scaleForPixels(pixelSize)
-    lineHeight = math.max(8, Text.pixel(12 * scale))
-    lines = Text.wrap(message, maxWidth, scale)
-    if #lines * lineHeight <= screenHeight - SCREEN_MARGIN * 2 then break end
+  local maximumHeight = screenHeight - SCREEN_MARGIN * 2
+  local requestedIndex = requestedTierIndex(state.settings.hud.fontPixels or 11)
+  local lines, fontPixels, lineHeight
+  for tierIndex = requestedIndex, 1, -1 do
+    fontPixels = HUD_FONT_PIXELS[tierIndex]
+    lineHeight = Text.lineHeightPixels(fontPixels)
+    lines = Text.wrapPixels(message, maxWidth, fontPixels)
+    if #lines * lineHeight <= maximumHeight then break end
   end
   local y = math.max(SCREEN_MARGIN,
     Text.pixel((screenHeight - #lines * lineHeight) / 2))
   for _, line in ipairs(lines) do
-    Text.draw(line, SCREEN_MARGIN, y, scale, HUD_FAILED, language, maxWidth, true)
+    Text.drawPixels(line, SCREEN_MARGIN, y, fontPixels,
+      HUD_FAILED, language, maxWidth, true)
     y = y + lineHeight
   end
 end

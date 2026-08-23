@@ -733,7 +733,7 @@ test("HUD renders every row with the shared native LanaPixel tier", () => {
   assert.match(hud, /Text\.wrapPixels/);
   assert.match(hud, /Text\.drawPixels/);
   assert.match(hud, /fontPixels/);
-  assert.doesNotMatch(hud, /fontScale|actualScale|factor|0\.8|0\.85|0\.9/);
+  assert.doesNotMatch(hud, /fontScale|actualScale|factor|,\s*0\.(?:8|85|9)\s*\)/);
 });
 
 test("HUD preserves position first, then left-shifts and paginates complete target blocks", () => {
@@ -784,7 +784,8 @@ test("Chinese rendering is self-contained and does not reference EID", () => {
   assert.match(text, /GetCurrentModPath/);
   assert.equal(fs.existsSync(fontPath), true, "bundled Chinese .fnt must exist");
   assert.equal(fs.existsSync(licensePath), true, "font license must ship with the mod");
-  const pages = fs.readdirSync(path.join(root, "resources/font")).filter((file) => /^achievement_lanapixel_\d+\.png$/.test(file));
+  const pages = fs.readdirSync(path.join(root, "resources/font"))
+    .filter((file) => /^achievement_lanapixel_(?:11|22|33)_\d+\.png$/.test(file));
   assert.ok(pages.length > 0, "font must include at least one texture page");
 });
 
@@ -797,7 +798,8 @@ test("bundled LanaPixel assets are complete", () => {
   for (const pixels of [11, 22, 33])
     assert.equal(fs.existsSync(path.join(fontDir, `achievement_lanapixel_${pixels}.fnt`)), true);
   assert.equal(fs.existsSync(path.join(fontDir, "LANAPIXEL_OFL.txt")), true);
-  const pages = fs.readdirSync(fontDir).filter((file) => /^achievement_lanapixel_\d+\.png$/.test(file));
+  const pages = fs.readdirSync(fontDir)
+    .filter((file) => /^achievement_lanapixel_(?:11|22|33)_\d+\.png$/.test(file));
   assert.ok(pages.length > 0, "LanaPixel font must include a texture page");
 });
 

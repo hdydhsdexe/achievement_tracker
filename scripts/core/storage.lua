@@ -2,7 +2,7 @@ local json = require("json")
 local Storage = {}
 local MAX_ACHIEVEMENT_COUNT = 16384
 local MAX_MOD_SAVE_DATA_BYTES = 4 * 1024 * 1024
-local F3_FONT_PIXELS = { [11]=true, [22]=true, [33]=true }
+local NATIVE_FONT_PIXELS = { [11]=true, [22]=true, [33]=true }
 local COMPLETION_MARKS = {
   MOMS_HEART=true, ISAAC=true, SATAN=true, BOSS_RUSH=true, BLUE_BABY=true,
   LAMB=true, MEGA_SATAN=true, ULTRA_GREED=true, HUSH=true, DELIRIUM=true,
@@ -69,10 +69,21 @@ local function normalizeCompletionMarks(snapshot)
   return normalized
 end
 
+local function migrateHudFontPixels(decoded)
+  if decoded.schemaVersion == 8 and type(decoded.hud) == "table"
+    and NATIVE_FONT_PIXELS[decoded.hud.fontPixels] then
+    return decoded.hud.fontPixels
+  end
+  local oldScale = type(decoded.hud) == "table" and tonumber(decoded.hud.fontScale) or 1
+  oldScale = math.max(0.5, math.min(2, oldScale or 1))
+  local oldPixels = math.floor(oldScale * 16 + 0.5)
+  return oldPixels >= 22 and 22 or 11
+end
+
 local function migrateF3FontPixels(decoded)
-  if decoded.schemaVersion == 6 then return 11 end
-  if decoded.schemaVersion == 7 and type(decoded.f3) == "table"
-    and F3_FONT_PIXELS[decoded.f3.fontPixels] then
+  local schemaVersion = tonumber(decoded.schemaVersion)
+  if schemaVersion and schemaVersion >= 7
+    and type(decoded.f3) == "table" and NATIVE_FONT_PIXELS[decoded.f3.fontPixels] then
     return decoded.f3.fontPixels
   end
   return 11
@@ -80,11 +91,11 @@ end
 
 local function defaults()
   return {
-    schemaVersion = 7,
+    schemaVersion = 8,
     language = "zh",
     maxTracked = 3,
     tracked = {},
-    hud = { x = 18, y = 82, fontScale = 1, visible = true },
+    hud = { x = 18, y = 82, fontPixels = 11, visible = true },
     f3 = { fontPixels = 11 },
     manuallyCompleted = {},
     observedCompleted = {},
@@ -107,9 +118,9 @@ function Storage.load(mod)
   if type(decoded.hud) == "table" then
     data.hud.x = tonumber(decoded.hud.x) or data.hud.x
     data.hud.y = tonumber(decoded.hud.y) or data.hud.y
-    data.hud.fontScale = math.max(0.5, math.min(2, tonumber(decoded.hud.fontScale) or data.hud.fontScale))
     data.hud.visible = decoded.hud.visible ~= false
   end
+  data.hud.fontPixels = migrateHudFontPixels(decoded)
   data.f3.fontPixels = migrateF3FontPixels(decoded)
   if type(decoded.manuallyCompleted) == "table" then data.manuallyCompleted = decoded.manuallyCompleted end
   if type(decoded.observedCompleted) == "table" then data.observedCompleted = decoded.observedCompleted end
@@ -120,9 +131,13 @@ function Storage.load(mod)
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 7
+  data.schemaVersion = 8
+  data.hud = type(data.hud) == "table" and data.hud
+    or { x = 18, y = 82, fontPixels = 11, visible = true }
+  if not NATIVE_FONT_PIXELS[data.hud.fontPixels] then data.hud.fontPixels = 11 end
+  data.hud["fontScale"] = nil
   data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 11 }
-  if not F3_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 11 end
+  if not NATIVE_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 11 end
   data.achievementImport = normalizeAchievementImport(data.achievementImport)
   data.completionMarks = normalizeCompletionMarks(data.completionMarks)
   mod:SaveData(json.encode(data))

@@ -1,10 +1,15 @@
 local Catalog = require("scripts.data.goals")
 local Tracker = require("scripts.core.tracker")
 local Mcm = {}
-local F3_PIXELS_BY_INDEX = { [1]=11, [2]=22, [3]=33 }
+local NATIVE_PIXELS_BY_INDEX = { [1]=11, [2]=22, [3]=33 }
 
 local function languageIndex(language) return language == "zh" and 1 or 2 end
 local function languageName(index) return index == 1 and "中文" or "English" end
+local function fontIndex(pixels) return pixels == 11 and 1 or (pixels == 33 and 3 or 2) end
+local function fontName(pixels)
+  return pixels == 11 and "Small / 小"
+    or (pixels == 33 and "Large / 大" or "Standard / 标准")
+end
 
 local function addNumber(modName, category, label, current, onChange, minimum, maximum, step, suffix)
   ModConfigMenu.AddSetting(modName, category, {
@@ -49,24 +54,24 @@ function Mcm.setup(state, save)
   end)
 
   addNumber(modName, general, "HUD font size / HUD 字体大小",
-    function() return state.settings.hud.fontScale end,
-    function(value) state.settings.hud.fontScale=math.max(0.5, math.min(2, value)); save() end,
-    0.5, 2, 0.1, "x")
-  addNumber(modName, general, "F3 font size / F3 字体大小",
-    function()
-      local pixels = state.settings.f3.fontPixels
-      return pixels == 11 and 1 or (pixels == 33 and 3 or 2)
-    end,
+    function() return fontIndex(state.settings.hud.fontPixels) end,
     function(value)
-      state.settings.f3.fontPixels = F3_PIXELS_BY_INDEX[value] or 11
+      state.settings.hud.fontPixels = NATIVE_PIXELS_BY_INDEX[value] or 11
       save()
     end,
     1, 3, 1)
   ModConfigMenu.AddText(modName, general, function()
-    local pixels = state.settings.f3.fontPixels
-    local sizeName = pixels == 11 and "Small / 小"
-      or (pixels == 33 and "Large / 大" or "Standard / 标准")
-    return "F3: " .. sizeName
+    return "HUD: " .. fontName(state.settings.hud.fontPixels)
+  end)
+  addNumber(modName, general, "F3 font size / F3 字体大小",
+    function() return fontIndex(state.settings.f3.fontPixels) end,
+    function(value)
+      state.settings.f3.fontPixels = NATIVE_PIXELS_BY_INDEX[value] or 11
+      save()
+    end,
+    1, 3, 1)
+  ModConfigMenu.AddText(modName, general, function()
+    return "F3: " .. fontName(state.settings.f3.fontPixels)
   end)
   addNumber(modName, general, "HUD X / 横向位置",
     function() return state.settings.hud.x end,
