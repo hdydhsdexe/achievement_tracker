@@ -22,7 +22,8 @@ test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => 
   assert.match(changeNotes, /v0\.7\.2/);
   for (const document of [description, changeNotes, read("README.md")]) {
     assert.match(document, /11[^\n]*22[^\n]*33|11\/22\/33/,
-      "release copy must describe the native integer-multiple F3 tiers");
+      "release copy must describe the shared native integer-multiple HUD/F3 tiers");
+    assert.match(document, /HUD[^\n]*(?:11|整数|integer)|(?:11|整数|integer)[^\n]*HUD/i);
     assert.doesNotMatch(document, /native 8\/10\/12|原生 8、10、12|8\/10\/12px/);
   }
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
@@ -624,11 +625,6 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /panelY = math\.floor\(\(screenHeight - panelHeight\) \/ 2\)/);
   assert.match(menu, /RewardIcons\.renderPaper\(panelX, panelY, panelWidth, panelHeight\)/);
   assert.doesNotMatch(menu, /screenWidth - 122/);
-  assert.match(text, /function Text\.width/);
-  assert.match(text, /function Text\.ellipsize/);
-  assert.match(text, /local FONT_NATIVE_PIXELS = 16/);
-  assert.match(text, /function Text\.scaleForPixels/);
-  assert.match(text, /function Text\.snapScale/);
   assert.match(text, /Text\.pixel\(x\)/);
   assert.match(text, /Text\.pixel\(y\)/);
   assert.match(text, /local PIXEL_FONT_SIZES = \{ 11, 22, 33 \}/);
@@ -725,31 +721,38 @@ test("REPENTOGON pause support is conditional and never pauses multiplayer", () 
   assert.match(menu, /multiplayerRealtime/);
 });
 
-test("HUD renders localized completion conditions with a scalable Unicode font", () => {
+test("HUD renders every row with the shared native LanaPixel tier", () => {
   const hud = read("scripts/ui/hud.lua");
   const text = read("scripts/ui/text.lua");
-  assert.match(text, /resources\/font\/achievement_lanapixel\.fnt/);
+  assert.doesNotMatch(text, /resources\/font\/achievement_lanapixel\.fnt/);
   assert.match(text, /DrawStringScaledUTF8/);
   assert.match(hud, /text\.detail/);
   assert.match(hud, /"- "\s*\.\.\s*text\.name/);
   assert.match(hud, /Routes\.evaluate/);
-  assert.match(text, /function Text\.wrap/);
-  assert.match(hud, /fontScale/);
+  assert.match(text, /function Text\.wrapPixels/);
+  assert.match(hud, /Text\.wrapPixels/);
+  assert.match(hud, /Text\.drawPixels/);
+  assert.match(hud, /fontPixels/);
+  assert.doesNotMatch(hud, /fontScale|actualScale|factor|0\.8|0\.85|0\.9/);
 });
 
-test("HUD auto-fits requested text size and keeps the complete block on screen", () => {
+test("HUD preserves position first, then left-shifts and paginates complete target blocks", () => {
   const hud = read("scripts/ui/hud.lua");
   assert.match(hud, /local SCREEN_MARGIN = 8/);
   assert.match(hud, /local MIN_HUD_WIDTH = 120/);
-  assert.match(hud, /local MIN_FONT_PIXELS = 8/);
-  assert.match(hud, /local MAX_FONT_PIXELS = 32/);
-  assert.match(hud, /local function buildRows/);
+  assert.match(hud, /local HUD_FONT_PIXELS = \{ 11, 22, 33 \}/);
+  assert.match(hud, /local PAGE_ROTATION_FRAMES = 150/);
+  assert.match(hud, /local function buildBlocks/);
   assert.match(hud, /local function fitLayout/);
-  assert.match(hud, /for pixelSize = requestedPixels, MIN_FONT_PIXELS, -1/);
+  assert.match(hud, /for tierIndex = requestedIndex, 1, -1/);
+  assert.match(hud, /for candidateX = x - 1, SCREEN_MARGIN, -1/);
+  assert.match(hud, /local function paginateBlocks/);
+  assert.match(hud, /layoutSignature/);
+  assert.match(hud, /Isaac\.GetFrameCount\(\)[\s\S]*?PAGE_ROTATION_FRAMES/);
   assert.match(hud, /screenHeight - SCREEN_MARGIN - totalHeight/);
-  assert.match(hud, /Text\.wrap/);
+  assert.match(hud, /Text\.wrapPixels/);
   assert.match(hud, /Text\.pixel/);
-  assert.doesNotMatch(hud, /local maxWidth = math\.max\(120, Isaac\.GetScreenWidth\(\) - x - 12\)/);
+  assert.doesNotMatch(hud, /Text\.scaleForPixels|for pixelSize = requestedPixels/);
 });
 
 test("HUD uses the ivory palette while retaining bright completion and failure states", () => {
@@ -763,20 +766,21 @@ test("HUD uses the ivory palette while retaining bright completion and failure s
   assert.match(hud, /HUD_FAILED, language/);
 });
 
-test("renderer always uses the bundled LanaPixel font without fallbacks", () => {
+test("renderer always uses native 11/22/33px LanaPixel atlases at 1:1", () => {
   const text = read("scripts/ui/text.lua");
-  assert.match(text, /bundledFont:Load\(modPath \..*achievement_lanapixel\.fnt/);
-  assert.match(text, /bundledFont:DrawStringScaledUTF8/);
+  assert.doesNotMatch(text, /bundledFont|FONT_NATIVE_PIXELS|scaleForPixels|snapScale/);
+  assert.match(text, /achievement_lanapixel_" \..*pixelSize/);
+  assert.match(text, /drawWithFont\(pixelFonts\[size\],[\s\S]*?1, color/);
   assert.doesNotMatch(text, /terminus8|achievement_zh|fallback|IsLoaded/);
   assert.match(text, /function Text\.resolveLanguage/);
 });
 
 test("Chinese rendering is self-contained and does not reference EID", () => {
   const text = read("scripts/ui/text.lua");
-  const fontPath = path.join(root, "resources/font/achievement_lanapixel.fnt");
+  const fontPath = path.join(root, "resources/font/achievement_lanapixel_11.fnt");
   const licensePath = path.join(root, "resources/font/LANAPIXEL_OFL.txt");
   assert.doesNotMatch(text, /external item descriptions/i);
-  assert.match(text, /resources\/font\/achievement_lanapixel\.fnt/);
+  assert.match(text, /resources\/font\/achievement_lanapixel_/);
   assert.match(text, /GetCurrentModPath/);
   assert.equal(fs.existsSync(fontPath), true, "bundled Chinese .fnt must exist");
   assert.equal(fs.existsSync(licensePath), true, "font license must ship with the mod");
@@ -787,9 +791,11 @@ test("Chinese rendering is self-contained and does not reference EID", () => {
 test("bundled LanaPixel assets are complete", () => {
   const text = read("scripts/ui/text.lua");
   const fontDir = path.join(root, "resources/font");
-  assert.match(text, /resources\/font\/achievement_lanapixel\.fnt/);
+  assert.match(text, /resources\/font\/achievement_lanapixel_/);
   assert.doesNotMatch(text, /resources\/font\/achievement_zh\.fnt/);
-  assert.equal(fs.existsSync(path.join(fontDir, "achievement_lanapixel.fnt")), true);
+  assert.equal(fs.existsSync(path.join(fontDir, "achievement_lanapixel.fnt")), false);
+  for (const pixels of [11, 22, 33])
+    assert.equal(fs.existsSync(path.join(fontDir, `achievement_lanapixel_${pixels}.fnt`)), true);
   assert.equal(fs.existsSync(path.join(fontDir, "LANAPIXEL_OFL.txt")), true);
   const pages = fs.readdirSync(fontDir).filter((file) => /^achievement_lanapixel_\d+\.png$/.test(file));
   assert.ok(pages.length > 0, "LanaPixel font must include a texture page");
@@ -800,6 +806,7 @@ test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position s
   assert.match(mcm, /Language/);
   assert.match(mcm, /HUD font size \/ HUD 字体大小/);
   assert.match(mcm, /F3 font size \/ F3 字体大小/);
+  assert.match(mcm, /state\.settings\.hud\.fontPixels/);
   assert.match(mcm, /state\.settings\.f3\.fontPixels/);
   assert.match(mcm, /\[1\]=11,\s*\[2\]=22,\s*\[3\]=33/);
   assert.match(mcm, /Small \/ 小/);
@@ -820,7 +827,7 @@ test("persistent settings are loaded defensively and saved as JSON", () => {
   assert.match(storage, /json\.encode/);
   assert.match(storage, /schemaVersion/);
   assert.match(storage, /activeRun/);
-  assert.match(storage, /fontScale/);
+  assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /fontPixels/);
 });
 

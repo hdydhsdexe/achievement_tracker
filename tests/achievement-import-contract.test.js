@@ -6,17 +6,23 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v7 migrates legacy F3 sizes to native 11px and validates new tiers", () => {
+test("storage schema v8 migrates legacy HUD scaling and preserves native tiers", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*7/);
-  assert.doesNotMatch(storage, /schemaVersion\s*=\s*6/);
+  assert.match(storage, /schemaVersion\s*=\s*8/);
+  assert.doesNotMatch(storage, /schemaVersion\s*=\s*7/);
+  assert.match(storage, /hud\s*=\s*\{[^}]*fontPixels\s*=\s*11/);
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
-  assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
+  assert.match(storage, /local NATIVE_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
+  assert.match(storage, /local function migrateHudFontPixels/);
+  assert.match(storage, /decoded\.schemaVersion\s*==\s*8[\s\S]*?return decoded\.hud\.fontPixels/);
+  assert.match(storage, /math\.floor\([^\n]*oldScale[^\n]*\*\s*16[^\n]*\+\s*0\.5\)/);
+  assert.match(storage, /oldPixels\s*>=\s*22[^\n]*and\s*22\s*or\s*11/);
+  assert.match(storage, /data\.hud\.fontPixels\s*=\s*migrateHudFontPixels\(decoded\)/);
+  assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /local function migrateF3FontPixels/);
-  assert.match(storage, /decoded\.schemaVersion\s*==\s*6[\s\S]*?return 11/,
-    "every schema 6 F3 tier must migrate to the safe native 11px font");
-  assert.match(storage, /F3_FONT_PIXELS\[decoded\.f3\.fontPixels\][\s\S]*?return decoded\.f3\.fontPixels/);
+  assert.match(storage, /decoded\.schemaVersion\s*>=\s*7[\s\S]*?return decoded\.f3\.fontPixels/,
+    "schema 7 F3 native tiers must survive the schema 8 upgrade");
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);

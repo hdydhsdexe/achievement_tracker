@@ -122,8 +122,8 @@ function runtimeCharacters() {
   return characters;
 }
 
-test("bundled font contains real glyphs for every runtime character", () => {
-  const {pages, records} = parseBmFont(read("resources/font/achievement_lanapixel.fnt"));
+test("shared native font contains real glyphs for every runtime character", () => {
+  const {pages, records} = parseBmFont(read("resources/font/achievement_lanapixel_11.fnt"));
   const decodedPages = pages.map((page) => decodeRgbaPng(fs.readFileSync(path.join(fontDir, page))));
   for (const character of runtimeCharacters())
     assert.ok(records.has(character.codePointAt(0)), `missing BMFont record for ${character}`);
@@ -149,10 +149,10 @@ test("bundled font contains real glyphs for every runtime character", () => {
   }
 });
 
-test("font generation declares primary and fallback sources without unresolved glyphs", () => {
+test("native font generation declares primary and fallback sources without unresolved glyphs", () => {
   const generator = read("tools/generate_font.py").toString("utf8");
   const packageJson = JSON.parse(read("package.json"));
-  const sourcePath = path.join(fontDir, "achievement_lanapixel.sources.json");
+  const sourcePath = path.join(fontDir, "achievement_lanapixel_11.sources.json");
   assert.match(generator, /--fallback-font/);
   assert.match(generator, /--fallback-size/);
   assert.match(generator, /--pixel-base-size/);
@@ -163,14 +163,16 @@ test("font generation declares primary and fallback sources without unresolved g
   assert.equal(packageJson.devDependencies["@fontpkg/source-han-sans-sc"], "2.5.3");
   assert.equal(fs.existsSync(sourcePath), true, "generated glyph source manifest must exist");
   const sources = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
-  assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", size: 16});
-  assert.deepEqual(sources.fallbackFont, {file: "SourceHanSansSC-Regular.otf", size: 15});
+  assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", designSize: 11,
+    outputSize: 11, scale: 1, rendering: "binary-nearest"});
+  assert.deepEqual(sources.fallbackFont, {file: "SourceHanSansSC-Regular.otf",
+    size: 10, rendering: "antialiased"});
   assert.equal(sources.glyphCount, runtimeCharacters().size);
   assert.deepEqual(sources.unresolvedGlyphs, []);
   assert.deepEqual(sources.fallbackGlyphs.map((entry) => entry.character), missingFromLanaPixel);
 });
 
-test("F3 ships hard-edged native 11px glyphs and exact 2x/3x integer atlases", () => {
+test("HUD and F3 share hard-edged native 11px glyphs and exact 2x/3x integer atlases", () => {
   const decoded = new Map();
   const parsedFonts = new Map();
   for (const [pixelSize, multiplier] of [[11, 1], [22, 2], [33, 3]]) {
@@ -256,4 +258,8 @@ test("F3 ships hard-edged native 11px glyphs and exact 2x/3x integer atlases", (
   for (const obsolete of fs.readdirSync(fontDir)
     .filter((file) => /^achievement_lanapixel_(?:8|10|12)(?:[_.]|$)/.test(file)))
     assert.fail(`obsolete F3 font asset still ships: ${obsolete}`);
+  for (const obsolete of ["achievement_lanapixel.fnt", "achievement_lanapixel_0.png",
+    "achievement_lanapixel.sources.json"])
+    assert.equal(fs.existsSync(path.join(fontDir, obsolete)), false,
+      `obsolete scaled HUD font asset still ships: ${obsolete}`);
 });

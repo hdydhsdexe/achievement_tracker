@@ -7,8 +7,7 @@ const root = path.resolve(__dirname, "..");
 const fontDir = path.join(root, "resources/font");
 
 function parseFont(pixelSize) {
-  const name = pixelSize === 16 ? "achievement_lanapixel.fnt"
-    : `achievement_lanapixel_${pixelSize}.fnt`;
+  const name = `achievement_lanapixel_${pixelSize}.fnt`;
   const data = fs.readFileSync(path.join(fontDir, name));
   const records = new Map();
   let lineHeight = 0;
@@ -194,46 +193,138 @@ test("the longest bilingual conditions wrap without losing content", () => {
   }
 });
 
-test("HUD clamps extreme preferences and fits three long multi-line routes", () => {
-  const screenWidth = 640;
-  const screenHeight = 360;
-  const margin = 8;
-  const minimumWidth = 120;
-  const x = Math.max(margin,
-    Math.min(screenWidth - margin - minimumWidth, 600));
-  assert.equal(x, 512);
-  const maxWidth = screenWidth - margin - x;
-  assert.equal(maxWidth, minimumWidth);
+const HUD_TIERS = [11, 22, 33];
 
-  const font = parseFont(16);
-  const routeRows = [
-    ["ACHIEVEMENT CONDITIONS", 0, 1],
-  ];
+function routeBlocks(font, maxWidth) {
+  const wrapped = (value, indent = 0) => wrap(value, maxWidth - indent, font.records);
+  const blocks = [];
   for (const id of [324, 325, 326]) {
-    routeRows.push([`- #${id} A deliberately long tracked achievement [1/2]`, 0, 1]);
-    routeRows.push(["NOW: complete the current floor and preserve the required route", 8, 0.9]);
-    routeRows.push(["NEXT: enter the alternate exit and continue toward the final boss", 8, 0.85]);
+    blocks.push([
+      ...wrapped(`- #${id} A deliberately long tracked achievement [1/2]`),
+      ...wrapped("NOW: complete the current floor and preserve the required route", 8),
+      ...wrapped("NEXT: enter the alternate exit and continue toward the final boss", 8),
+    ]);
   }
-  routeRows.push(["F3: goals  |  F4: hide", 0, 0.8]);
+  return {
+    header: wrapped("ACHIEVEMENT CONDITIONS"),
+    footer: wrapped("F3: goals  |  F4: hide  [9/9]"),
+    blocks,
+  };
+}
 
-  let totalHeight = Infinity;
-  let chosenPixels = 8;
-  for (let pixelSize = 32; pixelSize >= 8; pixelSize -= 1) {
-    let height = 0;
-    for (const [value, indent, factor] of routeRows) {
-      const rowPixels = Math.max(8, Math.round(pixelSize * factor));
-      const lines = wrap(value, (maxWidth - indent) * 16 / rowPixels, font.records);
-      height += lines.length * Math.max(8, Math.round(12 * rowPixels / 16));
+function paginatedRows(content, availableLines) {
+  const fixed = content.header.length + content.footer.length;
+  const capacity = Math.max(1, availableLines - fixed);
+  const pages = [];
+  let page = [];
+  let split = false;
+  const flush = () => {
+    if (page.length > 0) pages.push(page);
+    page = [];
+  };
+  for (const block of content.blocks) {
+    if (block.length > capacity) {
+      flush();
+      split = true;
+      for (let offset = 0; offset < block.length; offset += capacity)
+        pages.push(block.slice(offset, offset + capacity));
+    } else {
+      if (page.length + block.length > capacity) flush();
+      page.push(...block);
     }
-    totalHeight = height;
-    chosenPixels = pixelSize;
-    if (height <= screenHeight - margin * 2) break;
+  }
+  flush();
+  return {pages, split, fixed};
+}
+
+function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, preferredY, fonts) {
+  const margin = 8;
+  const maximumX = Math.max(margin, screenWidth - margin - 120);
+  const preferred = Math.max(margin, Math.min(maximumX, preferredX));
+  const availableHeight = screenHeight - margin * 2;
+  const requestedIndex = Math.max(0, HUD_TIERS.indexOf(requestedPixels));
+  const staticAt = (pixelSize, x) => {
+    const font = fonts.get(pixelSize);
+    const content = routeBlocks(font, screenWidth - margin - x);
+    const lines = content.header.length + content.footer.length
+      + content.blocks.reduce((total, block) => total + block.length, 0);
+    return {pixelSize, font, x, content, lines, totalHeight: lines * font.lineHeight};
+  };
+  for (let tierIndex = requestedIndex; tierIndex >= 0; tierIndex -= 1) {
+    const result = staticAt(HUD_TIERS[tierIndex], preferred);
+    if (result.totalHeight <= availableHeight) {
+      const y = Math.max(margin, Math.min(preferredY,
+        screenHeight - margin - result.totalHeight));
+      return {...result, y, pages: [result.content.blocks.flat()], split: false};
+    }
+  }
+  for (let x = preferred - 1; x >= margin; x -= 1) {
+    const result = staticAt(11, x);
+    if (result.totalHeight <= availableHeight) {
+      const y = Math.max(margin, Math.min(preferredY,
+        screenHeight - margin - result.totalHeight));
+      return {...result, y, pages: [result.content.blocks.flat()], split: false};
+    }
   }
 
-  assert.ok(chosenPixels >= 8);
-  assert.ok(totalHeight <= screenHeight - margin * 2);
-  const y = Math.max(margin,
-    Math.min(400, screenHeight - margin - totalHeight));
-  assert.ok(y >= margin);
-  assert.ok(y + totalHeight <= screenHeight - margin);
+  const font = fonts.get(11);
+  const availableLines = Math.floor(availableHeight / font.lineHeight);
+  let fallback;
+  for (let x = preferred; x >= margin; x -= 1) {
+    const content = routeBlocks(font, screenWidth - margin - x);
+    const pagination = paginatedRows(content, availableLines);
+    fallback = {pixelSize: 11, font, x, content, ...pagination};
+    if (!pagination.split) break;
+  }
+  const pageLines = Math.max(...fallback.pages.map((page) =>
+    page.length + fallback.content.header.length + fallback.content.footer.length));
+  const totalHeight = pageLines * font.lineHeight;
+  const y = Math.max(margin, Math.min(preferredY,
+    screenHeight - margin - totalHeight));
+  return {...fallback, y, lines: pageLines, totalHeight};
+}
+
+test("HUD native tiers preserve position, then left-shift only at the 11px floor", () => {
+  const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
+  const shifted = fitNativeHud(33, 640, 360, 600, 400, fonts);
+  assert.equal(shifted.pixelSize, 11);
+  assert.ok(shifted.x < 512, "the 11px floor must move left only when the saved X cannot fit");
+  assert.equal(shifted.pages.length, 1);
+  assert.ok(shifted.y >= 8 && shifted.y + shifted.totalHeight <= 352);
+
+  assert.equal(fitNativeHud(22, 854, 480, 18, 82, fonts).pixelSize, 22);
+  assert.equal(fitNativeHud(33, 1920, 1080, 18, 82, fonts).pixelSize, 33);
+});
+
+test("320x180 HUD pagination preserves every complete target row inside safe bounds", () => {
+  const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
+  const layout = fitNativeHud(33, 320, 180, 600, 400, fonts);
+  assert.equal(layout.pixelSize, 11);
+  assert.ok(layout.pages.length > 1);
+  assert.equal(layout.split, false, "left-shifting must avoid splitting a target when possible");
+  assert.deepEqual(layout.pages.flat(), layout.content.blocks.flat());
+  for (const page of layout.pages) {
+    const height = (page.length + layout.content.header.length
+      + layout.content.footer.length) * layout.font.lineHeight;
+    assert.ok(height <= 164);
+  }
+  assert.ok(layout.y >= 8 && layout.y + layout.totalHeight <= 172);
+});
+
+test("all bilingual warning conditions fit centered at a native tier", () => {
+  const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
+  const screens = [[320, 180], [408, 270], [480, 270], [640, 360], [854, 480], [1920, 1080]];
+  for (const row of catalogRows()) {
+    for (const language of ["zh", "en"]) {
+      const message = `${row[language]}: condition lost (reason)`;
+      for (const requested of HUD_TIERS) {
+        for (const [width, height] of screens) {
+          const effective = [...HUD_TIERS].reverse().find((pixels) => pixels <= requested
+            && wrap(message, width - 16, fonts.get(pixels).records).length
+              * fonts.get(pixels).lineHeight <= height - 16);
+          assert.ok(effective, `${row.id} ${language} must fit ${width}x${height}`);
+        }
+      }
+    }
+  }
 });
