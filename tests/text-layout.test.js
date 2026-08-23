@@ -269,13 +269,9 @@ function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, pr
 
   const font = fonts.get(11);
   const availableLines = Math.floor(availableHeight / font.lineHeight);
-  let fallback;
-  for (let x = preferred; x >= margin; x -= 1) {
-    const content = routeBlocks(font, screenWidth - margin - x);
-    const pagination = paginatedRows(content, availableLines);
-    fallback = {pixelSize: 11, font, x, content, ...pagination};
-    if (!pagination.split) break;
-  }
+  const content = routeBlocks(font, screenWidth - margin * 2);
+  const pagination = paginatedRows(content, availableLines);
+  const fallback = {pixelSize: 11, font, x: margin, content, ...pagination};
   const pageLines = Math.max(...fallback.pages.map((page) =>
     page.length + fallback.content.header.length + fallback.content.footer.length));
   const totalHeight = pageLines * font.lineHeight;
@@ -300,6 +296,7 @@ test("320x180 HUD pagination preserves every complete target row inside safe bou
   const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
   const layout = fitNativeHud(33, 320, 180, 600, 400, fonts);
   assert.equal(layout.pixelSize, 11);
+  assert.equal(layout.x, 8, "pagination begins only after using the full safe width");
   assert.ok(layout.pages.length > 1);
   assert.equal(layout.split, false, "left-shifting must avoid splitting a target when possible");
   assert.deepEqual(layout.pages.flat(), layout.content.blocks.flat());

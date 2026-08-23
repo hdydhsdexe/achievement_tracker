@@ -15,7 +15,7 @@ test("storage schema v8 migrates legacy HUD scaling and preserves native tiers",
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
   assert.match(storage, /local NATIVE_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
   assert.match(storage, /local function migrateHudFontPixels/);
-  assert.match(storage, /decoded\.schemaVersion\s*==\s*8[\s\S]*?return decoded\.hud\.fontPixels/);
+  assert.match(storage, /local function migrateHudFontPixels\(decoded\)\s+local schemaVersion = tonumber\(decoded\.schemaVersion\)[\s\S]*?schemaVersion\s*==\s*8[\s\S]*?return decoded\.hud\.fontPixels/);
   assert.match(storage, /math\.floor\([^\n]*oldScale[^\n]*\*\s*16[^\n]*\+\s*0\.5\)/);
   assert.match(storage, /oldPixels\s*>=\s*22[^\n]*and\s*22\s*or\s*11/);
   assert.match(storage, /data\.hud\.fontPixels\s*=\s*migrateHudFontPixels\(decoded\)/);

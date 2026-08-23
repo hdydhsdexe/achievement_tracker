@@ -747,6 +747,8 @@ test("HUD preserves position first, then left-shifts and paginates complete targ
   assert.match(hud, /for tierIndex = requestedIndex, 1, -1/);
   assert.match(hud, /for candidateX = x - 1, SCREEN_MARGIN, -1/);
   assert.match(hud, /local function paginateBlocks/);
+  assert.match(hud, /pagedLayout\(state, SCREEN_MARGIN, screenWidth, availableHeight\)/,
+    "pagination must start only after the 11px HUD has expanded to the full safe width");
   assert.match(hud, /layoutSignature/);
   assert.match(hud, /Isaac\.GetFrameCount\(\)[\s\S]*?PAGE_ROTATION_FRAMES/);
   assert.match(hud, /screenHeight - SCREEN_MARGIN - totalHeight/);
