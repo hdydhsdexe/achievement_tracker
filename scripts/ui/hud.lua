@@ -42,6 +42,21 @@ local function appendRows(target, source)
   for _, row in ipairs(source) do table.insert(target, row) end
 end
 
+local function lineAdvance(fontPixels, lineSpacingPixels)
+  return Text.lineHeightPixels(fontPixels) + lineSpacingPixels
+end
+
+local function contentHeight(lines, fontPixels, lineSpacingPixels)
+  if lines <= 0 then return 0 end
+  return lines * Text.lineHeightPixels(fontPixels)
+    + (lines - 1) * lineSpacingPixels
+end
+
+local function maximumLineCount(availableHeight, fontPixels, lineSpacingPixels)
+  return math.max(1, math.floor((availableHeight + lineSpacingPixels)
+    / lineAdvance(fontPixels, lineSpacingPixels)))
+end
+
 local function buildBlocks(state, fontPixels, x, screenWidth)
   local settings = state.settings
   local language = Text.resolveLanguage(settings.language)
@@ -121,12 +136,13 @@ local function pageLineCount(content, rows, page, pages)
   return #content.headerRows + #rows + #footerRows(content, page, pages)
 end
 
-local function staticLayout(state, fontPixels, x, screenWidth)
+local function staticLayout(state, fontPixels, x, screenWidth, lineSpacingPixels)
   local content = buildBlocks(state, fontPixels, x, screenWidth)
   local rows = allBlockRows(content.blocks)
   local lines = pageLineCount(content, rows, 1, 1)
   return { content=content, pages={ rows }, lines=lines,
-    totalHeight=lines * Text.lineHeightPixels(fontPixels), x=x, fontPixels=fontPixels }
+    totalHeight=contentHeight(lines, fontPixels, lineSpacingPixels),
+    x=x, fontPixels=fontPixels, lineSpacingPixels=lineSpacingPixels }
 end
 
 local function paginateBlocks(content, availableLines)
@@ -160,11 +176,11 @@ local function paginateBlocks(content, availableLines)
   return pages, split
 end
 
-local function pagedLayout(state, x, screenWidth, availableHeight)
+local function pagedLayout(state, x, screenWidth, availableHeight, lineSpacingPixels)
   local fontPixels = 11
   local content = buildBlocks(state, fontPixels, x, screenWidth)
-  local availableLines = math.max(1,
-    math.floor(availableHeight / Text.lineHeightPixels(fontPixels)))
+  local availableLines = maximumLineCount(availableHeight,
+    fontPixels, lineSpacingPixels)
   local pages, split = paginateBlocks(content, availableLines)
   local maximumLines = 1
   for page, rows in ipairs(pages) do
@@ -172,8 +188,8 @@ local function pagedLayout(state, x, screenWidth, availableHeight)
       pageLineCount(content, rows, page, #pages))
   end
   return { content=content, pages=pages, split=split, lines=maximumLines,
-    totalHeight=maximumLines * Text.lineHeightPixels(fontPixels),
-    x=x, fontPixels=fontPixels }
+    totalHeight=contentHeight(maximumLines, fontPixels, lineSpacingPixels),
+    x=x, fontPixels=fontPixels, lineSpacingPixels=lineSpacingPixels }
 end
 
 local function requestedTierIndex(fontPixels)
@@ -199,26 +215,31 @@ local function fitLayout(state)
   local preferredY = tonumber(state.settings.hud.y) or SCREEN_MARGIN
   local availableHeight = screenHeight - SCREEN_MARGIN * 2
   local requestedPixels = state.settings.hud.fontPixels or 11
+  local lineSpacingPixels = state.settings.hud.lineSpacingPixels or 0
   local requestedIndex = requestedTierIndex(requestedPixels)
   for tierIndex = requestedIndex, 1, -1 do
-    local layout = staticLayout(state, HUD_FONT_PIXELS[tierIndex], x, screenWidth)
+    local layout = staticLayout(state, HUD_FONT_PIXELS[tierIndex], x,
+      screenWidth, lineSpacingPixels)
     if layout.totalHeight <= availableHeight then
       return placeVertically(layout, preferredY, screenHeight)
     end
   end
   for candidateX = x - 1, SCREEN_MARGIN, -1 do
-    local layout = staticLayout(state, 11, candidateX, screenWidth)
+    local layout = staticLayout(state, 11, candidateX,
+      screenWidth, lineSpacingPixels)
     if layout.totalHeight <= availableHeight then
       return placeVertically(layout, preferredY, screenHeight)
     end
   end
-  local fallback = pagedLayout(state, SCREEN_MARGIN, screenWidth, availableHeight)
+  local fallback = pagedLayout(state, SCREEN_MARGIN, screenWidth,
+    availableHeight, lineSpacingPixels)
   return placeVertically(fallback, preferredY, screenHeight)
 end
 
 local function layoutSignature(layout)
   local parts = { layout.content.language, tostring(layout.x), tostring(layout.y),
-    tostring(layout.fontPixels), tostring(#layout.pages) }
+    tostring(layout.fontPixels), tostring(layout.lineSpacingPixels),
+    tostring(#layout.pages) }
   for _, page in ipairs(layout.pages) do
     for _, row in ipairs(page) do table.insert(parts, row.text) end
     table.insert(parts, "|")
@@ -246,11 +267,11 @@ function Hud.render(state)
   appendRows(rows, layout.pages[page])
   appendRows(rows, footerRows(layout.content, page, #layout.pages))
   local y = layout.y
-  local lineHeight = Text.lineHeightPixels(layout.fontPixels)
+  local advance = lineAdvance(layout.fontPixels, layout.lineSpacingPixels)
   for _, row in ipairs(rows) do
     Text.drawPixels(row.text, layout.x + row.indent, y, layout.fontPixels,
       row.color, layout.content.language)
-    y = y + lineHeight
+    y = y + advance
   end
 end
 
@@ -269,19 +290,21 @@ function Hud.renderWarning(state)
   local maxWidth = screenWidth - SCREEN_MARGIN * 2
   local maximumHeight = screenHeight - SCREEN_MARGIN * 2
   local requestedIndex = requestedTierIndex(state.settings.hud.fontPixels or 11)
-  local lines, fontPixels, lineHeight
+  local lineSpacingPixels = state.settings.hud.lineSpacingPixels or 0
+  local lines, fontPixels, warningHeight
   for tierIndex = requestedIndex, 1, -1 do
     fontPixels = HUD_FONT_PIXELS[tierIndex]
-    lineHeight = Text.lineHeightPixels(fontPixels)
     lines = Text.wrapPixels(message, maxWidth, fontPixels)
-    if #lines * lineHeight <= maximumHeight then break end
+    warningHeight = contentHeight(#lines, fontPixels, lineSpacingPixels)
+    if warningHeight <= maximumHeight then break end
   end
   local y = math.max(SCREEN_MARGIN,
-    Text.pixel((screenHeight - #lines * lineHeight) / 2))
+    Text.pixel((screenHeight - warningHeight) / 2))
+  local advance = lineAdvance(fontPixels, lineSpacingPixels)
   for _, line in ipairs(lines) do
     Text.drawPixels(line, SCREEN_MARGIN, y, fontPixels,
       HUD_FAILED, language, maxWidth, true)
-    y = y + lineHeight
+    y = y + advance
   end
 end
 

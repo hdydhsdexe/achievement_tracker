@@ -74,6 +74,6 @@ The bundled bitmap font combines glyphs generated from LanaPixel and Source Han 
 
 [h1]Version 0.7.2[/h1]
 
-Improves text robustness across resolutions. HUD and F3 now share native 11/22/33px fonts drawn at 1:1: LanaPixel uses a hard-edged 11px design grid with exact 2x/3x nearest-neighbor variants, while Chinese fallback glyphs retain antialiasing. F3 grows height-first and then width-first; HUD downgrades at the saved position, shifts left only at the 11px floor, and paginates complete goals on extremely small screens.
+Improves text robustness across resolutions. HUD and F3 now share native 11/22/33px fonts drawn at 1:1: LanaPixel uses a hard-edged 11px design grid with exact 2x/3x nearest-neighbor variants, while Chinese fallback glyphs retain antialiasing. F3 grows height-first and then width-first; HUD downgrades at the saved position, shifts left only at the 11px floor, and paginates complete goals on extremely small screens. Mod Config Menu can adjust HUD line spacing from 0 to 8px without changing the saved font or position preference.
 
-改善不同分辨率下的文字显示。HUD 与 F3 共用原生 11/22/33px 字库并按 1:1 绘制：LanaPixel 以 11px 硬边设计栅格为基准，22/33px 为精确 2×/3× 最近邻版本，中文后备字形保留抗锯齿。F3 面板先增高、再加宽；HUD 在保存位置先降档，仅在 11px 仍不足时左移，并在极小画面按完整目标分页。
+改善不同分辨率下的文字显示。HUD 与 F3 共用原生 11/22/33px 字库并按 1:1 绘制：LanaPixel 以 11px 硬边设计栅格为基准，22/33px 为精确 2×/3× 最近邻版本，中文后备字形保留抗锯齿。F3 面板先增高、再加宽；HUD 在保存位置先降档，仅在 11px 仍不足时左移，并在极小画面按完整目标分页。Mod Config Menu 可将 HUD 行间距调整为 0–8px，不会覆盖保存的字号或位置偏好。

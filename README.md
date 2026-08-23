@@ -19,7 +19,7 @@
 - 已知角色通关标记按角色和难度长期保存。安装 REPENTOGON 时会只读同步游戏原生标记；否则根据本 Mod 实际见证的 Boss 击杀、Boss Rush 完成及已导入的解锁成就积累肯定证据，未知标记不会被当作未完成。
 - 为成就 #326 Zip! 提供时间提醒。
 - 检测 It's the Key 的心、硬币和炸弹拾取限制。
-- 可选适配 Mod Config Menu Pure，可独立调整 HUD 与 F3 的原生 11/22/33px 字号上限、HUD 位置和追踪目标。
+- 可选适配 Mod Config Menu Pure，可独立调整 HUD 与 F3 的原生 11/22/33px 字号上限、HUD 0–8px 行间距、HUD 位置和追踪目标。
 
 ## 中文字体
 

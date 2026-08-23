@@ -71,6 +71,10 @@ function Mcm.setup(state, save)
       state.settings.hud.fontPixels = pixels
       save()
     end)
+  addNumber(modName, general, "HUD line spacing / HUD 行间距",
+    function() return state.settings.hud.lineSpacingPixels end,
+    function(value) state.settings.hud.lineSpacingPixels=value; save() end,
+    0, 8, 1, "px")
   addFontSize(modName, general, "F3 font size / F3 字体大小",
     function() return state.settings.f3.fontPixels end,
     function(pixels)

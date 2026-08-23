@@ -71,7 +71,7 @@ end
 
 local function migrateHudFontPixels(decoded)
   local schemaVersion = tonumber(decoded.schemaVersion)
-  if schemaVersion == 8 and type(decoded.hud) == "table"
+  if schemaVersion and schemaVersion >= 8 and type(decoded.hud) == "table"
     and NATIVE_FONT_PIXELS[decoded.hud.fontPixels] then
     return decoded.hud.fontPixels
   end
@@ -79,6 +79,12 @@ local function migrateHudFontPixels(decoded)
   oldScale = math.max(0.5, math.min(2, oldScale or 1))
   local oldPixels = math.floor(oldScale * 16 + 0.5)
   return oldPixels >= 22 and 22 or 11
+end
+
+local function normalizeHudLineSpacing(value)
+  value = tonumber(value)
+  if not value then return 0 end
+  return math.max(0, math.min(8, math.floor(value + 0.5)))
 end
 
 local function migrateF3FontPixels(decoded)
@@ -92,11 +98,11 @@ end
 
 local function defaults()
   return {
-    schemaVersion = 8,
+    schemaVersion = 9,
     language = "zh",
     maxTracked = 3,
     tracked = {},
-    hud = { x = 18, y = 82, fontPixels = 11, visible = true },
+    hud = { x = 18, y = 82, fontPixels = 11, lineSpacingPixels = 0, visible = true },
     f3 = { fontPixels = 11 },
     manuallyCompleted = {},
     observedCompleted = {},
@@ -119,6 +125,7 @@ function Storage.load(mod)
   if type(decoded.hud) == "table" then
     data.hud.x = tonumber(decoded.hud.x) or data.hud.x
     data.hud.y = tonumber(decoded.hud.y) or data.hud.y
+    data.hud.lineSpacingPixels = normalizeHudLineSpacing(decoded.hud.lineSpacingPixels)
     data.hud.visible = decoded.hud.visible ~= false
   end
   data.hud.fontPixels = migrateHudFontPixels(decoded)
@@ -132,10 +139,11 @@ function Storage.load(mod)
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 8
+  data.schemaVersion = 9
   data.hud = type(data.hud) == "table" and data.hud
-    or { x = 18, y = 82, fontPixels = 11, visible = true }
+    or { x = 18, y = 82, fontPixels = 11, lineSpacingPixels = 0, visible = true }
   if not NATIVE_FONT_PIXELS[data.hud.fontPixels] then data.hud.fontPixels = 11 end
+  data.hud.lineSpacingPixels = normalizeHudLineSpacing(data.hud.lineSpacingPixels)
   data.hud["fontScale"] = nil
   data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 11 }
   if not NATIVE_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 11 end

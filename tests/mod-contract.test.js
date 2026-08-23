@@ -755,7 +755,7 @@ test("HUD preserves position first, then left-shifts and paginates complete targ
   assert.match(hud, /lineSpacingPixels/);
   assert.match(hud, /tostring\(layout\.lineSpacingPixels\)/,
     "changing line spacing must reset automatic page rotation");
-  assert.match(hud, /pagedLayout\(state, SCREEN_MARGIN, screenWidth, availableHeight\)/,
+  assert.match(hud, /pagedLayout\(state, SCREEN_MARGIN, screenWidth,\s*availableHeight, lineSpacingPixels\)/,
     "pagination must start only after the 11px HUD has expanded to the full safe width");
   assert.match(hud, /layoutSignature/);
   assert.match(hud, /Isaac\.GetFrameCount\(\)[\s\S]*?PAGE_ROTATION_FRAMES/);

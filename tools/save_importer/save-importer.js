@@ -160,7 +160,7 @@
 
     return {
       ...existing,
-      schemaVersion: 8,
+      schemaVersion: 9,
       achievementImport,
     };
   }
