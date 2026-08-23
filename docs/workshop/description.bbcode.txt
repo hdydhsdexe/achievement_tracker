@@ -70,6 +70,6 @@ The bundled bitmap font combines glyphs generated from LanaPixel and Source Han 
 
 [h1]Version 0.7.2[/h1]
 
-Improves text robustness across resolutions. F3 now uses native 8/10/12px bitmap fonts, dynamically sizes pages for complete condition text, and keeps pause notices in the footer. HUD text independently auto-fits its full content and stays inside safe screen bounds.
+Improves text robustness across resolutions. F3 now draws native 11/22/33px fonts at 1:1: LanaPixel uses a hard-edged 11px design grid with exact 2x/3x nearest-neighbor variants, while Chinese fallback glyphs retain antialiasing. The panel grows vertically, then horizontally, and automatically falls back to a smaller tier when needed. HUD behavior remains independent.
 
-改善不同分辨率下的文字显示。F3 使用原生 8/10/12px 位图字体，根据完整条件正文动态调整分页，并将暂停提示合并到页脚；HUD 字号独立自动适配，完整内容会保持在画面安全区域内。
+改善不同分辨率下的文字显示。F3 使用原生 11/22/33px 字库并按 1:1 绘制：LanaPixel 以 11px 硬边设计栅格为基准，22/33px 为精确 2×/3× 最近邻版本，中文后备字形保留抗锯齿。面板会先增高、再加宽，必要时自动降档；HUD 设置保持独立。

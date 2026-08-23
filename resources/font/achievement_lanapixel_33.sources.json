@@ -1,11 +1,15 @@
 {
   "primaryFont": {
     "file": "LanaPixel.ttf",
-    "size": 12
+    "designSize": 11,
+    "outputSize": 33,
+    "scale": 3,
+    "rendering": "binary-nearest"
   },
   "fallbackFont": {
     "file": "SourceHanSansSC-Regular.otf",
-    "size": 11
+    "size": 30,
+    "rendering": "antialiased"
   },
   "glyphCount": 1174,
   "fallbackGlyphs": [

@@ -151,7 +151,7 @@ test("F3 navigation repeats held arrows after a real-time delay without wrapping
 test("F3 mouse hover selects visible tiles and a left-click edge toggles tracking", () => {
   const main = read("main.lua");
   const menu = read("scripts/ui/menu.lua");
-  assert.match(menu, /local function menuLayout\(state\)/);
+  assert.match(menu, /local function fitMenuLayout\(state\)/);
   assert.match(menu, /Input\.GetMousePosition\(false\)/);
   assert.match(menu, /Input\.IsMouseBtnPressed\(Mouse\.MOUSE_BUTTON_LEFT\)/);
   assert.match(menu, /local clicked = mouseDown and not state\.menu\.mouseDown/);
@@ -160,7 +160,7 @@ test("F3 mouse hover selects visible tiles and a left-click edge toggles trackin
   assert.match(menu, /local function toggleGoal/);
   assert.match(menu, /refreshGoals\(state, context, true\)/);
   assert.match(menu, /SHOOT_KEYS\[buttonAction\]/);
-  assert.match(menu, /mouseInsidePanel\(Input\.GetMousePosition\(false\), menuLayout\(state\)\)/);
+  assert.match(menu, /mouseInsidePanel\(Input\.GetMousePosition\(false\), fitMenuLayout\(state\)\)/);
   assert.match(main, /InputHook\.GET_ACTION_VALUE/,
     "blocked mouse shooting must return the correct value for analog input hooks");
 });

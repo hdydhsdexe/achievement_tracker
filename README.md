@@ -19,11 +19,11 @@
 - 已知角色通关标记按角色和难度长期保存。安装 REPENTOGON 时会只读同步游戏原生标记；否则根据本 Mod 实际见证的 Boss 击杀、Boss Rush 完成及已导入的解锁成就积累肯定证据，未知标记不会被当作未完成。
 - 为成就 #326 Zip! 提供时间提醒。
 - 检测 It's the Key 的心、硬币和炸弹拾取限制。
-- 可选适配 Mod Config Menu Pure，可独立调整 HUD 字号上限、F3 原生 8/10/12px 字号、HUD 位置和追踪目标。
+- 可选适配 Mod Config Menu Pure，可独立调整 HUD 字号上限、F3 原生 11/22/33px 字号、HUD 位置和追踪目标。
 
 ## 中文字体
 
-Mod 使用由 LanaPixel 生成的自带中文位图字体；LanaPixel 缺少的字符会在生成时由 Source Han Sans SC 补齐。F3 菜单分别提供原生 8、10、12px 字库并以 1:1 比例绘制，避免字形自身因分数缩放产生额外模糊。字库只包含当前界面和成就条件实际使用的字形，生成器会拒绝任何两套源字体都无法显示的字符。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。两套字体均遵循 SIL Open Font License 1.1，许可证分别位于 `resources/font/LANAPIXEL_OFL.txt` 和 `resources/font/OFL.txt`。
+Mod 使用由 LanaPixel 生成的自带中文位图字体；LanaPixel 缺少的字符会在生成时由 Source Han Sans SC 补齐。F3 菜单以 LanaPixel 的 11px 设计栅格为基准，提供原生 11/22/33px 字库并全部按 1:1 绘制；22/33px 的 LanaPixel 主字形是 11px 二值硬边字形的精确 2×/3× 最近邻放大，中文后备字形则保留灰阶抗锯齿以避免断笔。所选字号是上限：面板会先增高、再加宽，仍不足时自动降到较小档位，且不会覆盖保存的选择。字库只包含当前界面和成就条件实际使用的字形，生成器会拒绝任何两套源字体都无法显示的字符。中文显示不依赖 EID、中文补丁或游戏语言资源包，因此同时适配《忏悔》和《忏悔+》。两套字体均遵循 SIL Open Font License 1.1，许可证分别位于 `resources/font/LANAPIXEL_OFL.txt` 和 `resources/font/OFL.txt`。
 
 ## 安装
 
@@ -54,6 +54,6 @@ F3 原生字库只能避免字形纹理自身的分数缩放；游戏的全局 F
 - `npm.cmd test`：运行零依赖合约测试。
 - `一键导入成就.cmd`：Windows 一键发现、备份并导入全部有效存档槽。
 - `tools/save_importer/index.html`：离线解析游戏存档并生成 Achievement Tracker 导入文件。
-- `tools/generate_font.py`：从 Lua 文本重新生成精简字体，并输出每个后备字形的来源清单。先运行 `npm.cmd install`，再使用 `--font node_modules/@fontpkg/lana-pixel/LanaPixel.ttf --fallback-font node_modules/@fontpkg/source-han-sans-sc/SourceHanSansSC-Regular.otf --fallback-size 15 --name achievement_lanapixel`；新增文案后应重新生成并运行测试。
+- `tools/generate_font.py`：从 Lua 文本重新生成精简字体，并输出每个后备字形的来源清单。先运行 `npm.cmd install`；HUD 字库继续使用普通生成参数，F3 字库则使用 `--pixel-base-size 11`，并依次用 `--size 11/22/33` 与 `--fallback-size 10/20/30` 生成三档资源。新增文案后应重新生成并运行测试。
 - `tools/generate_reward_type_icons.py`：重新生成非标准奖励的五格像素图集。
 - 堕化角色路线的游戏内回归应覆盖：正确/错误及多人角色、饰品跨房间提醒、头目房/宝箱房放置与拾回、续局、回溯对应楼层取碎片、持有红钥匙直接到家，以及中英文窄分辨率 HUD。

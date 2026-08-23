@@ -329,7 +329,7 @@ function Read-ModSaveObject {
 
 function Merge-ModSaveObject {
     param($Existing, $Snapshot)
-    $Existing | Add-Member -MemberType NoteProperty -Name schemaVersion -Value 6 -Force
+    $Existing | Add-Member -MemberType NoteProperty -Name schemaVersion -Value 7 -Force
     $import = [pscustomobject][ordered]@{
         formatVersion = 1
         saveSlot = [int]$Snapshot.saveSlot
@@ -348,7 +348,7 @@ function ConvertTo-ModSaveJson {
 function Assert-StagedModSave {
     param([string] $Path, $ExpectedSnapshot)
     $data = Read-ModSaveObject -Path $Path -ExpectedSlot $ExpectedSnapshot.saveSlot
-    if ([int]$data.schemaVersion -ne 6 -or [int]$data.achievementImport.formatVersion -ne 1 -or
+    if ([int]$data.schemaVersion -ne 7 -or [int]$data.achievementImport.formatVersion -ne 1 -or
         [int]$data.achievementImport.achievementCount -ne [int]$ExpectedSnapshot.achievementCount) {
         throw "暂存 Mod 存档复验失败：$Path"
     }

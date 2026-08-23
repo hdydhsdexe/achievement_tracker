@@ -39,12 +39,14 @@ function fitF3Layout(requestedPixels, language, screenWidth, screenHeight, rows,
   for (let tierIndex = requestedIndex; tierIndex >= 0; tierIndex -= 1) {
     const pixelSize = F3_PIXEL_TIERS[tierIndex];
     const font = fonts.get(pixelSize);
+    const gridTop = 10 + font.lineHeight * 2;
+    const footerReserve = font.lineHeight + 6;
     const measure = (panelWidth) => {
       const contentWidth = panelWidth - 24;
       const maxDetailLines = Math.max(...rows.map((row) =>
         wrap(row[language], contentWidth, font.records).length));
-      const requiredHeight = 42 + font.lineHeight + 4
-        + (maxDetailLines + 1) * font.lineHeight + 18;
+      const requiredHeight = gridTop + font.lineHeight + 4
+        + (maxDetailLines + 1) * font.lineHeight + footerReserve;
       return {contentWidth, maxDetailLines, requiredHeight};
     };
 
@@ -61,13 +63,13 @@ function fitF3Layout(requestedPixels, language, screenWidth, screenHeight, rows,
       || panelWidth > maximumPanelWidth) continue;
 
     const panelHeight = Math.max(basePanelHeight, measured.requiredHeight);
-    const contentBottom = panelHeight - 18;
+    const contentBottom = panelHeight - footerReserve;
     const detailHeight = (measured.maxDetailLines + 1) * font.lineHeight;
     const gridRows = Math.max(1, Math.min(9,
-      Math.floor((contentBottom - 42 - 4 - detailHeight) / font.lineHeight)));
+      Math.floor((contentBottom - gridTop - 4 - detailHeight) / font.lineHeight)));
     return {pixelSize, font, panelWidth, panelHeight, contentBottom,
       contentWidth: measured.contentWidth, maxDetailLines: measured.maxDetailLines,
-      gridRows};
+      gridRows, gridTop, footerReserve};
   }
   throw new Error("11px must fit the supported minimum resolution");
 }
@@ -159,7 +161,7 @@ test("every catalog condition fits after height-first panel growth and native-ti
         assert.ok(layout.gridRows >= 1,
           `${screenWidth}x${screenHeight} ${language} requested ${requestedPixels}px must retain a grid row`);
         const detailHeight = (layout.maxDetailLines + 1) * layout.font.lineHeight;
-        const detailBottom = 42 + layout.gridRows * layout.font.lineHeight
+        const detailBottom = layout.gridTop + layout.gridRows * layout.font.lineHeight
           + 4 + detailHeight;
         assert.ok(detailBottom <= layout.contentBottom,
           `${screenWidth}x${screenHeight} ${language} effective ${layout.pixelSize}px overlaps footer`);
@@ -169,10 +171,10 @@ test("every catalog condition fits after height-first panel growth and native-ti
 
   for (const requestedPixels of [22, 33])
     assert.equal(fitF3Layout(requestedPixels, "en", 320, 180, rows, fonts).pixelSize, 11);
-  assert.equal(fitF3Layout(22, "en", 480, 270, rows, fonts).pixelSize, 22);
+  assert.equal(fitF3Layout(22, "en", 640, 360, rows, fonts).pixelSize, 22);
   assert.equal(fitF3Layout(33, "en", 854, 480, rows, fonts).pixelSize, 33);
   const tallFirst = fitF3Layout(22, "en", 640, 360, rows, fonts);
-  assert.equal(tallFirst.panelWidth, 340, "height must grow before width");
+  assert.ok(tallFirst.panelWidth >= 340, "width may grow only after height is exhausted");
   assert.ok(tallFirst.panelHeight > 250);
 });
 

@@ -17,14 +17,11 @@ local HOLD_REPEAT_MS = 90
 local PANEL_WIDTH_RATIO = 0.64
 local MIN_PANEL_WIDTH = 270
 local MAX_PANEL_WIDTH = 340
-local MAX_PANEL_HEIGHT = 250
-local FOOTER_RESERVE = 18
+local BASE_PANEL_HEIGHT = 250
+local SCREEN_VERTICAL_MARGIN = 6
+local SCREEN_HORIZONTAL_MARGIN = 12
 local DETAIL_GAP = 4
-local MENU_FONT_PIXELS = {
-  [8]={ title=10, body=8, label=8, small=8 },
-  [10]={ title=12, body=10, label=8, small=8 },
-  [12]={ title=12, body=12, label=10, small=8 }
-}
+local F3_FONT_PIXELS = { 11, 22, 33 }
 local detailLineCache = {}
 local SHOOT_KEYS = {
   [ButtonAction.ACTION_SHOOTLEFT]=Keyboard.KEY_LEFT,
@@ -56,34 +53,69 @@ local function maximumDetailLines(language, contentWidth, bodyPixels)
   return maximum
 end
 
-local function menuLayout(state)
-  local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
-  local panelWidth = math.min(MAX_PANEL_WIDTH,
-    math.max(MIN_PANEL_WIDTH, math.floor(screenWidth * PANEL_WIDTH_RATIO)))
-  panelWidth = math.min(panelWidth, screenWidth - 24)
-  local panelHeight = math.min(MAX_PANEL_HEIGHT, screenHeight - 12)
-  local panelX = math.floor((screenWidth - panelWidth) / 2)
-  local panelY = math.floor((screenHeight - panelHeight) / 2)
-  local x, top = panelX + 12, panelY + 10
-  local contentWidth = panelWidth - 24
-  local language = Text.resolveLanguage(state.settings.language)
-  local fontPixels = state.settings.f3 and state.settings.f3.fontPixels or 10
-  local fonts = MENU_FONT_PIXELS[fontPixels] or MENU_FONT_PIXELS[10]
-  local lineHeight = Text.lineHeightPixels(fonts.body)
-  local gridTop = top + 32
-  local contentBottom = panelY + panelHeight - FOOTER_RESERVE
-  local maxDetailLines = maximumDetailLines(language, contentWidth, fonts.body)
+local function measureMenuLayout(language, panelWidth, fontPixels)
+  local contentWidth = panelWidth - SCREEN_HORIZONTAL_MARGIN * 2
+  local lineHeight = Text.lineHeightPixels(fontPixels)
+  local gridTop = 10 + lineHeight * 2
+  local footerReserve = lineHeight + 6
+  local maxDetailLines = maximumDetailLines(language, contentWidth, fontPixels)
   local detailHeight = (maxDetailLines + 1) * lineHeight
-  local rows = math.max(1, math.min(MAX_ROWS,
-    math.floor((contentBottom - gridTop - DETAIL_GAP - detailHeight) / lineHeight)))
+  local requiredHeight = gridTop + lineHeight + DETAIL_GAP + detailHeight + footerReserve
   return {
-    panelWidth=panelWidth, panelHeight=panelHeight, panelX=panelX, panelY=panelY,
-    x=x, top=top, contentWidth=contentWidth,
-    columnWidth=math.floor(contentWidth / COLUMNS), gridTop=gridTop,
-    contentBottom=contentBottom, maxDetailLines=maxDetailLines,
-    rows=rows, pageSize=rows * COLUMNS, lineHeight=lineHeight,
-    detailY=gridTop + rows * lineHeight + DETAIL_GAP, fonts=fonts
+    contentWidth=contentWidth, lineHeight=lineHeight, gridTop=gridTop,
+    footerReserve=footerReserve, maxDetailLines=maxDetailLines,
+    detailHeight=detailHeight, requiredHeight=requiredHeight
   }
+end
+
+local function fitMenuLayout(state)
+  local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
+  local maximumPanelWidth = screenWidth - SCREEN_HORIZONTAL_MARGIN * 2
+  local maximumPanelHeight = screenHeight - SCREEN_VERTICAL_MARGIN * 2
+  local basePanelWidth = math.min(MAX_PANEL_WIDTH,
+    math.max(MIN_PANEL_WIDTH, math.floor(screenWidth * PANEL_WIDTH_RATIO)))
+  basePanelWidth = math.min(basePanelWidth, maximumPanelWidth)
+  local basePanelHeight = math.min(BASE_PANEL_HEIGHT, maximumPanelHeight)
+  local language = Text.resolveLanguage(state.settings.language)
+  local requestedPixels = state.settings.f3 and state.settings.f3.fontPixels or 11
+  local requestedIndex = 1
+  for index, pixels in ipairs(F3_FONT_PIXELS) do
+    if pixels == requestedPixels then requestedIndex = index end
+  end
+
+  for tierIndex = requestedIndex, 1, -1 do
+    local fontPixels = F3_FONT_PIXELS[tierIndex]
+    local panelWidth = basePanelWidth
+    local measured = measureMenuLayout(language, panelWidth, fontPixels)
+    if measured.requiredHeight > maximumPanelHeight then
+      for panelWidth = basePanelWidth + 1, maximumPanelWidth do
+        measured = measureMenuLayout(language, panelWidth, fontPixels)
+        if measured.requiredHeight <= maximumPanelHeight then break end
+      end
+    end
+    if measured.requiredHeight <= maximumPanelHeight and panelWidth <= maximumPanelWidth then
+      local panelHeight = math.max(basePanelHeight, measured.requiredHeight)
+      local panelX = math.floor((screenWidth - panelWidth) / 2)
+      local panelY = math.floor((screenHeight - panelHeight) / 2)
+      local x, top = panelX + SCREEN_HORIZONTAL_MARGIN, panelY + 10
+      local gridTop = panelY + measured.gridTop
+      local contentBottom = panelY + panelHeight - measured.footerReserve
+      local rows = math.max(1, math.min(MAX_ROWS, math.floor(
+        (contentBottom - gridTop - DETAIL_GAP - measured.detailHeight)
+          / measured.lineHeight)))
+      return {
+        panelWidth=panelWidth, panelHeight=panelHeight, panelX=panelX, panelY=panelY,
+        x=x, top=top, contentWidth=measured.contentWidth,
+        columnWidth=math.floor(measured.contentWidth / COLUMNS), gridTop=gridTop,
+        contentBottom=contentBottom, maxDetailLines=measured.maxDetailLines,
+        rows=rows, pageSize=rows * COLUMNS, lineHeight=measured.lineHeight,
+        detailY=gridTop + rows * measured.lineHeight + DETAIL_GAP,
+        footerReserve=measured.footerReserve, fontPixels=fontPixels
+      }
+    end
+  end
+
+  error("F3 11px layout does not fit the supported screen size")
 end
 
 function Menu.new()
@@ -117,7 +149,7 @@ local function matchesFilter(goal, filter)
 end
 
 local function refreshGoals(state, context, preserveSelection)
-  local layout = menuLayout(state)
+  local layout = fitMenuLayout(state)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
@@ -231,7 +263,7 @@ local function updateMouseSelection(state)
   local position = Input.GetMousePosition(false)
   local moved = state.menu.mouseX ~= position.X or state.menu.mouseY ~= position.Y
   state.menu.mouseX, state.menu.mouseY = position.X, position.Y
-  local index = mouseGoalIndex(state, position, menuLayout(state))
+  local index = mouseGoalIndex(state, position, fitMenuLayout(state))
   if moved and index then state.menu.cursor = index end
   local mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
   local clicked = mouseDown and not state.menu.mouseDown
@@ -322,7 +354,7 @@ function Menu.shouldBlockInput(state, entity, inputHook, buttonAction)
     or buttonAction == ButtonAction.ACTION_MAP then return true end
   local shootKey = SHOOT_KEYS[buttonAction]
   if shootKey and (Input.IsButtonPressed(shootKey, 0)
-    or mouseInsidePanel(Input.GetMousePosition(false), menuLayout(state))) then
+    or mouseInsidePanel(Input.GetMousePosition(false), fitMenuLayout(state))) then
     return true
   end
   if buttonAction == ButtonAction.ACTION_ITEM
@@ -377,7 +409,7 @@ function Menu.update(state, save)
   end
   local goals = state.menu.goals or {}
   local count = #goals
-  local layout = menuLayout(state)
+  local layout = fitMenuLayout(state)
   local keyboardActivated = false
   if count > 0 then
     if not state.menu.searchFocused then
@@ -451,10 +483,10 @@ function Menu.render(state)
   local labels = Text.labels(language)
   local context = state.menu.relevanceContext
     or CharacterRelevance.buildContext(Game(), Catalog.goals)
-  local layout = menuLayout(state)
+  local layout = fitMenuLayout(state)
   local panelWidth, panelHeight = layout.panelWidth, layout.panelHeight
   local panelX, panelY = layout.panelX, layout.panelY
-  local fonts = layout.fonts
+  local fontPixels = layout.fontPixels
   local x, top = layout.x, layout.top
   local contentWidth, columnWidth = layout.contentWidth, layout.columnWidth
   local gridTop = layout.gridTop
@@ -465,18 +497,18 @@ function Menu.render(state)
     title = labels.searchPrompt .. ": " .. state.menu.query
       .. (state.menu.searchFocused and "_" or "")
   end
-  Text.drawPixels(Text.ellipsizePixels(title, contentWidth, fonts.title), panelX, top,
-    fonts.title, DARK_INK,
+  Text.drawPixels(Text.ellipsizePixels(title, contentWidth, fontPixels), panelX, top,
+    fontPixels, DARK_INK,
     language, panelWidth, true)
   local filterStatus = filterLine(labels, state.menu.filterIndex)
   local filterHint = state.menu.query ~= ""
     and string.format(labels.searchResults, #goals) or labels.filterHint
-  local hintWidth = Text.widthPixels(filterHint, fonts.small)
+  local hintWidth = Text.widthPixels(filterHint, fontPixels)
   Text.drawPixels(Text.ellipsizePixels(filterStatus,
-      math.max(20, contentWidth - hintWidth - 8), fonts.label), x, top + 16,
-    fonts.label, INK, language)
-  Text.drawPixels(filterHint, panelX + panelWidth - 12 - hintWidth, top + 16,
-    fonts.small, MUTED, language)
+      math.max(20, contentWidth - hintWidth - 8), fontPixels), x, top + layout.lineHeight,
+    fontPixels, INK, language)
+  Text.drawPixels(filterHint, panelX + panelWidth - 12 - hintWidth, top + layout.lineHeight,
+    fontPixels, MUTED, language)
 
   local last = math.min(#goals, state.menu.offset + layout.pageSize - 1)
   for index = state.menu.offset, last do
@@ -502,12 +534,12 @@ function Menu.render(state)
     local status = completed and "+" or (not completable and "!"
       or (convertible and "~" or "?"))
     local name = Text.ellipsizePixels(Catalog.text(goal, language).name,
-      columnWidth - 31, fonts.body)
+      columnWidth - 31, fontPixels)
     local color = dimmed and DIMMED_INK
       or (completed and STAMP_INK
         or (convertible and CONVERTIBLE_INK or (selected and DARK_INK or INK)))
     Text.drawPixels(marker .. tracking .. status .. " " .. name,
-      tileX + 13, tileY, fonts.body, color, language)
+      tileX + 13, tileY, fontPixels, color, language)
   end
 
   local detailY = layout.detailY
@@ -529,39 +561,39 @@ function Menu.render(state)
       or (convertible and CONVERTIBLE_INK or MUTED)
     local leftWidth = math.floor(contentWidth * 0.43)
     local leftHeader = labels.completionCondition .. " · " .. statusLabel
-    Text.drawPixels(Text.ellipsizePixels(leftHeader, leftWidth - 6, fonts.label),
-      x, detailY, fonts.label, statusInk, language)
+    Text.drawPixels(Text.ellipsizePixels(leftHeader, leftWidth - 6, fontPixels),
+      x, detailY, fontPixels, statusInk, language)
 
     local rewardX = x + leftWidth
     local rewardWidth = contentWidth - leftWidth
     local meta = labels.unlockReward .. " " .. rewardMeta(reward, labels)
     local separator = " · "
     local nameWidth = math.max(0, rewardWidth
-      - Text.widthPixels(meta .. separator, fonts.small))
+      - Text.widthPixels(meta .. separator, fontPixels))
     local summary = meta
-    if nameWidth > Text.widthPixels("...", fonts.small) then
+    if nameWidth > Text.widthPixels("...", fontPixels) then
       summary = meta .. separator
-        .. Text.ellipsizePixels(rewardName(selected, language), nameWidth, fonts.small)
+        .. Text.ellipsizePixels(rewardName(selected, language), nameWidth, fontPixels)
     end
-    Text.drawPixels(Text.ellipsizePixels(summary, rewardWidth, fonts.small),
-      rewardX, detailY, fonts.small, MUTED, language)
+    Text.drawPixels(Text.ellipsizePixels(summary, rewardWidth, fontPixels),
+      rewardX, detailY, fontPixels, MUTED, language)
 
     local detailLines = Text.wrapPixels(Catalog.text(selected, language).detail,
-      contentWidth, fonts.body)
+      contentWidth, fontPixels)
     for lineIndex, line in ipairs(detailLines) do
       Text.drawPixels(line, x, detailY + lineIndex * layout.lineHeight,
-        fonts.body, detailInk, language)
+        fontPixels, detailInk, language)
     end
   else
     local emptyLabel = state.menu.query ~= "" and labels.emptySearch or labels.emptyFilter
     Text.drawPixels(emptyLabel, x, detailY + layout.lineHeight,
-      fonts.body, MUTED, language)
+      fontPixels, MUTED, language)
   end
 
   local page = #goals > 0
     and math.floor((state.menu.cursor - 1) / layout.pageSize) + 1 or 1
   local pages = math.max(1, math.ceil(#goals / layout.pageSize))
-  local footerY = panelY + panelHeight - 14
+  local footerY = panelY + panelHeight - layout.footerReserve + 3
   local controls = state.menu.searchFocused and labels.controlsSearch or labels.controlsMenu
   if Menu.isMultiplayer(Game()) then
     controls = labels.multiplayerRealtime
@@ -570,12 +602,12 @@ function Menu.render(state)
   end
   local statistics = string.format("%d/%d %s  |  %d/%d", #state.tracker.ids,
     state.tracker.max, labels.tracked, page, pages)
-  local statisticsWidth = Text.widthPixels(statistics, fonts.small)
+  local statisticsWidth = Text.widthPixels(statistics, fontPixels)
   Text.drawPixels(Text.ellipsizePixels(controls,
-      math.max(20, contentWidth - statisticsWidth - 8), fonts.small),
-    x, footerY, fonts.small, MUTED, language)
+      math.max(20, contentWidth - statisticsWidth - 8), fontPixels),
+    x, footerY, fontPixels, MUTED, language)
   Text.drawPixels(statistics, panelX + panelWidth - 12 - statisticsWidth,
-    footerY, fonts.small, STAMP_INK, language)
+    footerY, fontPixels, STAMP_INK, language)
 end
 
 return Menu

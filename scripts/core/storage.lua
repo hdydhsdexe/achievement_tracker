@@ -2,7 +2,7 @@ local json = require("json")
 local Storage = {}
 local MAX_ACHIEVEMENT_COUNT = 16384
 local MAX_MOD_SAVE_DATA_BYTES = 4 * 1024 * 1024
-local F3_FONT_PIXELS = { [8]=true, [10]=true, [12]=true }
+local F3_FONT_PIXELS = { [11]=true, [22]=true, [33]=true }
 local COMPLETION_MARKS = {
   MOMS_HEART=true, ISAAC=true, SATAN=true, BOSS_RUSH=true, BLUE_BABY=true,
   LAMB=true, MEGA_SATAN=true, ULTRA_GREED=true, HUSH=true, DELIRIUM=true,
@@ -70,24 +70,22 @@ local function normalizeCompletionMarks(snapshot)
 end
 
 local function migrateF3FontPixels(decoded)
-  if type(decoded.f3) == "table" and F3_FONT_PIXELS[decoded.f3.fontPixels] then
+  if decoded.schemaVersion == 6 then return 11 end
+  if decoded.schemaVersion == 7 and type(decoded.f3) == "table"
+    and F3_FONT_PIXELS[decoded.f3.fontPixels] then
     return decoded.f3.fontPixels
   end
-  local oldScale = type(decoded.hud) == "table" and tonumber(decoded.hud.fontScale) or 1
-  local oldPixels = math.max(8, math.min(11, math.floor((oldScale or 1) * 10 + 0.5)))
-  if oldPixels == 8 then return 8 end
-  if oldPixels == 11 then return 12 end
-  return 10
+  return 11
 end
 
 local function defaults()
   return {
-    schemaVersion = 6,
+    schemaVersion = 7,
     language = "zh",
     maxTracked = 3,
     tracked = {},
     hud = { x = 18, y = 82, fontScale = 1, visible = true },
-    f3 = { fontPixels = 10 },
+    f3 = { fontPixels = 11 },
     manuallyCompleted = {},
     observedCompleted = {},
     achievementImport = nil,
@@ -122,9 +120,9 @@ function Storage.load(mod)
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 6
-  data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 10 }
-  if not F3_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 10 end
+  data.schemaVersion = 7
+  data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 11 }
+  if not F3_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 11 end
   data.achievementImport = normalizeAchievementImport(data.achievementImport)
   data.completionMarks = normalizeCompletionMarks(data.completionMarks)
   mod:SaveData(json.encode(data))

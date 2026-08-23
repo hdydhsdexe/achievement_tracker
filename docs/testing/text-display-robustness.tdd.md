@@ -2,10 +2,11 @@
 
 ## Scope
 
-- Native unsmoothed F3 fonts at 8, 10, and 12 pixels.
-- Resolution-, language-, and font-aware F3 rows and pagination.
+- Native unsmoothed F3 fonts at 11, 22, and 33 pixels, all drawn at 1:1.
+- Binary 11px LanaPixel glyphs with exact nearest-neighbor 2x/3x variants, plus antialiased Source Han fallback glyphs.
+- Height-first panel expansion, native-tier fallback, and resolution-, language-, and font-aware pagination.
 - Full-width wrapped bilingual achievement conditions and compact reward summaries.
-- Independent HUD/F3 settings, schema 5 to 6 migration, HUD auto-fit, and safe bounds.
+- Independent HUD/F3 settings, schema 6 to 7 migration, HUD auto-fit, and safe bounds.
 - Consistent 0.7.2 metadata and Workshop copy.
 
 ## RED
@@ -13,8 +14,8 @@
 The focused regression suite was run before implementation:
 
 - Command: `node --test tests/text-layout.test.js tests/font-assets.test.js tests/mod-contract.test.js tests/achievement-import-contract.test.js tests/save-importer.test.js`
-- Result: 84 tests, 70 passed, 14 failed.
-- Failures covered the absent schema 6 migration, F3 font assets and APIs, dynamic pagination/detail layout, HUD fitting, separate MCM controls, importer schema, and 0.7.2 release metadata.
+- Result: 85 tests, 74 passed, 11 failed.
+- Failures covered the absent schema 7 migration, native integer-multiple F3 font assets, adaptive panel growth and tier fallback, importer schema, and updated 0.7.2 release documentation.
 
 ## GREEN
 
@@ -33,5 +34,5 @@ the longest English condition (#324), the representative long Chinese condition
 Automated tests cannot reproduce the game's final display pipeline. Before Workshop
 publication, verify Chinese and English, all three F3 sizes, HUD 0.5/1/2x, windowed
 and fullscreen modes, and the game's Filter setting on representative hardware.
-The native F3 atlases prevent fractional scaling of the glyph textures themselves;
+The native 11/22/33px F3 atlases prevent fractional scaling of LanaPixel glyph textures themselves;
 they cannot bypass filtering applied later by the game, graphics driver, or display.

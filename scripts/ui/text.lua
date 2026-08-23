@@ -2,7 +2,7 @@ local Text = {}
 local bundledFont = Font()
 local FONT_NATIVE_PIXELS = 16
 local pixelFonts = {}
-local PIXEL_FONT_SIZES = { 8, 10, 12 }
+local PIXEL_FONT_SIZES = { 11, 22, 33 }
 
 local function roundPixel(value)
   if value >= 0 then return math.floor(value + 0.5) end
@@ -140,7 +140,7 @@ end
 local function nativePixelSize(pixelSize)
   local value = Text.pixel(pixelSize)
   if pixelFonts[value] then return value end
-  return 10
+  return 11
 end
 
 function Text.drawPixels(value, x, y, pixelSize, color, language, boxWidth, center)
@@ -155,7 +155,7 @@ end
 
 function Text.lineHeightPixels(pixelSize)
   local size = nativePixelSize(pixelSize)
-  return size == 8 and 13 or (size == 12 and 17 or 15)
+  return size == 33 and 48 or (size == 22 and 32 or 16)
 end
 
 local function glyphs(value)
