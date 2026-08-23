@@ -11,7 +11,7 @@
     "size": 30,
     "rendering": "antialiased"
   },
-  "glyphCount": 1175,
+  "glyphCount": 1179,
   "fallbackGlyphs": [
     {
       "character": "†",
@@ -20,6 +20,10 @@
     {
       "character": "∞",
       "codepoint": "U+221E"
+    },
+    {
+      "character": "≥",
+      "codepoint": "U+2265"
     },
     {
       "character": "嗝",

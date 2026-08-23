@@ -6,11 +6,10 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v9 adds bounded HUD line spacing and preserves native tiers", () => {
+test("storage schema v10 adds bounded long-term progress imports and preserves native tiers", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*9/);
-  assert.doesNotMatch(storage, /schemaVersion\s*=\s*8/);
+  assert.match(storage, /schemaVersion\s*=\s*10/);
   assert.match(storage, /hud\s*=\s*\{[^}]*fontPixels\s*=\s*11[^}]*lineSpacingPixels\s*=\s*0/);
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
   assert.match(storage, /local NATIVE_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
@@ -27,7 +26,7 @@ test("storage schema v9 adds bounded HUD line spacing and preserves native tiers
   assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /local function migrateF3FontPixels/);
   assert.match(storage, /schemaVersion\s*>=\s*7[\s\S]*?return decoded\.f3\.fontPixels/,
-    "schema 7 F3 native tiers must survive the schema 9 upgrade");
+    "schema 7 F3 native tiers must survive the schema 10 upgrade");
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);
@@ -43,6 +42,12 @@ test("storage schema v9 adds bounded HUD line spacing and preserves native tiers
   assert.match(storage, /#raw\s*>\s*MAX_MOD_SAVE_DATA_BYTES/);
   assert.match(storage, /achievementImport\s*=\s*normalizeAchievementImport\(decoded\.achievementImport\)/);
   assert.match(storage, /data\.achievementImport\s*=\s*normalizeAchievementImport\(data\.achievementImport\)/);
+  assert.match(storage, /MAX_EVENT_COUNTER_COUNT\s*=\s*4096/);
+  assert.match(storage, /local function normalizeProgressImport\(snapshot\)/);
+  assert.match(storage, /snapshot\.eventCounterCount[\s\S]*?MAX_EVENT_COUNTER_COUNT/);
+  assert.match(storage, /count\s*~=\s*snapshot\.eventCounterCount/);
+  assert.match(storage, /progressImport\s*=\s*normalizeProgressImport\(decoded\.progressImport\)/);
+  assert.match(storage, /progressObserved\s*=\s*normalizeProgressObserved\(decoded\.progressObserved\)/);
   assert.match(storage, /local function normalizeCompletionMarks\(snapshot\)/);
   assert.match(storage, /completionMarks\s*=\s*normalizeCompletionMarks\(decoded\.completionMarks\)/);
   assert.match(storage, /data\.completionMarks\s*=\s*normalizeCompletionMarks\(data\.completionMarks\)/);

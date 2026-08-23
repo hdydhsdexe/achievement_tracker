@@ -1,6 +1,8 @@
 local json = require("json")
 local Storage = {}
 local MAX_ACHIEVEMENT_COUNT = 16384
+local MAX_EVENT_COUNTER_COUNT = 4096
+local MAX_EVENT_COUNTER_VALUE = 4294967295
 local MAX_MOD_SAVE_DATA_BYTES = 4 * 1024 * 1024
 local NATIVE_FONT_PIXELS = { [11]=true, [22]=true, [33]=true }
 local COMPLETION_MARKS = {
@@ -44,6 +46,42 @@ local function normalizeAchievementImport(snapshot)
     achievementCount = snapshot.achievementCount,
     unlockedIds = normalizedIds
   }
+end
+
+local function normalizeProgressImport(snapshot)
+  if type(snapshot) ~= "table" or snapshot.formatVersion ~= 1 then return nil end
+  if not isInteger(snapshot.saveSlot) or snapshot.saveSlot < 1 or snapshot.saveSlot > 3 then return nil end
+  if not isInteger(snapshot.eventCounterCount) or snapshot.eventCounterCount < 1
+    or snapshot.eventCounterCount > MAX_EVENT_COUNTER_COUNT then return nil end
+  if type(snapshot.values) ~= "table" then return nil end
+  local values, count = {}, 0
+  for index, value in pairs(snapshot.values) do
+    if not isInteger(index) or index < 1 or index > snapshot.eventCounterCount then return nil end
+    if not isInteger(value) or value < 0 or value > MAX_EVENT_COUNTER_VALUE then return nil end
+    values[index], count = value, count + 1
+  end
+  if count ~= snapshot.eventCounterCount then return nil end
+  return {
+    formatVersion=1, saveSlot=snapshot.saveSlot,
+    eventCounterCount=snapshot.eventCounterCount, values=values,
+    importedAt=type(snapshot.importedAt) == "string" and string.sub(snapshot.importedAt, 1, 64) or nil
+  }
+end
+
+local function normalizeProgressObserved(snapshot)
+  local normalized = { eventCounters={} }
+  if type(snapshot) ~= "table" or type(snapshot.eventCounters) ~= "table" then return normalized end
+  local count = 0
+  for key, value in pairs(snapshot.eventCounters) do
+    local eventId = tonumber(key)
+    if count < MAX_EVENT_COUNTER_COUNT and isInteger(eventId) and eventId >= 0
+      and eventId < MAX_EVENT_COUNTER_COUNT and isInteger(value) and value >= 0
+      and value <= MAX_EVENT_COUNTER_VALUE then
+      normalized.eventCounters[tostring(eventId)] = value
+      count = count + 1
+    end
+  end
+  return normalized
 end
 
 local function normalizeCompletionMarks(snapshot)
@@ -98,7 +136,7 @@ end
 
 local function defaults()
   return {
-    schemaVersion = 9,
+    schemaVersion = 10,
     language = "zh",
     maxTracked = 3,
     tracked = {},
@@ -107,6 +145,8 @@ local function defaults()
     manuallyCompleted = {},
     observedCompleted = {},
     achievementImport = nil,
+    progressImport = nil,
+    progressObserved = { eventCounters={} },
     completionMarks = {},
     activeRun = nil
   }
@@ -134,12 +174,19 @@ function Storage.load(mod)
   if type(decoded.observedCompleted) == "table" then data.observedCompleted = decoded.observedCompleted end
   data.completionMarks = normalizeCompletionMarks(decoded.completionMarks)
   data.achievementImport = normalizeAchievementImport(decoded.achievementImport)
+  data.progressImport = normalizeProgressImport(decoded.progressImport)
+  data.progressObserved = normalizeProgressObserved(decoded.progressObserved)
+  if data.achievementImport and data.progressImport
+    and data.achievementImport.saveSlot ~= data.progressImport.saveSlot then
+    data.progressImport = nil
+    data.progressObserved = { eventCounters={} }
+  end
   if type(decoded.activeRun) == "table" then data.activeRun = decoded.activeRun end
   return data
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 9
+  data.schemaVersion = 10
   data.hud = type(data.hud) == "table" and data.hud
     or { x = 18, y = 82, fontPixels = 11, lineSpacingPixels = 0, visible = true }
   if not NATIVE_FONT_PIXELS[data.hud.fontPixels] then data.hud.fontPixels = 11 end
@@ -148,6 +195,8 @@ function Storage.save(mod, data)
   data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 11 }
   if not NATIVE_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 11 end
   data.achievementImport = normalizeAchievementImport(data.achievementImport)
+  data.progressImport = normalizeProgressImport(data.progressImport)
+  data.progressObserved = normalizeProgressObserved(data.progressObserved)
   data.completionMarks = normalizeCompletionMarks(data.completionMarks)
   mod:SaveData(json.encode(data))
 end

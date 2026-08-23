@@ -12,12 +12,15 @@
 
   const MAGIC = "ISAACNGSAVE09R  ";
   const HEADER_SIZE = 0x20;
+  const BLOCK_HEADER_SIZE = 12;
   const ACHIEVEMENT_BLOCK_TYPE = 1;
+  const EVENT_COUNTER_BLOCK_TYPE = 2;
   const MAX_BLOCK_SIZE = 1024 * 1024;
   const LIMITS = Object.freeze({
     maxPersistentFileBytes: 8 * 1024 * 1024,
     maxModSaveJsonChars: 2 * 1024 * 1024,
     maxAchievementCount: 16384,
+    maxEventCounterCount: 4096,
   });
 
   function asBytes(input) {
@@ -76,7 +79,30 @@
       }
     }
 
-    return { achievementCount, unlockedIds };
+    const eventHeaderOffset = HEADER_SIZE + blockSize;
+    if (eventHeaderOffset > bytes.byteLength - BLOCK_HEADER_SIZE) {
+      throw new Error("Save file is truncated before the event counter block.");
+    }
+    const eventBlockType = view.getUint32(eventHeaderOffset, true);
+    const eventBlockSize = view.getUint32(eventHeaderOffset + 4, true);
+    const eventCounterCount = view.getUint32(eventHeaderOffset + 8, true);
+    if (eventBlockType !== EVENT_COUNTER_BLOCK_TYPE) {
+      throw new Error(`The second block is not an event counter block (block type ${eventBlockType}).`);
+    }
+    if (eventCounterCount < 1 || eventCounterCount > LIMITS.maxEventCounterCount
+      || eventBlockSize !== eventCounterCount * 4 || eventBlockSize > MAX_BLOCK_SIZE) {
+      throw new Error(`Invalid event counter block size ${eventBlockSize} for count ${eventCounterCount}.`);
+    }
+    const eventDataOffset = eventHeaderOffset + BLOCK_HEADER_SIZE;
+    if (eventBlockSize > bytes.byteLength - eventDataOffset) {
+      throw new Error("Save file is truncated inside the event counter block.");
+    }
+    const eventCounters = [];
+    for (let eventId = 0; eventId < eventCounterCount; eventId += 1) {
+      eventCounters.push(view.getUint32(eventDataOffset + eventId * 4, true));
+    }
+
+    return { achievementCount, unlockedIds, eventCounterCount, eventCounters };
   }
 
   function inferPersistentSaveSlot(fileName) {
@@ -128,11 +154,28 @@
     }
     unlockedIds.sort((left, right) => left - right);
 
+    if (!Number.isInteger(snapshot.eventCounterCount) || snapshot.eventCounterCount < 1
+      || snapshot.eventCounterCount > LIMITS.maxEventCounterCount) {
+      throw new Error("Event counter count must be a positive supported integer.");
+    }
+    if (!Array.isArray(snapshot.eventCounters)
+      || snapshot.eventCounters.length !== snapshot.eventCounterCount) {
+      throw new Error("Event counter array must be continuous and match its declared count.");
+    }
+    const eventCounters = snapshot.eventCounters.map((value, eventId) => {
+      if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+        throw new Error(`Invalid event counter ${eventId}: ${String(value)}.`);
+      }
+      return value;
+    });
+
     return {
       formatVersion: 1,
       saveSlot: snapshot.saveSlot,
       achievementCount: snapshot.achievementCount,
       unlockedIds,
+      eventCounterCount: snapshot.eventCounterCount,
+      eventCounters,
     };
   }
 
@@ -151,17 +194,36 @@
     if (prior && Number.isInteger(prior.saveSlot) && prior.saveSlot !== saveSlot) {
       throw new Error(`Save slot conflict: existing import is slot ${prior.saveSlot}, selected save is slot ${saveSlot}.`);
     }
+    const priorProgress = existing.progressImport;
+    if (priorProgress && Number.isInteger(priorProgress.saveSlot)
+      && priorProgress.saveSlot !== saveSlot) {
+      throw new Error(`Save slot conflict: existing progress import is slot ${priorProgress.saveSlot}, selected save is slot ${saveSlot}.`);
+    }
   }
 
   function mergeModSaveData(existingData, snapshot) {
     const existing = validateExistingData(existingData);
-    const achievementImport = validateSnapshot(snapshot);
-    assertPriorImportSlot(existing, achievementImport.saveSlot);
+    const validated = validateSnapshot(snapshot);
+    const achievementImport = {
+      formatVersion: validated.formatVersion,
+      saveSlot: validated.saveSlot,
+      achievementCount: validated.achievementCount,
+      unlockedIds: validated.unlockedIds,
+    };
+    assertPriorImportSlot(existing, validated.saveSlot);
 
     return {
       ...existing,
-      schemaVersion: 9,
+      schemaVersion: 10,
       achievementImport,
+      progressImport: {
+        formatVersion: 1,
+        saveSlot: validated.saveSlot,
+        eventCounterCount: validated.eventCounterCount,
+        values: validated.eventCounters,
+        importedAt: new Date().toISOString(),
+      },
+      progressObserved: { eventCounters: {} },
     };
   }
 

@@ -2,6 +2,7 @@ local Catalog = require("scripts.data.goals")
 local CompletionMarks = require("scripts.core.completion_marks")
 local CharacterRelevance = require("scripts.core.character_relevance")
 local Rewards = require("scripts.core.rewards")
+local LongTermProgress = require("scripts.core.long_term_progress")
 local RewardIcons = require("scripts.ui.reward_icons")
 local Text = require("scripts.ui.text")
 local Tracker = require("scripts.core.tracker")
@@ -602,7 +603,9 @@ function Menu.render(state)
     Text.drawPixels(Text.ellipsizePixels(summary, rewardWidth, fontPixels),
       rewardX, detailY, fontPixels, MUTED, language)
 
-    local detailLines = Text.wrapPixels(Catalog.text(selected, language).detail,
+    local detail = Catalog.text(selected, language).detail
+      .. (LongTermProgress.format(selected, state, language) or "")
+    local detailLines = Text.wrapPixels(detail,
       contentWidth, fontPixels)
     for lineIndex, line in ipairs(detailLines) do
       Text.drawPixels(line, x, detailY + lineIndex * layout.lineHeight,

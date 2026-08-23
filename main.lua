@@ -8,6 +8,7 @@ local Evaluator = require("scripts.core.evaluator")
 local Hud = require("scripts.ui.hud")
 local Mcm = require("scripts.integrations.mcm")
 local Menu = require("scripts.ui.menu")
+local LongTermProgress = require("scripts.core.long_term_progress")
 local Sensors = require("scripts.core.sensors")
 local Routes = require("scripts.core.routes")
 local Storage = require("scripts.core.storage")
@@ -163,6 +164,9 @@ function AchievementTracker:onGameStarted(isContinued)
       "player", currentPlayer:GetPlayerType(), nil, State.settings.achievementImport)
   end
   refreshRouteFloor()
+  if LongTermProgress.canObserve(GameInstance) then
+    LongTermProgress.observeRoom(State.settings, State.run, GameInstance)
+  end
   Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
     "stage", GameInstance:GetLevel():GetStage(), nil, State.settings.achievementImport)
   Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
@@ -233,11 +237,23 @@ end
 function AchievementTracker:onPickupUpdate(pickup)
   if not State.settings then return end
   Sensors.onPickupUpdate(State.run, pickup)
+  if LongTermProgress.canObserve(GameInstance)
+    and LongTermProgress.observePickup(State.settings, State.run, pickup) then save() end
   if Routes.observePickup(State.run, pickup, GameInstance, trackingTaintedUnlock()) then save() end
 end
 
 function AchievementTracker:onUsePill(pillEffect)
   if State.settings then Sensors.onUsePill(State.run, pillEffect) end
+end
+
+function AchievementTracker:onUseCard(card)
+  if not State.settings or not LongTermProgress.canObserve(GameInstance) then return end
+  local changed = LongTermProgress.increment(State.settings, 196, 1)
+  local deathCard = Card and Card.CARD_DEATH or 13
+  if card == deathCard then
+    changed = LongTermProgress.increment(State.settings, 7, 1) or changed
+  end
+  if changed then save() end
 end
 
 local function observeAndSave(kind, value, variant)
@@ -259,14 +275,27 @@ end
 
 function AchievementTracker:onNewRoom()
   syncBossRushCompletion()
+  if LongTermProgress.canObserve(GameInstance)
+    and LongTermProgress.observeRoom(State.settings, State.run, GameInstance) then save() end
 end
 
 function AchievementTracker:onNpcDeath(npc)
   if not npc:IsBoss() then return end
   local routeChanged = Routes.observeNpc(State.run, npc, GameInstance)
+  local mark = Routes.markFromNpc(npc, GameInstance)
+  if LongTermProgress.canObserve(GameInstance) then
+    local eventByMark = { MOMS_HEART=1, ISAAC=11, SATAN=13, HUSH=158 }
+    local eventId = eventByMark[mark]
+    if not eventId and EntityType and EntityType.ENTITY_BABY_PLUM
+      and npc.Type == EntityType.ENTITY_BABY_PLUM then eventId = 493 end
+    if eventId then LongTermProgress.increment(State.settings, eventId, 1) end
+  end
   observeAndSave("boss", npc.Type, npc.Variant)
-  recordCompletionMark(Routes.markFromNpc(npc, GameInstance))
-  if routeChanged then save() end
+  recordCompletionMark(mark)
+  if routeChanged or (LongTermProgress.canObserve(GameInstance)
+    and (mark == "MOMS_HEART" or mark == "ISAAC" or mark == "SATAN" or mark == "HUSH"
+      or (EntityType and EntityType.ENTITY_BABY_PLUM
+        and npc.Type == EntityType.ENTITY_BABY_PLUM))) then save() end
 end
 
 function AchievementTracker:onAchievementUnlocked(achievementId)
@@ -293,6 +322,7 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_UPDATE, AchievementTracker.o
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_RENDER, AchievementTracker.onRender)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, AchievementTracker.onPickupUpdate)
 AchievementTracker:AddCallback(ModCallbacks.MC_USE_PILL, AchievementTracker.onUsePill)
+AchievementTracker:AddCallback(ModCallbacks.MC_USE_CARD, AchievementTracker.onUseCard)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, AchievementTracker.onPlayerInit)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, AchievementTracker.onNewRoom)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, AchievementTracker.onNewLevel)

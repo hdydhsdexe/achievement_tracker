@@ -36,8 +36,12 @@ function New-Directory {
 }
 
 function New-IsaacSave {
-    param([string] $Path, [int[]] $Unlocked = @(1, 3), [int] $Count = 6, [switch] $Broken)
-    $bytes = New-Object byte[] (0x20 + $Count)
+    param(
+        [string] $Path, [int[]] $Unlocked = @(1, 3), [int] $Count = 6,
+        [int] $EventCount = 496, [hashtable] $EventValues = @{}, [switch] $Broken
+    )
+    $eventHeader = 0x20 + $Count
+    $bytes = New-Object byte[] ($eventHeader + 12 + $EventCount * 4)
     if (-not $Broken) {
         $magic = [System.Text.Encoding]::ASCII.GetBytes('ISAACNGSAVE09R  ')
         [Array]::Copy($magic, 0, $bytes, 0, $magic.Length)
@@ -46,6 +50,13 @@ function New-IsaacSave {
     [Array]::Copy([BitConverter]::GetBytes([uint32] $Count), 0, $bytes, 0x18, 4)
     [Array]::Copy([BitConverter]::GetBytes([uint32] $Count), 0, $bytes, 0x1c, 4)
     foreach ($id in $Unlocked) { $bytes[0x20 + $id] = 1 }
+    [Array]::Copy([BitConverter]::GetBytes([uint32] 2), 0, $bytes, $eventHeader, 4)
+    [Array]::Copy([BitConverter]::GetBytes([uint32] ($EventCount * 4)), 0, $bytes, $eventHeader + 4, 4)
+    [Array]::Copy([BitConverter]::GetBytes([uint32] $EventCount), 0, $bytes, $eventHeader + 8, 4)
+    foreach ($eventId in $EventValues.Keys) {
+        [Array]::Copy([BitConverter]::GetBytes([uint32] $EventValues[$eventId]), 0,
+            $bytes, $eventHeader + 12 + ([int]$eventId * 4), 4)
+    }
     [System.IO.File]::WriteAllBytes($Path, $bytes)
 }
 
@@ -101,7 +112,16 @@ $largeSnapshot = Read-IsaacAchievementSnapshot -Path $largeSave -SaveSlot 1
 Assert-Equal $largeSnapshot.achievementCount 642 'full SAVE09R retains achievement count 642'
 Assert-True (@($largeSnapshot.unlockedIds) -contains 284) 'achievement id 284 remains unlocked'
 Assert-True (@($largeSnapshot.unlockedIds) -contains 641) 'achievement id 641 remains unlocked'
+Assert-Equal $largeSnapshot.eventCounterCount 496 'Repentance event counter count is parsed'
 Write-Output 'PASS: little-endian uint32 preserves achievement ids above 255'
+
+$plusSave = Join-Path $layout.Base 'rep+persistentgamedata2.dat'
+New-IsaacSave $plusSave -EventCount 523 -EventValues @{ 3 = 29; 522 = [uint32]::MaxValue }
+$plusSnapshot = Read-IsaacAchievementSnapshot -Path $plusSave -SaveSlot 2
+Assert-Equal $plusSnapshot.eventCounterCount 523 'Repentance+ event counter count is parsed'
+Assert-Equal $plusSnapshot.eventCounters[3] 29 'event counter values retain their native index'
+Assert-Equal $plusSnapshot.eventCounters[522] ([uint32]::MaxValue) 'event counters retain UInt32 maximum'
+Write-Output 'PASS: Repentance and Repentance+ event blocks are parsed'
 
 # Canonical and legacy local directories are enumerated as independent coherent sets.
 $layout = New-Layout 'canonical-local'
@@ -238,7 +258,7 @@ Assert-Equal $result.Slots[0].UnlockedCount 2 'dry-run reports unlock count'
 Assert-True (-not (Test-Path -LiteralPath $layout.Data)) 'dry-run must not create target directory'
 Write-Output 'PASS: DryRun is read-only'
 
-# A real import preserves arbitrary fields, backs up old bytes, produces BOM-free schema v9,
+# A real import preserves arbitrary fields, backs up old bytes, produces BOM-free schema v10,
 # handles every available slot, and leaves absent slot 2 untouched.
 $layout = New-Layout 'merge'
 $local = New-Directory (Join-Path $layout.Documents 'My Games\Binding of Isaac Repentance')
@@ -257,13 +277,16 @@ $options = Get-Options $layout
 $result = Invoke-WithOptions $options
 $merged = Get-Content -LiteralPath (Join-Path $data 'save1.dat') -Raw | ConvertFrom-Json
 $minimal = Get-Content -LiteralPath (Join-Path $data 'save3.dat') -Raw | ConvertFrom-Json
-Assert-Equal $merged.schemaVersion 9 'schema upgraded'
+Assert-Equal $merged.schemaVersion 10 'schema upgraded'
+Assert-Equal $merged.progressImport.eventCounterCount 496 'progress event snapshot imported'
+Assert-Equal @($merged.progressImport.values).Count 496 'progress event array remains continuous'
+Assert-Equal @($merged.progressObserved.eventCounters.PSObject.Properties).Count 0 'reimport clears observed deltas'
 Assert-Equal $merged.language 'zh' 'language preserved'
 Assert-Equal $merged.tracked[0] 'achievement_326' 'tracked goals preserved'
 Assert-True ([bool]$merged.observedCompleted.achievement_326) 'observations preserved'
 Assert-Equal $merged.achievementImport.saveSlot 1 'slot 1 snapshot'
 Assert-Equal $merged.achievementImport.unlockedIds.Count 2 'slot 1 unlocks'
-Assert-Equal $minimal.schemaVersion 9 'minimal slot 3 created'
+Assert-Equal $minimal.schemaVersion 10 'minimal slot 3 created'
 Assert-Equal $minimal.achievementImport.saveSlot 3 'slot 3 snapshot'
 Assert-True ((Get-Content -LiteralPath $slot2 -Raw) -eq '{"sentinel":true}') 'missing source slot 2 remains untouched'
 Assert-True (Test-Path -LiteralPath (Join-Path $result.BackupPath 'save1.dat')) 'existing slot is backed up'

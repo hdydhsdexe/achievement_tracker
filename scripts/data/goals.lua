@@ -19,6 +19,58 @@ local trackingMetadata = {
   achievement_386 = { progressKey="gulp", target=5 }
 }
 
+-- Shared persistent counters are declared once. Achievement metadata only
+-- selects a source and its milestone, keeping localized wording independent.
+local greedDonationEvents = {}
+for eventId = 159, 172 do greedDonationEvents[#greedDonationEvents + 1] = eventId end
+greedDonationEvents[#greedDonationEvents + 1] = 212
+for eventId = 385, 403 do greedDonationEvents[#greedDonationEvents + 1] = eventId end
+
+local longTermSources = {
+  momsHeart={eventIds={1}, observable=true}, rocks={eventIds={2}},
+  tintedRocks={eventIds={3}}, poop={eventIds={5}}, deathCard={eventIds={7}, observable=true},
+  arcades={eventIds={9}, observable=true}, deaths={eventIds={10}}, isaacKills={eventIds={11}, observable=true},
+  shopkeepers={eventIds={12}}, satanKills={eventIds={13}, observable=true},
+  shellGames={eventIds={14}}, angelDeals={eventIds={15}}, devilDeals={eventIds={16}},
+  bloodMachine={eventIds={17}}, slotsBroken={eventIds={18}}, donation={eventIds={20}},
+  hushKills={eventIds={158}, observable=true}, greedDonation={eventIds=greedDonationEvents, aggregate="sum"},
+  dailiesPlayed={eventIds={190}}, dailyStreak={eventIds={192}}, dailiesWon={eventIds={193}},
+  rainbowPoop={eventIds={194}}, batteries={eventIds={195}, observable=true}, cards={eventIds={196}, observable=true},
+  purchases={eventIds={197}}, lockedChests={eventIds={198}}, openedWalls={eventIds={199}},
+  bloodClot={eventIds={200}, observable=true}, rubberCement={eventIds={201}, observable=true}, beds={eventIds={202}},
+  babyPlum={eventIds={493}, observable=true}, batteryBumKills={eventIds={494}},
+  batteryBumPayouts={eventIds={495}},
+  blueBabyCharacters={kind="completion_mark_count", mark="BLUE_BABY",
+    playerTypes={0,1,2,3,4,5,6,7,8,9,10,13,14,15,16,18,19}}
+}
+
+local longTermMilestones = {
+  momsHeart={{150,2},{8,3},{139,4},{33,5},{140,6},{141,7},{10,8},{11,9},
+    {32,10},{234,10},{34,11},{342,11},{343,16},{344,21},{345,30}},
+  isaacKills={{57,5},{68,10}}, satanKills={{78,5}}, hushKills={{407,3}}, babyPlum={{409,10}},
+  tintedRocks={{28,10},{12,100}}, rocks={{85,100},{350,500}}, poop={{145,100}},
+  rainbowPoop={{353,5}}, arcades={{26,10}}, deaths={{30,100}}, deathCard={{36,4}},
+  shopkeepers={{61,20}}, shellGames={{64,100}}, angelDeals={{66,10},{380,25}},
+  devilDeals={{142,20},{376,25},{383,50}}, bloodMachine={{147,30}}, slotsBroken={{148,30}},
+  donation={{134,10},{151,20},{135,50},{152,100},{136,150},{153,200},{137,400},
+    {154,600},{59,900},{138,999}},
+  greedDonation={{242,2},{243,14},{244,33},{245,68},{246,111},{247,234},{248,439},
+    {341,500},{249,666},{250,879},{275,999},{251,1000}},
+  dailiesPlayed={{325,31}}, dailyStreak={{336,5}}, dailiesWon={{354,7}},
+  batteries={{358,20}}, cards={{362,20}}, purchases={{364,50}}, lockedChests={{371,20}},
+  openedWalls={{375,50}}, bloodClot={{377,10}}, rubberCement={{382,5}}, beds={{385,10}},
+  batteryBumPayouts={{523,5}}, batteryBumKills={{545,10}},
+  blueBabyCharacters={{346,3},{347,6}}
+}
+for sourceKey, milestones in pairs(longTermMilestones) do
+  local source = longTermSources[sourceKey]
+  for _, milestone in ipairs(milestones) do
+    trackingMetadata["achievement_" .. milestone[1]] = {
+      longTerm={source=source, sourceKey=sourceKey, target=milestone[2]}
+    }
+  end
+end
+
 -- Generated catalog rows only encode standard reward types. These overrides
 -- describe non-standard unlockable rewards without editing generated data.
 local rewardOverrides = {
@@ -134,6 +186,11 @@ for _, goal in ipairs(goals) do
   goal.reward = Rewards.display(goal)
 end
 CompletionMarks.attach(goals)
+for _, goal in ipairs(goals) do
+  if goal.longTerm and goal.longTerm.source.kind == "completion_mark_count" then
+    goal.completionRequirements = nil
+  end
+end
 
 local Catalog = { goals = goals }
 

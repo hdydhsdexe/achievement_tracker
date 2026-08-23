@@ -5,6 +5,8 @@ $script:IsaacSaveHeaderSize = 0x20
 $script:MaxPersistentSaveBytes = 8MB
 $script:MaxAchievementBlockBytes = 1MB
 $script:MaxAchievementCount = 16384
+$script:EventBlockHeaderSize = 12
+$script:MaxEventCounterCount = 4096
 $script:MaxModSaveBytes = 4MB
 $script:MaxCandidateFiles = 256
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -89,11 +91,33 @@ function Read-IsaacAchievementSnapshot {
     for ($id = 1; $id -lt $achievementCount; $id++) {
         if ($bytes[$script:IsaacSaveHeaderSize + $id] -gt 0) { $unlocked.Add($id) }
     }
+    $eventHeaderOffset = $script:IsaacSaveHeaderSize + [int]$blockSize
+    if ($eventHeaderOffset -gt ($bytes.Length - $script:EventBlockHeaderSize)) {
+        throw "游戏存档在事件计数块之前已截断：$canonical"
+    }
+    $eventBlockType = Read-UInt32LittleEndian $bytes $eventHeaderOffset
+    $eventBlockSize = Read-UInt32LittleEndian $bytes ($eventHeaderOffset + 4)
+    $eventCounterCount = Read-UInt32LittleEndian $bytes ($eventHeaderOffset + 8)
+    if ($eventBlockType -ne 2) { throw "第二个数据块不是事件计数块：$canonical" }
+    if ($eventCounterCount -lt 1 -or $eventCounterCount -gt $script:MaxEventCounterCount -or
+        $eventBlockSize -ne ($eventCounterCount * 4) -or $eventBlockSize -gt $script:MaxAchievementBlockBytes) {
+        throw "事件计数块大小或数量无效：$canonical"
+    }
+    $eventDataOffset = $eventHeaderOffset + $script:EventBlockHeaderSize
+    if ($eventBlockSize -gt ($bytes.Length - $eventDataOffset)) {
+        throw "游戏存档在事件计数块中截断：$canonical"
+    }
+    $eventCounters = New-Object System.Collections.Generic.List[uint32]
+    for ($eventId = 0; $eventId -lt $eventCounterCount; $eventId++) {
+        $eventCounters.Add([uint32](Read-UInt32LittleEndian $bytes ($eventDataOffset + $eventId * 4)))
+    }
     return [pscustomobject]@{
         formatVersion = 1
         saveSlot = $SaveSlot
         achievementCount = [int]$achievementCount
         unlockedIds = [int[]]$unlocked.ToArray()
+        eventCounterCount = [int]$eventCounterCount
+        eventCounters = [uint32[]]$eventCounters.ToArray()
     }
 }
 
@@ -324,12 +348,19 @@ function Read-ModSaveObject {
             throw "Mod 存档中的槽位与文件名冲突：$Path"
         }
     }
+    $progressProperty = $data.PSObject.Properties['progressImport']
+    if ($null -ne $progressProperty -and $null -ne $progressProperty.Value) {
+        $slotProperty = $progressProperty.Value.PSObject.Properties['saveSlot']
+        if ($null -ne $slotProperty -and $null -ne $slotProperty.Value -and [int]$slotProperty.Value -ne $ExpectedSlot) {
+            throw "Mod 存档中的进度槽位与文件名冲突：$Path"
+        }
+    }
     return $data
 }
 
 function Merge-ModSaveObject {
     param($Existing, $Snapshot)
-    $Existing | Add-Member -MemberType NoteProperty -Name schemaVersion -Value 9 -Force
+    $Existing | Add-Member -MemberType NoteProperty -Name schemaVersion -Value 10 -Force
     $import = [pscustomobject][ordered]@{
         formatVersion = 1
         saveSlot = [int]$Snapshot.saveSlot
@@ -337,6 +368,16 @@ function Merge-ModSaveObject {
         unlockedIds = [int[]]@($Snapshot.unlockedIds)
     }
     $Existing | Add-Member -MemberType NoteProperty -Name achievementImport -Value $import -Force
+    $progressImport = [pscustomobject][ordered]@{
+        formatVersion = 1
+        saveSlot = [int]$Snapshot.saveSlot
+        eventCounterCount = [int]$Snapshot.eventCounterCount
+        values = [uint32[]]@($Snapshot.eventCounters)
+        importedAt = [DateTime]::UtcNow.ToString('o')
+    }
+    $progressObserved = [pscustomobject][ordered]@{ eventCounters = [pscustomobject][ordered]@{} }
+    $Existing | Add-Member -MemberType NoteProperty -Name progressImport -Value $progressImport -Force
+    $Existing | Add-Member -MemberType NoteProperty -Name progressObserved -Value $progressObserved -Force
     return $Existing
 }
 
@@ -348,13 +389,18 @@ function ConvertTo-ModSaveJson {
 function Assert-StagedModSave {
     param([string] $Path, $ExpectedSnapshot)
     $data = Read-ModSaveObject -Path $Path -ExpectedSlot $ExpectedSnapshot.saveSlot
-    if ([int]$data.schemaVersion -ne 9 -or [int]$data.achievementImport.formatVersion -ne 1 -or
-        [int]$data.achievementImport.achievementCount -ne [int]$ExpectedSnapshot.achievementCount) {
+    if ([int]$data.schemaVersion -ne 10 -or [int]$data.achievementImport.formatVersion -ne 1 -or
+        [int]$data.achievementImport.achievementCount -ne [int]$ExpectedSnapshot.achievementCount -or
+        [int]$data.progressImport.formatVersion -ne 1 -or
+        [int]$data.progressImport.eventCounterCount -ne [int]$ExpectedSnapshot.eventCounterCount) {
         throw "暂存 Mod 存档复验失败：$Path"
     }
     $actual = @($data.achievementImport.unlockedIds | ForEach-Object { [int]$_ }) -join ','
     $expected = @($ExpectedSnapshot.unlockedIds | ForEach-Object { [int]$_ }) -join ','
     if ($actual -ne $expected) { throw "暂存 Mod 存档的成就列表复验失败：$Path" }
+    $actualEvents = @($data.progressImport.values | ForEach-Object { [uint32]$_ }) -join ','
+    $expectedEvents = @($ExpectedSnapshot.eventCounters | ForEach-Object { [uint32]$_ }) -join ','
+    if ($actualEvents -ne $expectedEvents) { throw "暂存 Mod 存档的事件计数列表复验失败：$Path" }
 }
 
 function New-BackupDirectory {

@@ -26,7 +26,13 @@ function makeSave(options = {}) {
   const blockSize = options.blockSize ?? achievementBytes.length;
   const achievementCount = options.achievementCount ?? achievementBytes.length;
   const actualDataSize = options.actualDataSize ?? blockSize;
-  const buffer = new ArrayBuffer(0x20 + actualDataSize);
+  const includeEventBlock = options.includeEventBlock ?? options.actualDataSize == null;
+  const eventCounters = options.eventCounters ?? new Array(options.eventCounterCount ?? 496).fill(0);
+  const eventCounterCount = options.eventCounterCount ?? eventCounters.length;
+  const eventBlockSize = options.eventBlockSize ?? eventCounterCount * 4;
+  const eventActualDataSize = options.eventActualDataSize ?? eventBlockSize;
+  const eventBytes = includeEventBlock ? 12 + eventActualDataSize : 0;
+  const buffer = new ArrayBuffer(0x20 + actualDataSize + eventBytes);
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
 
@@ -38,7 +44,27 @@ function makeSave(options = {}) {
   view.setUint32(0x18, blockSize, true);
   view.setUint32(0x1c, achievementCount, true);
   bytes.set(achievementBytes.slice(0, actualDataSize), 0x20);
+  if (includeEventBlock) {
+    const eventHeaderOffset = 0x20 + actualDataSize;
+    view.setUint32(eventHeaderOffset, options.eventBlockType ?? 2, true);
+    view.setUint32(eventHeaderOffset + 4, eventBlockSize, true);
+    view.setUint32(eventHeaderOffset + 8, eventCounterCount, true);
+    for (let eventId = 0; eventId < Math.min(eventCounters.length, Math.floor(eventActualDataSize / 4)); eventId += 1) {
+      view.setUint32(eventHeaderOffset + 12 + eventId * 4, eventCounters[eventId], true);
+    }
+  }
   return buffer;
+}
+
+function snapshot(options = {}) {
+  const eventCounters = options.eventCounters ?? [0, 29, 7];
+  return {
+    saveSlot: options.saveSlot ?? 1,
+    achievementCount: options.achievementCount ?? 3,
+    unlockedIds: options.unlockedIds ?? [],
+    eventCounterCount: options.eventCounterCount ?? eventCounters.length,
+    eventCounters,
+  };
 }
 
 test("parses the SAVE09R achievement block as little-endian bytes", () => {
@@ -46,6 +72,25 @@ test("parses the SAVE09R achievement block as little-endian bytes", () => {
 
   assert.equal(parsed.achievementCount, 5);
   assert.deepEqual(parsed.unlockedIds, [1, 3]);
+  assert.equal(parsed.eventCounterCount, 496);
+  assert.equal(parsed.eventCounters.length, 496);
+});
+
+test("parses Repentance and Repentance+ event counter blocks", () => {
+  for (const count of [496, 523]) {
+    const values = Array.from({ length: count }, (_, id) => id === count - 1 ? 0xffffffff : id);
+    const parsed = parsePersistentGameData(makeSave({ eventCounters: values }));
+    assert.equal(parsed.eventCounterCount, count);
+    assert.deepEqual(parsed.eventCounters, values);
+  }
+});
+
+test("rejects missing, mistyped, truncated, and inconsistent event counter blocks", () => {
+  assert.throws(() => parsePersistentGameData(makeSave({ includeEventBlock: false })), /event counter|truncated/i);
+  assert.throws(() => parsePersistentGameData(makeSave({ eventBlockType: 3 })), /event counter|block type/i);
+  assert.throws(() => parsePersistentGameData(makeSave({ eventCounterCount: 496, eventBlockSize: 8 })), /event counter|size|count/i);
+  assert.throws(() => parsePersistentGameData(makeSave({ eventCounterCount: 496, eventActualDataSize: 4 })), /event counter|truncated/i);
+  assert.throws(() => parsePersistentGameData(makeSave({ eventCounterCount: LIMITS.maxEventCounterCount + 1 })), /event counter|size|count/i);
 });
 
 test("never treats achievement byte index zero as an achievement", () => {
@@ -108,27 +153,27 @@ test("caps persistent files, achievement counts, and existing Mod JSON", () => {
     /achievement count/i,
   );
   assert.throws(
-    () => mergeModSaveJson(`{"padding":"${"x".repeat(LIMITS.maxModSaveJsonChars)}"}`, {
+    () => mergeModSaveJson(`{"padding":"${"x".repeat(LIMITS.maxModSaveJsonChars)}"}`, snapshot({
       saveSlot: 1,
       achievementCount: 2,
       unlockedIds: [],
-    }),
+    })),
     /too large|size/i,
   );
   assert.throws(
-    () => mergeModSaveData(null, {
+    () => mergeModSaveData(null, snapshot({
       saveSlot: 1,
       achievementCount: LIMITS.maxAchievementCount + 1,
       unlockedIds: [],
-    }),
+    })),
     /achievement count/i,
   );
   assert.throws(
-    () => mergeModSaveData(null, {
+    () => mergeModSaveData(null, snapshot({
       saveSlot: 1,
       achievementCount: LIMITS.maxAchievementCount,
       unlockedIds: new Array(LIMITS.maxAchievementCount).fill(1),
-    }),
+    })),
     /achievement IDs|too many/i,
   );
 });
@@ -158,96 +203,92 @@ test("merges an import snapshot while preserving existing Mod fields", () => {
     tracked: ["achievement_326"],
     observedCompleted: { achievement_326: true },
     manuallyCompleted: { achievement_10: true },
+    progressImport: { formatVersion: 1, saveSlot: 2, eventCounterCount: 1, values: [99] },
+    progressObserved: { eventCounters: { "3": 12 } },
   };
 
-  const merged = mergeModSaveData(existing, {
+  const merged = mergeModSaveData(existing, snapshot({
     saveSlot: 2,
     achievementCount: 6,
     unlockedIds: [5, 1, 5, 3],
-  });
+  }));
 
-  assert.deepEqual(merged, {
-    ...existing,
-    schemaVersion: 9,
-    achievementImport: {
-      formatVersion: 1,
-      saveSlot: 2,
-      achievementCount: 6,
-      unlockedIds: [1, 3, 5],
-    },
-  });
+  assert.equal(merged.schemaVersion, 10);
+  assert.deepEqual(merged.achievementImport.unlockedIds, [1, 3, 5]);
+  assert.deepEqual(merged.progressImport.values, [0, 29, 7]);
+  assert.equal(merged.progressImport.saveSlot, 2);
+  assert.match(merged.progressImport.importedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(merged.progressObserved, { eventCounters: {} });
   assert.notEqual(merged, existing);
 });
 
-test("creates a minimal schema v9 Mod save when no existing JSON is supplied", () => {
-  const merged = mergeModSaveData(null, {
+test("creates a minimal schema v10 Mod save when no existing JSON is supplied", () => {
+  const merged = mergeModSaveData(null, snapshot({
     saveSlot: 1,
     achievementCount: 3,
     unlockedIds: [2],
-  });
+  }));
 
-  assert.deepEqual(merged, {
-    schemaVersion: 9,
-    achievementImport: {
-      formatVersion: 1,
-      saveSlot: 1,
-      achievementCount: 3,
-      unlockedIds: [2],
-    },
-  });
+  assert.equal(merged.schemaVersion, 10);
+  assert.deepEqual(merged.achievementImport.unlockedIds, [2]);
+  assert.deepEqual(merged.progressImport.values, [0, 29, 7]);
+  assert.deepEqual(merged.progressObserved, { eventCounters: {} });
 });
 
 test("validates imported slots, counts, and achievement IDs", () => {
   assert.throws(
-    () => mergeModSaveData(null, { saveSlot: 4, achievementCount: 3, unlockedIds: [] }),
+    () => mergeModSaveData(null, snapshot({ saveSlot: 4, achievementCount: 3, unlockedIds: [] })),
     /save slot/i,
   );
   assert.throws(
-    () => mergeModSaveData(null, { saveSlot: 1, achievementCount: 0, unlockedIds: [] }),
+    () => mergeModSaveData(null, snapshot({ saveSlot: 1, achievementCount: 0, unlockedIds: [] })),
     /achievement count/i,
   );
   assert.throws(
-    () => mergeModSaveData(null, { saveSlot: 1, achievementCount: 3, unlockedIds: [4] }),
+    () => mergeModSaveData(null, snapshot({ saveSlot: 1, achievementCount: 3, unlockedIds: [4] })),
     /achievement id/i,
+  );
+  assert.throws(
+    () => mergeModSaveData(null, snapshot({ eventCounterCount: 2, eventCounters: [1] })),
+    /event counter array|continuous|count/i,
+  );
+  assert.throws(
+    () => mergeModSaveData(null, snapshot({ eventCounters: [0, -1, 2] })),
+    /event counter/i,
   );
 });
 
 test("parses optional existing JSON and returns stable pretty JSON", () => {
-  const result = mergeModSaveJson('{"language":"en","schemaVersion":3}', {
+  const result = mergeModSaveJson('{"language":"en","schemaVersion":3}', snapshot({
     saveSlot: 3,
     achievementCount: 4,
     unlockedIds: [3, 1],
-  }, {
+  }), {
     existingFileName: "save3.dat",
   });
 
   assert.equal(result.fileName, "save3.dat");
   assert.equal(result.json.endsWith("\n"), true);
-  assert.deepEqual(JSON.parse(result.json), {
-    language: "en",
-    schemaVersion: 9,
-    achievementImport: {
-      formatVersion: 1,
-      saveSlot: 3,
-      achievementCount: 4,
-      unlockedIds: [1, 3],
-    },
-  });
+  const parsed = JSON.parse(result.json);
+  assert.equal(parsed.language, "en");
+  assert.equal(parsed.schemaVersion, 10);
+  assert.deepEqual(parsed.achievementImport.unlockedIds, [1, 3]);
+  assert.deepEqual(parsed.progressImport.values, [0, 29, 7]);
 });
 
 test("rejects malformed or non-object existing Mod JSON", () => {
   assert.throws(
-    () => mergeModSaveJson("{broken", { saveSlot: 1, achievementCount: 2, unlockedIds: [] }),
+    () => mergeModSaveJson("{broken", snapshot({ saveSlot: 1, achievementCount: 2, unlockedIds: [] })),
     /JSON/i,
   );
   assert.throws(
-    () => mergeModSaveJson("[]", { saveSlot: 1, achievementCount: 2, unlockedIds: [] }),
+    () => mergeModSaveJson("[]", snapshot({ saveSlot: 1, achievementCount: 2, unlockedIds: [] })),
     /JSON object/i,
   );
 });
 
 test("rejects slot conflicts from the Mod filename or its prior import", () => {
-  const imported = { saveSlot: 1, achievementCount: 2, unlockedIds: [1] };
+  const imported = snapshot({ saveSlot: 1, achievementCount: 2, unlockedIds: [1] });
 
   assert.throws(
     () => mergeModSaveJson("{}", imported, { existingFileName: "save2.dat" }),
@@ -257,15 +298,19 @@ test("rejects slot conflicts from the Mod filename or its prior import", () => {
     () => mergeModSaveJson('{"achievementImport":{"saveSlot":3}}', imported),
     /slot.*conflict/i,
   );
+  assert.throws(
+    () => mergeModSaveJson('{"progressImport":{"saveSlot":3}}', imported),
+    /slot.*conflict/i,
+  );
 });
 
 test("rejects an existing Mod file whose slot cannot be proven from its filename", () => {
   assert.throws(
-    () => mergeModSaveJson("{}", {
+    () => mergeModSaveJson("{}", snapshot({
       saveSlot: 1,
       achievementCount: 2,
       unlockedIds: [1],
-    }, {
+    }), {
       existingFileName: "achievement-tracker-backup.dat",
     }),
     /Mod filename|slot/i,

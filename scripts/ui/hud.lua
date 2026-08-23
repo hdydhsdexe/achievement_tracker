@@ -3,6 +3,7 @@ local CompletionMarks = require("scripts.core.completion_marks")
 local Routes = require("scripts.core.routes")
 local Text = require("scripts.ui.text")
 local Sensors = require("scripts.core.sensors")
+local LongTermProgress = require("scripts.core.long_term_progress")
 local Hud = {}
 
 local HUD_TITLE = KColor(1.00, 0.94, 0.78, 1)
@@ -80,6 +81,8 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
       local suffix = goal.deadline and ("  < " .. formatTime(goal.deadline)) or ""
       local progress, target = Sensors.progress(goal, state.run)
       if progress then suffix = suffix .. string.format("  (%d/%d)", progress, target) end
+      local longTerm = LongTermProgress.format(goal, state, language)
+      if longTerm then suffix = suffix .. longTerm end
       local failed = state.run.failedGoals and state.run.failedGoals[goal.id]
       local completed = (state.profileCompleted and state.profileCompleted[goal.id])
         or (state.run.completedGoals and state.run.completedGoals[goal.id])
