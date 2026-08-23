@@ -6,7 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => {
+test("mod has v0.8.1 Workshop metadata and registers gameplay callbacks", () => {
   const metadata = read("metadata.xml");
   const main = read("main.lua");
   const mcm = read("scripts/integrations/mcm.lua");
@@ -15,11 +15,12 @@ test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => 
   assert.match(metadata, /<name>Achievement Tracker \/ 成就条件追踪器<\/name>/);
   assert.match(metadata, /<directory>achievement_tracker<\/directory>/);
   assert.match(metadata, /<id>3788047099<\/id>/);
-  assert.match(metadata, /<version>0\.7\.2<\/version>/);
-  assert.match(mcm, /Achievement Tracker v0\.7\.2/);
+  assert.match(metadata, /<version>0\.8\.1<\/version>/);
+  assert.match(mcm, /Achievement Tracker v0\.8\.1/);
   assert.doesNotMatch(mcm, /Achievement Tracker v0\.2\.0/);
-  assert.match(description, /Version 0\.7\.2/);
-  assert.match(changeNotes, /v0\.7\.2/);
+  assert.match(description, /Version 0\.8\.1/);
+  assert.match(changeNotes, /v0\.8\.1/);
+  assert.match(read("README.md"), /当前版本：\*\*0\.8\.1\*\*/);
   for (const document of [description, changeNotes, read("README.md")]) {
     assert.match(document, /11[^\n]*22[^\n]*33|11\/22\/33/,
       "release copy must describe the shared native integer-multiple HUD/F3 tiers");
@@ -27,7 +28,10 @@ test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => 
     assert.doesNotMatch(document, /native 8\/10\/12|原生 8、10、12|8\/10\/12px/);
     assert.match(document, /line spacing|行间距/i,
       "release copy must describe the adjustable HUD line spacing");
+    assert.doesNotMatch(document, /0\.7\.2/,
+      "0.8.1 release copy must not retain the previous public version");
   }
+  assert.doesNotMatch(metadata + mcm, /0\.7\.2/);
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
   for (const callback of ["MC_POST_GAME_STARTED", "MC_POST_UPDATE", "MC_POST_RENDER", "MC_POST_PICKUP_UPDATE", "MC_PRE_GAME_EXIT"]) {
     assert.match(main, new RegExp(callback));
@@ -39,7 +43,7 @@ test("Workshop publication assets satisfy uploader limits", () => {
   const cover = fs.statSync(path.join(root, "docs/workshop/cover.png"));
   assert.ok(description.length < 8000, "Workshop description must stay below 8000 characters");
   assert.ok(cover.size < 1024 * 1024, "Workshop cover must stay below 1 MiB");
-  assert.match(description, /Version 0\.7\.2/);
+  assert.match(description, /Version 0\.8\.1/);
 });
 
 test("catalog exposes only achievement-backed goals and drops stale tracked ids", () => {
