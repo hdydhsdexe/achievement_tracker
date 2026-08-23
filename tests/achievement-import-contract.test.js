@@ -6,10 +6,14 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v5 validates achievements and persistent completion marks", () => {
+test("storage schema v6 validates achievements, F3 text settings, and persistent completion marks", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*5/);
+  assert.match(storage, /schemaVersion\s*=\s*6/);
+  assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*10\s*\}/);
+  assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[8\]=true,\s*\[10\]=true,\s*\[12\]=true\s*\}/);
+  assert.match(storage, /local function migrateF3FontPixels/);
+  assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);
   assert.match(storage, /achievementImport\s*=\s*nil/);

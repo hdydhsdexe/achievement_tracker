@@ -6,13 +6,20 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("mod has v0.7.1 Workshop metadata and registers gameplay callbacks", () => {
+test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => {
   const metadata = read("metadata.xml");
   const main = read("main.lua");
+  const mcm = read("scripts/integrations/mcm.lua");
+  const description = read("docs/workshop/description.bbcode.txt");
+  const changeNotes = read("docs/workshop/initial-change-notes.txt");
   assert.match(metadata, /<name>Achievement Tracker \/ 成就条件追踪器<\/name>/);
   assert.match(metadata, /<directory>achievement_tracker<\/directory>/);
   assert.match(metadata, /<id>3788047099<\/id>/);
-  assert.match(metadata, /<version>0\.7\.1<\/version>/);
+  assert.match(metadata, /<version>0\.7\.2<\/version>/);
+  assert.match(mcm, /Achievement Tracker v0\.7\.2/);
+  assert.doesNotMatch(mcm, /Achievement Tracker v0\.2\.0/);
+  assert.match(description, /Version 0\.7\.2/);
+  assert.match(changeNotes, /v0\.7\.2/);
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
   for (const callback of ["MC_POST_GAME_STARTED", "MC_POST_UPDATE", "MC_POST_RENDER", "MC_POST_PICKUP_UPDATE", "MC_PRE_GAME_EXIT"]) {
     assert.match(main, new RegExp(callback));
@@ -24,7 +31,7 @@ test("Workshop publication assets satisfy uploader limits", () => {
   const cover = fs.statSync(path.join(root, "docs/workshop/cover.png"));
   assert.ok(description.length < 8000, "Workshop description must stay below 8000 characters");
   assert.ok(cover.size < 1024 * 1024, "Workshop cover must stay below 1 MiB");
-  assert.match(description, /Version 0\.7\.1/);
+  assert.match(description, /Version 0\.7\.2/);
 });
 
 test("catalog exposes only achievement-backed goals and drops stale tracked ids", () => {
@@ -113,7 +120,10 @@ test("menu and HUD are usable without optional Mod Config Menu", () => {
 test("F3 menu uses a paged three-column tile grid", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /local COLUMNS = 3/);
-  assert.match(menu, /PAGE_SIZE = COLUMNS \* ROWS/);
+  assert.match(menu, /pageSize=rows \* COLUMNS/);
+  assert.match(menu, /layout\.pageSize/);
+  assert.match(menu, /layout\.rows/);
+  assert.doesNotMatch(menu, /local PAGE_SIZE/);
   assert.match(menu, /Keyboard\.KEY_LEFT/);
   assert.match(menu, /Keyboard\.KEY_RIGHT/);
   assert.match(menu, /column \* columnWidth/);
@@ -602,6 +612,7 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /local PANEL_WIDTH_RATIO = 0\.64/);
   assert.match(menu, /local MIN_PANEL_WIDTH = 270/);
   assert.match(menu, /local MAX_PANEL_WIDTH = 340/);
+  assert.match(menu, /local MAX_PANEL_HEIGHT = 250/);
   assert.match(menu, /panelX = math\.floor\(\(screenWidth - panelWidth\) \/ 2\)/);
   assert.match(menu, /panelY = math\.floor\(\(screenHeight - panelHeight\) \/ 2\)/);
   assert.match(menu, /RewardIcons\.renderPaper\(panelX, panelY, panelWidth, panelHeight\)/);
@@ -613,13 +624,13 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(text, /function Text\.snapScale/);
   assert.match(text, /Text\.pixel\(x\)/);
   assert.match(text, /Text\.pixel\(y\)/);
-  assert.match(menu, /local MENU_MIN_BODY_PIXELS = 8/);
-  assert.match(menu, /local MENU_MAX_BODY_PIXELS = 11/);
-  assert.match(menu, /title=Text\.scaleForPixels\(bodyPixels \+ 1\)/);
-  assert.match(menu, /body=Text\.scaleForPixels\(bodyPixels\)/);
-  assert.match(menu, /label=Text\.scaleForPixels\(math\.max\(8, bodyPixels - 1\)\)/);
-  assert.match(menu, /small=Text\.scaleForPixels\(math\.max\(7, bodyPixels - 2\)\)/);
-  assert.doesNotMatch(menu, /menuScale \* 0\.(?:64|68|72|76|82|84|88|9)/);
+  assert.match(menu, /local MENU_FONT_PIXELS = \{\s*\[8\]/);
+  assert.match(menu, /Text\.lineHeightPixels/);
+  assert.match(menu, /Text\.wrapPixels/);
+  assert.match(menu, /Text\.drawPixels/);
+  assert.match(menu, /maxDetailLines/);
+  assert.match(menu, /contentBottom/);
+  assert.doesNotMatch(menu, /Text\.draw\(Catalog\.text\(selected, language\)\.detail/);
 });
 
 test("catalog fuzzy search indexes bilingual copy and reward metadata with scores", () => {
@@ -707,6 +718,21 @@ test("HUD renders localized completion conditions with a scalable Unicode font",
   assert.match(hud, /fontScale/);
 });
 
+test("HUD auto-fits requested text size and keeps the complete block on screen", () => {
+  const hud = read("scripts/ui/hud.lua");
+  assert.match(hud, /local SCREEN_MARGIN = 8/);
+  assert.match(hud, /local MIN_HUD_WIDTH = 120/);
+  assert.match(hud, /local MIN_FONT_PIXELS = 8/);
+  assert.match(hud, /local MAX_FONT_PIXELS = 32/);
+  assert.match(hud, /local function buildRows/);
+  assert.match(hud, /local function fitLayout/);
+  assert.match(hud, /for pixelSize = requestedPixels, MIN_FONT_PIXELS, -1/);
+  assert.match(hud, /screenHeight - SCREEN_MARGIN - totalHeight/);
+  assert.match(hud, /Text\.wrap/);
+  assert.match(hud, /Text\.pixel/);
+  assert.doesNotMatch(hud, /local maxWidth = math\.max\(120, Isaac\.GetScreenWidth\(\) - x - 12\)/);
+});
+
 test("HUD uses the ivory palette while retaining bright completion and failure states", () => {
   const hud = read("scripts/ui/hud.lua");
   assert.match(hud, /local HUD_TITLE = KColor\(1\.00, 0\.94, 0\.78, 1\)/);
@@ -750,10 +776,13 @@ test("bundled LanaPixel assets are complete", () => {
   assert.ok(pages.length > 0, "LanaPixel font must include a texture page");
 });
 
-test("Mod Config Menu exposes language, font scale, and X/Y position settings", () => {
+test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position settings", () => {
   const mcm = read("scripts/integrations/mcm.lua");
   assert.match(mcm, /Language/);
-  assert.match(mcm, /Font size/);
+  assert.match(mcm, /HUD font size \/ HUD 字体大小/);
+  assert.match(mcm, /F3 font size \/ F3 字体大小/);
+  assert.match(mcm, /state\.settings\.f3\.fontPixels/);
+  assert.match(mcm, /\[1\]=8,\s*\[2\]=10,\s*\[3\]=12/);
   assert.match(mcm, /HUD X/);
   assert.match(mcm, /HUD Y/);
   assert.match(mcm, /Minimum/);
@@ -769,6 +798,7 @@ test("persistent settings are loaded defensively and saved as JSON", () => {
   assert.match(storage, /schemaVersion/);
   assert.match(storage, /activeRun/);
   assert.match(storage, /fontScale/);
+  assert.match(storage, /fontPixels/);
 });
 
 test("failed run state survives quitting and is restored only for the same run", () => {
@@ -1050,7 +1080,7 @@ test("F3 distinguishes convertible goals and refreshes them without moving the s
   assert.match(menu, /state\.menu\.completionSignature ~= completionSignature/);
   assert.match(menu, /local selectedGoalId = preserveSelection[\s\S]*?\.id/);
   assert.match(menu, /if goal\.id == selectedGoalId then[\s\S]*?state\.menu\.cursor = index/);
-  assert.match(menu, /state\.menu\.offset = math\.floor\(\(state\.menu\.cursor - 1\) \/ PAGE_SIZE\) \* PAGE_SIZE \+ 1/);
+  assert.match(menu, /state\.menu\.offset = math\.floor\(\(state\.menu\.cursor - 1\) \/ layout\.pageSize\) \* layout\.pageSize \+ 1/);
   assert.match(text, /availableAfterTransformation\s*=\s*"转换后可完成"/);
   assert.match(text, /availableAfterTransformation\s*=\s*"available after transformation"/);
 });

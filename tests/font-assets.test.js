@@ -19,10 +19,18 @@ function parseBmFont(data) {
   assert.equal(data.subarray(0, 4).toString("binary"), "BMF\x03");
   const records = new Map();
   let pages = [];
+  let fontSize = 0;
+  let smooth = null;
+  let lineHeight = 0;
   for (let offset = 4; offset < data.length;) {
     const type = data.readUInt8(offset);
     const size = data.readUInt32LE(offset + 1);
     const start = offset + 5;
+    if (type === 1) {
+      fontSize = data.readInt16LE(start);
+      smooth = (data.readUInt8(start + 2) & 0x80) !== 0;
+    }
+    if (type === 2) lineHeight = data.readUInt16LE(start);
     if (type === 3) pages = data.subarray(start, start + size).toString("utf8").split("\0").filter(Boolean);
     if (type === 4) {
       assert.equal(size % 20, 0);
@@ -37,7 +45,7 @@ function parseBmFont(data) {
     }
     offset = start + size;
   }
-  return {pages, records};
+  return {pages, records, fontSize, smooth, lineHeight};
 }
 
 function paeth(left, up, upperLeft) {
@@ -157,4 +165,25 @@ test("font generation declares primary and fallback sources without unresolved g
   assert.equal(sources.glyphCount, runtimeCharacters().size);
   assert.deepEqual(sources.unresolvedGlyphs, []);
   assert.deepEqual(sources.fallbackGlyphs.map((entry) => entry.character), missingFromLanaPixel);
+});
+
+test("F3 ships native unsmoothed 8, 10, and 12 pixel fonts with complete glyph coverage", () => {
+  for (const pixelSize of [8, 10, 12]) {
+    const name = `achievement_lanapixel_${pixelSize}`;
+    const parsed = parseBmFont(read(`resources/font/${name}.fnt`));
+    assert.equal(parsed.fontSize, pixelSize);
+    assert.equal(parsed.smooth, false, `${name} must disable BMFont smoothing`);
+    assert.ok(parsed.lineHeight >= pixelSize, `${name} must expose a usable native line height`);
+    for (const character of runtimeCharacters())
+      assert.ok(parsed.records.has(character.codePointAt(0)), `${name} missing ${character}`);
+    for (const page of parsed.pages)
+      assert.equal(fs.existsSync(path.join(fontDir, page)), true, `${name} missing page ${page}`);
+
+    const sources = JSON.parse(fs.readFileSync(path.join(fontDir, `${name}.sources.json`), "utf8"));
+    assert.deepEqual(sources.primaryFont, {file: "LanaPixel.ttf", size: pixelSize});
+    assert.deepEqual(sources.fallbackFont,
+      {file: "SourceHanSansSC-Regular.otf", size: pixelSize - 1});
+    assert.equal(sources.glyphCount, runtimeCharacters().size);
+    assert.deepEqual(sources.unresolvedGlyphs, []);
+  }
 });
