@@ -70,7 +70,8 @@ local function normalizeCompletionMarks(snapshot)
 end
 
 local function migrateHudFontPixels(decoded)
-  if decoded.schemaVersion == 8 and type(decoded.hud) == "table"
+  local schemaVersion = tonumber(decoded.schemaVersion)
+  if schemaVersion == 8 and type(decoded.hud) == "table"
     and NATIVE_FONT_PIXELS[decoded.hud.fontPixels] then
     return decoded.hud.fontPixels
   end

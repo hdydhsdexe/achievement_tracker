@@ -212,11 +212,7 @@ local function fitLayout(state)
       return placeVertically(layout, preferredY, screenHeight)
     end
   end
-  local fallback
-  for candidateX = x, SCREEN_MARGIN, -1 do
-    fallback = pagedLayout(state, candidateX, screenWidth, availableHeight)
-    if not fallback.split then break end
-  end
+  local fallback = pagedLayout(state, SCREEN_MARGIN, screenWidth, availableHeight)
   return placeVertically(fallback, preferredY, screenHeight)
 end
 
