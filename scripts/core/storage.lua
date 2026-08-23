@@ -2,6 +2,7 @@ local json = require("json")
 local Storage = {}
 local MAX_ACHIEVEMENT_COUNT = 16384
 local MAX_MOD_SAVE_DATA_BYTES = 4 * 1024 * 1024
+local F3_FONT_PIXELS = { [8]=true, [10]=true, [12]=true }
 local COMPLETION_MARKS = {
   MOMS_HEART=true, ISAAC=true, SATAN=true, BOSS_RUSH=true, BLUE_BABY=true,
   LAMB=true, MEGA_SATAN=true, ULTRA_GREED=true, HUSH=true, DELIRIUM=true,
@@ -68,13 +69,25 @@ local function normalizeCompletionMarks(snapshot)
   return normalized
 end
 
+local function migrateF3FontPixels(decoded)
+  if type(decoded.f3) == "table" and F3_FONT_PIXELS[decoded.f3.fontPixels] then
+    return decoded.f3.fontPixels
+  end
+  local oldScale = type(decoded.hud) == "table" and tonumber(decoded.hud.fontScale) or 1
+  local oldPixels = math.max(8, math.min(11, math.floor((oldScale or 1) * 10 + 0.5)))
+  if oldPixels == 8 then return 8 end
+  if oldPixels == 11 then return 12 end
+  return 10
+end
+
 local function defaults()
   return {
-    schemaVersion = 5,
+    schemaVersion = 6,
     language = "zh",
     maxTracked = 3,
     tracked = {},
     hud = { x = 18, y = 82, fontScale = 1, visible = true },
+    f3 = { fontPixels = 10 },
     manuallyCompleted = {},
     observedCompleted = {},
     achievementImport = nil,
@@ -99,6 +112,7 @@ function Storage.load(mod)
     data.hud.fontScale = math.max(0.5, math.min(2, tonumber(decoded.hud.fontScale) or data.hud.fontScale))
     data.hud.visible = decoded.hud.visible ~= false
   end
+  data.f3.fontPixels = migrateF3FontPixels(decoded)
   if type(decoded.manuallyCompleted) == "table" then data.manuallyCompleted = decoded.manuallyCompleted end
   if type(decoded.observedCompleted) == "table" then data.observedCompleted = decoded.observedCompleted end
   data.completionMarks = normalizeCompletionMarks(decoded.completionMarks)
@@ -108,7 +122,9 @@ function Storage.load(mod)
 end
 
 function Storage.save(mod, data)
-  data.schemaVersion = 5
+  data.schemaVersion = 6
+  data.f3 = type(data.f3) == "table" and data.f3 or { fontPixels = 10 }
+  if not F3_FONT_PIXELS[data.f3.fontPixels] then data.f3.fontPixels = 10 end
   data.achievementImport = normalizeAchievementImport(data.achievementImport)
   data.completionMarks = normalizeCompletionMarks(data.completionMarks)
   mod:SaveData(json.encode(data))

@@ -225,7 +225,7 @@ test("parses optional existing JSON and returns stable pretty JSON", () => {
   assert.equal(result.json.endsWith("\n"), true);
   assert.deepEqual(JSON.parse(result.json), {
     language: "en",
-    schemaVersion: 5,
+    schemaVersion: 6,
     achievementImport: {
       formatVersion: 1,
       saveSlot: 3,

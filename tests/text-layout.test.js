@@ -7,7 +7,9 @@ const root = path.resolve(__dirname, "..");
 const fontDir = path.join(root, "resources/font");
 
 function parseFont(pixelSize) {
-  const data = fs.readFileSync(path.join(fontDir, `achievement_lanapixel_${pixelSize}.fnt`));
+  const name = pixelSize === 16 ? "achievement_lanapixel.fnt"
+    : `achievement_lanapixel_${pixelSize}.fnt`;
+  const data = fs.readFileSync(path.join(fontDir, name));
   const records = new Map();
   let lineHeight = 0;
   for (let offset = 4; offset < data.length;) {
@@ -129,9 +131,54 @@ test("the longest bilingual conditions wrap without losing content", () => {
     for (const [id, language] of cases) {
       const value = rows.find((row) => row.id === id)[language];
       const lines = wrap(value, 246, font.records);
-      assert.equal(lines.join(" ").replace(/\s+/g, " ").trim(),
+      const recovered = language === "zh" ? lines.join("") : lines.join(" ");
+      assert.equal(recovered.replace(/\s+/g, " ").trim(),
         value.replace(/\s+/g, " ").trim());
       assert.ok(lines.every((line) => textWidth(line, font.records) <= 246));
     }
   }
+});
+
+test("HUD clamps extreme preferences and fits three long multi-line routes", () => {
+  const screenWidth = 640;
+  const screenHeight = 360;
+  const margin = 8;
+  const minimumWidth = 120;
+  const x = Math.max(margin,
+    Math.min(screenWidth - margin - minimumWidth, 600));
+  assert.equal(x, 512);
+  const maxWidth = screenWidth - margin - x;
+  assert.equal(maxWidth, minimumWidth);
+
+  const font = parseFont(16);
+  const routeRows = [
+    ["ACHIEVEMENT CONDITIONS", 0, 1],
+  ];
+  for (const id of [324, 325, 326]) {
+    routeRows.push([`- #${id} A deliberately long tracked achievement [1/2]`, 0, 1]);
+    routeRows.push(["NOW: complete the current floor and preserve the required route", 8, 0.9]);
+    routeRows.push(["NEXT: enter the alternate exit and continue toward the final boss", 8, 0.85]);
+  }
+  routeRows.push(["F3: goals  |  F4: hide", 0, 0.8]);
+
+  let totalHeight = Infinity;
+  let chosenPixels = 8;
+  for (let pixelSize = 32; pixelSize >= 8; pixelSize -= 1) {
+    let height = 0;
+    for (const [value, indent, factor] of routeRows) {
+      const rowPixels = Math.max(8, Math.round(pixelSize * factor));
+      const lines = wrap(value, (maxWidth - indent) * 16 / rowPixels, font.records);
+      height += lines.length * Math.max(8, Math.round(12 * rowPixels / 16));
+    }
+    totalHeight = height;
+    chosenPixels = pixelSize;
+    if (height <= screenHeight - margin * 2) break;
+  }
+
+  assert.ok(chosenPixels >= 8);
+  assert.ok(totalHeight <= screenHeight - margin * 2);
+  const y = Math.max(margin,
+    Math.min(400, screenHeight - margin - totalHeight));
+  assert.ok(y >= margin);
+  assert.ok(y + totalHeight <= screenHeight - margin);
 });

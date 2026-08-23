@@ -1,0 +1,170 @@
+{
+  "primaryFont": {
+    "file": "LanaPixel.ttf",
+    "size": 12
+  },
+  "fallbackFont": {
+    "file": "SourceHanSansSC-Regular.otf",
+    "size": 11
+  },
+  "glyphCount": 1174,
+  "fallbackGlyphs": [
+    {
+      "character": "†",
+      "codepoint": "U+2020"
+    },
+    {
+      "character": "∞",
+      "codepoint": "U+221E"
+    },
+    {
+      "character": "嗝",
+      "codepoint": "U+55DD"
+    },
+    {
+      "character": "噗",
+      "codepoint": "U+5657"
+    },
+    {
+      "character": "囤",
+      "codepoint": "U+56E4"
+    },
+    {
+      "character": "弑",
+      "codepoint": "U+5F11"
+    },
+    {
+      "character": "枷",
+      "codepoint": "U+67B7"
+    },
+    {
+      "character": "桦",
+      "codepoint": "U+6866"
+    },
+    {
+      "character": "璞",
+      "codepoint": "U+749E"
+    },
+    {
+      "character": "畸",
+      "codepoint": "U+7578"
+    },
+    {
+      "character": "瘟",
+      "codepoint": "U+761F"
+    },
+    {
+      "character": "瘢",
+      "codepoint": "U+7622"
+    },
+    {
+      "character": "睫",
+      "codepoint": "U+776B"
+    },
+    {
+      "character": "磺",
+      "codepoint": "U+78FA"
+    },
+    {
+      "character": "秽",
+      "codepoint": "U+79FD"
+    },
+    {
+      "character": "窖",
+      "codepoint": "U+7A96"
+    },
+    {
+      "character": "羁",
+      "codepoint": "U+7F81"
+    },
+    {
+      "character": "羔",
+      "codepoint": "U+7F94"
+    },
+    {
+      "character": "胯",
+      "codepoint": "U+80EF"
+    },
+    {
+      "character": "菇",
+      "codepoint": "U+83C7"
+    },
+    {
+      "character": "蘑",
+      "codepoint": "U+8611"
+    },
+    {
+      "character": "蛆",
+      "codepoint": "U+86C6"
+    },
+    {
+      "character": "蝎",
+      "codepoint": "U+874E"
+    },
+    {
+      "character": "蝗",
+      "codepoint": "U+8757"
+    },
+    {
+      "character": "蝙",
+      "codepoint": "U+8759"
+    },
+    {
+      "character": "蝠",
+      "codepoint": "U+8760"
+    },
+    {
+      "character": "蟀",
+      "codepoint": "U+87C0"
+    },
+    {
+      "character": "蟋",
+      "codepoint": "U+87CB"
+    },
+    {
+      "character": "褪",
+      "codepoint": "U+892A"
+    },
+    {
+      "character": "铲",
+      "codepoint": "U+94F2"
+    },
+    {
+      "character": "镀",
+      "codepoint": "U+9540"
+    },
+    {
+      "character": "镍",
+      "codepoint": "U+954D"
+    },
+    {
+      "character": "镣",
+      "codepoint": "U+9563"
+    },
+    {
+      "character": "颌",
+      "codepoint": "U+988C"
+    },
+    {
+      "character": "骰",
+      "codepoint": "U+9AB0"
+    },
+    {
+      "character": "髻",
+      "codepoint": "U+9AFB"
+    },
+    {
+      "character": "黏",
+      "codepoint": "U+9ECF"
+    },
+    {
+      "character": "龊",
+      "codepoint": "U+9F8A"
+    },
+    {
+      "character": "龌",
+      "codepoint": "U+9F8C"
+    }
+  ],
+  "unresolvedGlyphs": []
+}

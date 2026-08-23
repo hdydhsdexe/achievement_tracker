@@ -1,6 +1,7 @@
 local Catalog = require("scripts.data.goals")
 local Tracker = require("scripts.core.tracker")
 local Mcm = {}
+local F3_PIXELS_BY_INDEX = { [1]=8, [2]=10, [3]=12 }
 
 local function languageIndex(language) return language == "zh" and 1 or 2 end
 local function languageName(index) return index == 1 and "中文" or "English" end
@@ -25,7 +26,7 @@ function Mcm.setup(state, save)
   local modName = "Achievement Tracker"
   local general = "General / 常规"
   ModConfigMenu.RemoveCategory(modName)
-  ModConfigMenu.AddText(modName, general, function() return "Achievement Tracker v0.2.0 / 成就条件追踪" end)
+  ModConfigMenu.AddText(modName, general, function() return "Achievement Tracker v0.7.2 / 成就条件追踪" end)
 
   ModConfigMenu.AddSetting(modName, general, {
     Type = ModConfigMenu.OptionType.BOOLEAN,
@@ -47,10 +48,26 @@ function Mcm.setup(state, save)
     return "Current language / 当前语言: " .. languageName(languageIndex(state.settings.language))
   end)
 
-  addNumber(modName, general, "Font size / 字体大小",
+  addNumber(modName, general, "HUD font size / HUD 字体大小",
     function() return state.settings.hud.fontScale end,
     function(value) state.settings.hud.fontScale=math.max(0.5, math.min(2, value)); save() end,
     0.5, 2, 0.1, "x")
+  addNumber(modName, general, "F3 font size / F3 字体大小",
+    function()
+      local pixels = state.settings.f3.fontPixels
+      return pixels == 8 and 1 or (pixels == 12 and 3 or 2)
+    end,
+    function(value)
+      state.settings.f3.fontPixels = F3_PIXELS_BY_INDEX[value] or 10
+      save()
+    end,
+    1, 3, 1)
+  ModConfigMenu.AddText(modName, general, function()
+    local pixels = state.settings.f3.fontPixels
+    local sizeName = pixels == 8 and "Small / 小"
+      or (pixels == 12 and "Large / 大" or "Standard / 标准")
+    return "F3: " .. sizeName .. " " .. tostring(pixels) .. "px"
+  end)
   addNumber(modName, general, "HUD X / 横向位置",
     function() return state.settings.hud.x end,
     function(value) state.settings.hud.x=math.max(0, math.min(600, value)); save() end,

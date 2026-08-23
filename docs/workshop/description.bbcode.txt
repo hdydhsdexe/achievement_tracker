@@ -68,8 +68,8 @@ The bundled bitmap font combines glyphs generated from LanaPixel and Source Han 
 
 内置位图字体使用依据 SIL Open Font License 1.1 授权的 LanaPixel 与 Source Han Sans SC 生成。成就图标来源归属英文 The Binding of Isaac: Rebirth Wiki，并依据 CC BY-SA 4.0 使用。完整声明和许可证随 Mod 一并提供。
 
-[h1]Version 0.7.1[/h1]
+[h1]Version 0.7.2[/h1]
 
-Initial Steam Workshop release. Includes the full bilingual achievement catalog, bundled achievement art, route-aware HUD guidance, tainted-character unlock routing, the F3 visual menu, and the local save importer.
+Improves text robustness across resolutions. F3 now uses native 8/10/12px bitmap fonts, dynamically sizes pages for complete condition text, and keeps pause notices in the footer. HUD text independently auto-fits its full content and stays inside safe screen bounds.
 
-Steam 创意工坊首次发布版本。包含完整双语成就目录、内置成就图标、路线感知 HUD、堕化角色解锁路线、F3 可视化菜单和本地存档导入器。
+改善不同分辨率下的文字显示。F3 使用原生 8/10/12px 位图字体，根据完整条件正文动态调整分页，并将暂停提示合并到页脚；HUD 字号独立自动适配，完整内容会保持在画面安全区域内。

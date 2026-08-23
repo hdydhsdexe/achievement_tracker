@@ -13,6 +13,10 @@ test("storage schema v6 validates achievements, F3 text settings, and persistent
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*10\s*\}/);
   assert.match(storage, /local F3_FONT_PIXELS\s*=\s*\{\s*\[8\]=true,\s*\[10\]=true,\s*\[12\]=true\s*\}/);
   assert.match(storage, /local function migrateF3FontPixels/);
+  assert.match(storage, /if oldPixels == 8 then return 8 end/);
+  assert.match(storage, /if oldPixels == 11 then return 12 end/);
+  assert.match(storage, /return 10/,
+    "legacy 9px and 10px F3 text must migrate to the native 10px font");
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);

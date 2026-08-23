@@ -1,13 +1,11 @@
-Initial release / 首次发布 — v0.7.1
+Text display robustness update / 文字显示鲁棒性更新 — v0.7.2
 
-- Added the bilingual achievement condition tracker and F3 visual goal menu.
-- Added route-aware guidance, warnings, and tainted-character unlock routing.
-- Added bundled achievement icons and a self-contained Chinese bitmap font.
-- Added optional Mod Config Menu Pure and REPENTOGON integration.
-- Added the local achievement save importer for Windows.
+- Added native 8/10/12px F3 bitmap fonts with texture smoothing disabled.
+- Reflowed full bilingual conditions and dynamically sized F3 pages for the active resolution.
+- Separated HUD and F3 text settings; HUD now auto-fits and stays inside safe bounds.
+- Migrated saved settings to schema 6 without overwriting position preferences.
 
-- 发布中英双语成就条件追踪器和 F3 可视化目标菜单。
-- 加入路线感知提示、临界警告与堕化角色解锁路线。
-- 内置成就图标与独立中文位图字体。
-- 可选适配 Mod Config Menu Pure 与 REPENTOGON。
-- 提供 Windows 本地成就存档导入器。
+- 新增关闭纹理平滑的 F3 原生 8/10/12px 位图字库。
+- 完整换行中英成就条件，并根据当前分辨率动态调整 F3 分页。
+- 分离 HUD 与 F3 字号设置；HUD 会自动缩小并保持在安全区域内。
+- 存档升级到 schema 6，保留用户原始位置偏好。

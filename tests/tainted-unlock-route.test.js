@@ -111,14 +111,13 @@ test("tainted trinket reminders use the HUD route warning and never the popup wa
   const routes = read("scripts/core/routes.lua");
   const hud = read("scripts/ui/hud.lua");
   const tainted = localFunctionBody(routes, "taintedUnlockRoute");
-  const render = functionBody(hud, "Hud.render");
   const renderWarning = functionBody(hud, "Hud.renderWarning");
 
   assert.match(tainted, /taintedTrinketPending[\s\S]*?"warning"/,
     "seeing a spare trinket must promote the tracked route to yellow warning severity");
   assert.match(tainted, /red_key|cracked_key/,
     "holding either key source must suppress or resolve the preparation warning");
-  assert.match(render, /route\.severity == "warning" and HUD_WARNING/);
+  assert.match(hud, /route\.severity == "warning" and HUD_WARNING/);
   assert.doesNotMatch(renderWarning, /tainted|trinket|cracked|route/i,
     "the existing temporary popup is reserved for evaluator failures/deadlines");
 });

@@ -7,8 +7,7 @@ local Text = require("scripts.ui.text")
 local Tracker = require("scripts.core.tracker")
 local Menu = {}
 local COLUMNS = 3
-local ROWS = 9
-local PAGE_SIZE = COLUMNS * ROWS
+local MAX_ROWS = 9
 local FILTERS = { "all", "collectible", "trinket", "card",
   "character", "monster", "area", "challenge", "pickup", "world",
   "feature", "other" }
@@ -18,10 +17,15 @@ local HOLD_REPEAT_MS = 90
 local PANEL_WIDTH_RATIO = 0.64
 local MIN_PANEL_WIDTH = 270
 local MAX_PANEL_WIDTH = 340
-local MAX_PANEL_HEIGHT = 238
-local LINE_HEIGHT = 13
-local MENU_MIN_BODY_PIXELS = 8
-local MENU_MAX_BODY_PIXELS = 11
+local MAX_PANEL_HEIGHT = 250
+local FOOTER_RESERVE = 18
+local DETAIL_GAP = 4
+local MENU_FONT_PIXELS = {
+  [8]={ title=10, body=8, label=8, small=8 },
+  [10]={ title=12, body=10, label=8, small=8 },
+  [12]={ title=12, body=12, label=10, small=8 }
+}
+local detailLineCache = {}
 local SHOOT_KEYS = {
   [ButtonAction.ACTION_SHOOTLEFT]=Keyboard.KEY_LEFT,
   [ButtonAction.ACTION_SHOOTRIGHT]=Keyboard.KEY_RIGHT,
@@ -40,32 +44,45 @@ local DIMMED_TINT = Color(0.48, 0.48, 0.48, 1)
 local CONVERTIBLE_INK = KColor(1.00, 0.72, 0.30, 1)
 local CONVERTIBLE_TINT = Color(1.00, 0.68, 0.28, 1)
 
-local function menuLayout()
+local function maximumDetailLines(language, contentWidth, bodyPixels)
+  local key = table.concat({ language, contentWidth, bodyPixels }, ":")
+  if detailLineCache[key] then return detailLineCache[key] end
+  local maximum = 1
+  for _, goal in ipairs(Catalog.goals) do
+    maximum = math.max(maximum,
+      #Text.wrapPixels(Catalog.text(goal, language).detail, contentWidth, bodyPixels))
+  end
+  detailLineCache[key] = maximum
+  return maximum
+end
+
+local function menuLayout(state)
   local screenWidth, screenHeight = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
   local panelWidth = math.min(MAX_PANEL_WIDTH,
     math.max(MIN_PANEL_WIDTH, math.floor(screenWidth * PANEL_WIDTH_RATIO)))
   panelWidth = math.min(panelWidth, screenWidth - 24)
-  local panelHeight = math.min(MAX_PANEL_HEIGHT, screenHeight - 28)
+  local panelHeight = math.min(MAX_PANEL_HEIGHT, screenHeight - 12)
   local panelX = math.floor((screenWidth - panelWidth) / 2)
   local panelY = math.floor((screenHeight - panelHeight) / 2)
   local x, top = panelX + 12, panelY + 10
   local contentWidth = panelWidth - 24
+  local language = Text.resolveLanguage(state.settings.language)
+  local fontPixels = state.settings.f3 and state.settings.f3.fontPixels or 10
+  local fonts = MENU_FONT_PIXELS[fontPixels] or MENU_FONT_PIXELS[10]
+  local lineHeight = Text.lineHeightPixels(fonts.body)
+  local gridTop = top + 32
+  local contentBottom = panelY + panelHeight - FOOTER_RESERVE
+  local maxDetailLines = maximumDetailLines(language, contentWidth, fonts.body)
+  local detailHeight = (maxDetailLines + 1) * lineHeight
+  local rows = math.max(1, math.min(MAX_ROWS,
+    math.floor((contentBottom - gridTop - DETAIL_GAP - detailHeight) / lineHeight)))
   return {
     panelWidth=panelWidth, panelHeight=panelHeight, panelX=panelX, panelY=panelY,
     x=x, top=top, contentWidth=contentWidth,
-    columnWidth=math.floor(contentWidth / COLUMNS), gridTop=top + 32
-  }
-end
-
-local function menuTypeScales(fontScale)
-  local requestedPixels = math.floor((tonumber(fontScale) or 1) * 10 + 0.5)
-  local bodyPixels = math.max(MENU_MIN_BODY_PIXELS,
-    math.min(MENU_MAX_BODY_PIXELS, requestedPixels))
-  return {
-    title=Text.scaleForPixels(bodyPixels + 1),
-    body=Text.scaleForPixels(bodyPixels),
-    label=Text.scaleForPixels(math.max(8, bodyPixels - 1)),
-    small=Text.scaleForPixels(math.max(7, bodyPixels - 2))
+    columnWidth=math.floor(contentWidth / COLUMNS), gridTop=gridTop,
+    contentBottom=contentBottom, maxDetailLines=maxDetailLines,
+    rows=rows, pageSize=rows * COLUMNS, lineHeight=lineHeight,
+    detailY=gridTop + rows * lineHeight + DETAIL_GAP, fonts=fonts
   }
 end
 
@@ -100,6 +117,7 @@ local function matchesFilter(goal, filter)
 end
 
 local function refreshGoals(state, context, preserveSelection)
+  local layout = menuLayout(state)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
@@ -161,7 +179,7 @@ local function refreshGoals(state, context, preserveSelection)
     end
   end
   state.menu.offset = #goals > 0
-    and math.floor((state.menu.cursor - 1) / PAGE_SIZE) * PAGE_SIZE + 1 or 1
+    and math.floor((state.menu.cursor - 1) / layout.pageSize) * layout.pageSize + 1 or 1
 end
 
 local function triggered(key) return Input.IsButtonTriggered(key, 0) end
@@ -200,12 +218,12 @@ end
 local function mouseGoalIndex(state, position, layout)
   if not pointInside(position, layout.x, layout.gridTop,
     layout.x + layout.columnWidth * COLUMNS,
-    layout.gridTop + LINE_HEIGHT * ROWS) then return nil end
+    layout.gridTop + layout.lineHeight * layout.rows) then return nil end
   local column = math.floor((position.X - layout.x) / layout.columnWidth)
-  local row = math.floor((position.Y - layout.gridTop) / LINE_HEIGHT)
+  local row = math.floor((position.Y - layout.gridTop) / layout.lineHeight)
   local index = state.menu.offset + row * COLUMNS + column
   local goals = state.menu.goals or {}
-  if index > #goals or index >= state.menu.offset + PAGE_SIZE then return nil end
+  if index > #goals or index >= state.menu.offset + layout.pageSize then return nil end
   return index
 end
 
@@ -213,7 +231,7 @@ local function updateMouseSelection(state)
   local position = Input.GetMousePosition(false)
   local moved = state.menu.mouseX ~= position.X or state.menu.mouseY ~= position.Y
   state.menu.mouseX, state.menu.mouseY = position.X, position.Y
-  local index = mouseGoalIndex(state, position, menuLayout())
+  local index = mouseGoalIndex(state, position, menuLayout(state))
   if moved and index then state.menu.cursor = index end
   local mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
   local clicked = mouseDown and not state.menu.mouseDown
@@ -304,7 +322,7 @@ function Menu.shouldBlockInput(state, entity, inputHook, buttonAction)
     or buttonAction == ButtonAction.ACTION_MAP then return true end
   local shootKey = SHOOT_KEYS[buttonAction]
   if shootKey and (Input.IsButtonPressed(shootKey, 0)
-    or mouseInsidePanel(Input.GetMousePosition(false), menuLayout())) then
+    or mouseInsidePanel(Input.GetMousePosition(false), menuLayout(state))) then
     return true
   end
   if buttonAction == ButtonAction.ACTION_ITEM
@@ -359,6 +377,7 @@ function Menu.update(state, save)
   end
   local goals = state.menu.goals or {}
   local count = #goals
+  local layout = menuLayout(state)
   local keyboardActivated = false
   if count > 0 then
     if not state.menu.searchFocused then
@@ -380,7 +399,7 @@ function Menu.update(state, save)
     else
       resetRepeatKeys(state)
     end
-    state.menu.offset = math.floor((state.menu.cursor - 1) / PAGE_SIZE) * PAGE_SIZE + 1
+    state.menu.offset = math.floor((state.menu.cursor - 1) / layout.pageSize) * layout.pageSize + 1
   else
     state.menu.cursor, state.menu.offset = 1, 1
   end
@@ -432,10 +451,10 @@ function Menu.render(state)
   local labels = Text.labels(language)
   local context = state.menu.relevanceContext
     or CharacterRelevance.buildContext(Game(), Catalog.goals)
-  local layout = menuLayout()
+  local layout = menuLayout(state)
   local panelWidth, panelHeight = layout.panelWidth, layout.panelHeight
   local panelX, panelY = layout.panelX, layout.panelY
-  local typeScale = menuTypeScales(state.settings.hud.fontScale)
+  local fonts = layout.fonts
   local x, top = layout.x, layout.top
   local contentWidth, columnWidth = layout.contentWidth, layout.columnWidth
   local gridTop = layout.gridTop
@@ -446,23 +465,26 @@ function Menu.render(state)
     title = labels.searchPrompt .. ": " .. state.menu.query
       .. (state.menu.searchFocused and "_" or "")
   end
-  Text.draw(Text.ellipsize(title, contentWidth, typeScale.title), panelX, top,
-    typeScale.title, DARK_INK,
+  Text.drawPixels(Text.ellipsizePixels(title, contentWidth, fonts.title), panelX, top,
+    fonts.title, DARK_INK,
     language, panelWidth, true)
-  Text.draw(filterLine(labels, state.menu.filterIndex), x, top + 16,
-    typeScale.label, INK, language)
+  local filterStatus = filterLine(labels, state.menu.filterIndex)
   local filterHint = state.menu.query ~= ""
     and string.format(labels.searchResults, #goals) or labels.filterHint
-  Text.draw(filterHint, panelX + panelWidth - 12
-      - Text.width(filterHint, typeScale.small), top + 16,
-    typeScale.small, MUTED, language)
+  local hintWidth = Text.widthPixels(filterHint, fonts.small)
+  Text.drawPixels(Text.ellipsizePixels(filterStatus,
+      math.max(20, contentWidth - hintWidth - 8), fonts.label), x, top + 16,
+    fonts.label, INK, language)
+  Text.drawPixels(filterHint, panelX + panelWidth - 12 - hintWidth, top + 16,
+    fonts.small, MUTED, language)
 
-  local last = math.min(#goals, state.menu.offset + PAGE_SIZE - 1)
+  local last = math.min(#goals, state.menu.offset + layout.pageSize - 1)
   for index = state.menu.offset, last do
     local goal = goals[index]
     local localIndex = index - state.menu.offset
     local column, row = localIndex % COLUMNS, math.floor(localIndex / COLUMNS)
-    local tileX, tileY = x + column * columnWidth, gridTop + row * LINE_HEIGHT
+    local tileX, tileY = x + column * columnWidth,
+      gridTop + row * layout.lineHeight
     local selected = index == state.menu.cursor
     local completed = isCompleted(state, goal)
     local completable = isCompletable(goal)
@@ -479,16 +501,16 @@ function Menu.render(state)
     local tracking = tracked and "*" or " "
     local status = completed and "+" or (not completable and "!"
       or (convertible and "~" or "?"))
-    local name = Text.ellipsize(Catalog.text(goal, language).name,
-      columnWidth - 35, typeScale.body)
+    local name = Text.ellipsizePixels(Catalog.text(goal, language).name,
+      columnWidth - 31, fonts.body)
     local color = dimmed and DIMMED_INK
       or (completed and STAMP_INK
         or (convertible and CONVERTIBLE_INK or (selected and DARK_INK or INK)))
-    Text.draw(marker .. tracking .. status .. " " .. name,
-      tileX + 15, tileY, typeScale.body, color, language)
+    Text.drawPixels(marker .. tracking .. status .. " " .. name,
+      tileX + 13, tileY, fonts.body, color, language)
   end
 
-  local detailY = gridTop + ROWS * LINE_HEIGHT + 4
+  local detailY = layout.detailY
   local selected = goals[state.menu.cursor]
   if selected then
     local reward = Rewards.display(selected)
@@ -500,49 +522,60 @@ function Menu.render(state)
     local convertible = not completed and relevance == "convertible"
     local detailInk = dimmed and DIMMED_INK
       or (convertible and CONVERTIBLE_INK or INK)
-    local detailTint = dimmed and DIMMED_TINT
-      or (convertible and CONVERTIBLE_TINT or Color(1, 1, 1, 1))
-    local leftWidth = math.floor(contentWidth * 0.52)
-    local rewardX = x + leftWidth + 15
-    Text.draw(labels.completionCondition, x, detailY, typeScale.label, DARK_INK, language)
     local statusLabel = completed and labels.completed
       or (not completable and labels.unavailable
         or (convertible and labels.availableAfterTransformation or labels.unconfirmed))
     local statusInk = completed and STAMP_INK
       or (convertible and CONVERTIBLE_INK or MUTED)
-    Text.draw(statusLabel, x + 72, detailY, typeScale.small, statusInk, language)
-    Text.draw(Catalog.text(selected, language).detail, x, detailY + 13,
-      typeScale.label, detailInk, language, leftWidth - 12)
-    Text.draw("=>", x + leftWidth, detailY + 22, typeScale.body, DARK_INK, language)
-    Text.draw(labels.unlockReward, rewardX, detailY, typeScale.label, DARK_INK, language)
-    RewardIcons.render(reward, rewardX + 15, detailY + 29, 30, detailTint)
-    local nameX = rewardX + 36
-    Text.draw(Text.ellipsize(rewardName(selected, language),
-      panelX + panelWidth - nameX - 10, typeScale.label),
-      nameX, detailY + 18, typeScale.label, detailInk, language)
-    Text.draw(rewardMeta(reward, labels), nameX, detailY + 34,
-      typeScale.small, MUTED, language)
+    local leftWidth = math.floor(contentWidth * 0.43)
+    local leftHeader = labels.completionCondition .. " · " .. statusLabel
+    Text.drawPixels(Text.ellipsizePixels(leftHeader, leftWidth - 6, fonts.label),
+      x, detailY, fonts.label, statusInk, language)
+
+    local rewardX = x + leftWidth
+    local rewardWidth = contentWidth - leftWidth
+    local meta = labels.unlockReward .. " " .. rewardMeta(reward, labels)
+    local separator = " · "
+    local nameWidth = math.max(0, rewardWidth
+      - Text.widthPixels(meta .. separator, fonts.small))
+    local summary = meta
+    if nameWidth > Text.widthPixels("...", fonts.small) then
+      summary = meta .. separator
+        .. Text.ellipsizePixels(rewardName(selected, language), nameWidth, fonts.small)
+    end
+    Text.drawPixels(Text.ellipsizePixels(summary, rewardWidth, fonts.small),
+      rewardX, detailY, fonts.small, MUTED, language)
+
+    local detailLines = Text.wrapPixels(Catalog.text(selected, language).detail,
+      contentWidth, fonts.body)
+    for lineIndex, line in ipairs(detailLines) do
+      Text.drawPixels(line, x, detailY + lineIndex * layout.lineHeight,
+        fonts.body, detailInk, language)
+    end
   else
     local emptyLabel = state.menu.query ~= "" and labels.emptySearch or labels.emptyFilter
-    Text.draw(emptyLabel, x, detailY + 12, typeScale.body, MUTED, language)
+    Text.drawPixels(emptyLabel, x, detailY + layout.lineHeight,
+      fonts.body, MUTED, language)
   end
 
-  local page = #goals > 0 and math.floor((state.menu.cursor - 1) / PAGE_SIZE) + 1 or 1
-  local pages = math.max(1, math.ceil(#goals / PAGE_SIZE))
+  local page = #goals > 0
+    and math.floor((state.menu.cursor - 1) / layout.pageSize) + 1 or 1
+  local pages = math.max(1, math.ceil(#goals / layout.pageSize))
   local footerY = panelY + panelHeight - 14
   local controls = state.menu.searchFocused and labels.controlsSearch or labels.controlsMenu
-  Text.draw(Text.ellipsize(controls, contentWidth - 94, typeScale.small),
-    x, footerY, typeScale.small, MUTED, language)
-  Text.draw(string.format("%d/%d %s  |  %d/%d", #state.tracker.ids,
-    state.tracker.max, labels.tracked, page, pages),
-    panelX + panelWidth - 112, footerY, typeScale.small, STAMP_INK, language)
   if Menu.isMultiplayer(Game()) then
-    Text.draw(labels.multiplayerRealtime, x, footerY - 11,
-      typeScale.small, DARK_INK, language)
+    controls = labels.multiplayerRealtime
   elseif not ModCallbacks.MC_PRE_UPDATE then
-    Text.draw(labels.pauseUnavailable, x, footerY - 11,
-      typeScale.small, DARK_INK, language)
+    controls = labels.pauseUnavailable
   end
+  local statistics = string.format("%d/%d %s  |  %d/%d", #state.tracker.ids,
+    state.tracker.max, labels.tracked, page, pages)
+  local statisticsWidth = Text.widthPixels(statistics, fonts.small)
+  Text.drawPixels(Text.ellipsizePixels(controls,
+      math.max(20, contentWidth - statisticsWidth - 8), fonts.small),
+    x, footerY, fonts.small, MUTED, language)
+  Text.drawPixels(statistics, panelX + panelWidth - 12 - statisticsWidth,
+    footerY, fonts.small, STAMP_INK, language)
 end
 
 return Menu

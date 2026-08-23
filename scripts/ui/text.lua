@@ -1,6 +1,8 @@
 local Text = {}
 local bundledFont = Font()
 local FONT_NATIVE_PIXELS = 16
+local pixelFonts = {}
+local PIXEL_FONT_SIZES = { 8, 10, 12 }
 
 local function roundPixel(value)
   if value >= 0 then return math.floor(value + 0.5) end
@@ -33,6 +35,11 @@ end
 
 local modPath = Text.GetCurrentModPath()
 bundledFont:Load(modPath .. "resources/font/achievement_lanapixel.fnt", "")
+for _, pixelSize in ipairs(PIXEL_FONT_SIZES) do
+  local font = Font()
+  font:Load(modPath .. "resources/font/achievement_lanapixel_" .. tostring(pixelSize) .. ".fnt", "")
+  pixelFonts[pixelSize] = font
+end
 
 local ui = {
   zh = {
@@ -95,10 +102,17 @@ function Text.snapScale(scale)
   return Text.scaleForPixels((tonumber(scale) or 1) * FONT_NATIVE_PIXELS)
 end
 
+local function drawWithFont(font, value, x, y, scale, color, boxWidth, center)
+  local tint = color or KColor(1, 1, 1, 1)
+  local drawWidth = boxWidth and Text.pixel(boxWidth) or 0
+  font:DrawStringScaledUTF8(tostring(value), Text.pixel(x), Text.pixel(y),
+    scale, scale, tint, drawWidth, center == true)
+end
+
 function Text.draw(value, x, y, scale, color, language, boxWidth, center)
   local tint = color or KColor(1, 1, 1, 1)
-  local drawScale = Text.snapScale(scale)
   local drawWidth = boxWidth and Text.pixel(boxWidth) or 0
+  local drawScale = Text.snapScale(scale)
   bundledFont:DrawStringScaledUTF8(tostring(value), Text.pixel(x), Text.pixel(y),
     drawScale, drawScale, tint, drawWidth, center == true)
 end
@@ -123,6 +137,27 @@ function Text.ellipsize(value, maxWidth, scale)
   return table.concat(glyphs) .. suffix
 end
 
+local function nativePixelSize(pixelSize)
+  local value = Text.pixel(pixelSize)
+  if pixelFonts[value] then return value end
+  return 10
+end
+
+function Text.drawPixels(value, x, y, pixelSize, color, language, boxWidth, center)
+  local size = nativePixelSize(pixelSize)
+  drawWithFont(pixelFonts[size], value, x, y, 1, color, boxWidth, center)
+end
+
+function Text.widthPixels(value, pixelSize)
+  local size = nativePixelSize(pixelSize)
+  return pixelFonts[size]:GetStringWidthUTF8(tostring(value))
+end
+
+function Text.lineHeightPixels(pixelSize)
+  local size = nativePixelSize(pixelSize)
+  return size == 8 and 13 or (size == 12 and 17 or 15)
+end
+
 local function glyphs(value)
   local result = {}
   local source = tostring(value or "")
@@ -134,24 +169,51 @@ local function glyphs(value)
   return result
 end
 
-function Text.wrap(value, maxWidth, scale)
-  local lines, current = {}, ""
+function Text.ellipsizePixels(value, maxWidth, pixelSize)
+  local text = tostring(value or "")
+  if Text.widthPixels(text, pixelSize) <= maxWidth then return text end
+  local chars = glyphs(text)
+  local suffix = "..."
+  while #chars > 0 and Text.widthPixels(table.concat(chars) .. suffix, pixelSize) > maxWidth do
+    table.remove(chars)
+  end
+  return table.concat(chars) .. suffix
+end
+
+local function wrapWithWidth(value, maxWidth, measure)
+  local lines, current, lastSpace = {}, "", nil
   for _, glyph in ipairs(glyphs(value)) do
     if glyph == "\n" then
       table.insert(lines, current)
-      current = ""
+      current, lastSpace = "", nil
     else
       local candidate = current .. glyph
-      if current ~= "" and Text.width(candidate, scale) > maxWidth then
-        table.insert(lines, current)
-        current = glyph == " " and "" or glyph
+      if current ~= "" and measure(candidate) > maxWidth then
+        if lastSpace then
+          table.insert(lines, string.sub(current, 1, lastSpace - 1))
+          local remainder = string.sub(current, lastSpace + 1) .. glyph
+          current = string.gsub(remainder, "^ +", "")
+        else
+          table.insert(lines, current)
+          current = glyph == " " and "" or glyph
+        end
+        lastSpace = string.match(current, ".*() ")
       else
         current = candidate
+        if glyph == " " then lastSpace = #current end
       end
     end
   end
   if current ~= "" or #lines == 0 then table.insert(lines, current) end
   return lines
+end
+
+function Text.wrap(value, maxWidth, scale)
+  return wrapWithWidth(value, maxWidth, function(text) return Text.width(text, scale) end)
+end
+
+function Text.wrapPixels(value, maxWidth, pixelSize)
+  return wrapWithWidth(value, maxWidth, function(text) return Text.widthPixels(text, pixelSize) end)
 end
 
 return Text

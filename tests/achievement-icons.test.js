@@ -252,7 +252,7 @@ test("every bundled achievement icon is a verified 64x64 PNG matching its manife
   }
 });
 
-test("F3 prefers achievement ids for both icon sizes while preserving semantic fallbacks", () => {
+test("F3 compact tiles prefer achievement ids while preserving semantic fallbacks", () => {
   const rewards = fs.readFileSync(path.join(root, "scripts/core/rewards.lua"), "utf8");
   const icons = fs.readFileSync(path.join(root, "scripts/ui/reward_icons.lua"), "utf8");
   const menu = fs.readFileSync(path.join(root, "scripts/ui/menu.lua"), "utf8");
@@ -273,7 +273,8 @@ test("F3 prefers achievement ids for both icon sizes while preserving semantic f
     "semantic renderers must remain the fallback path");
   assert.match(icons, /if not entry then entry = fallbackSprite\(reward\) end/);
   assert.match(menu, /RewardIcons\.render\(reward,[^\n]+12/);
-  assert.match(menu, /RewardIcons\.render\(reward,[^\n]+30/);
+  assert.doesNotMatch(menu, /RewardIcons\.render\(reward,[^\n]+30/,
+    "the full-width detail text must not reserve a second large icon row");
   assert.match(actor, /Animation Name="AchievementIcon"/);
   assert.match(actor, /Width="64" Height="64"/);
   assert.doesNotMatch(icons, /https?:\/\//, "Lua runtime must remain offline");
