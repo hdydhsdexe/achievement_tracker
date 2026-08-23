@@ -2,7 +2,7 @@
 
 适用于 **The Binding of Isaac: Repentance / Repentance+** 的局内成就条件追踪器。
 
-当前版本：**0.7.2**。
+当前版本：**v0.8.1**。
 
 ## 功能
 

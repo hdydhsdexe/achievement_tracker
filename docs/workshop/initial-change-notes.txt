@@ -1,4 +1,4 @@
-Text display robustness update / 文字显示鲁棒性更新 — v0.7.2
+Text display robustness update / 文字显示鲁棒性更新 — v0.8.1
 
 - Added shared native 11/22/33px HUD/F3 fonts drawn at 1:1 with texture smoothing disabled.
 - Built LanaPixel at its 11px design grid and generated exact 2x/3x nearest-neighbor variants; Chinese fallback glyphs retain antialiasing.

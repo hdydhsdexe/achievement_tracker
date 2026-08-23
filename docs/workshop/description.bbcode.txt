@@ -72,7 +72,7 @@ The bundled bitmap font combines glyphs generated from LanaPixel and Source Han 
 
 内置位图字体使用依据 SIL Open Font License 1.1 授权的 LanaPixel 与 Source Han Sans SC 生成。成就图标来源归属英文 The Binding of Isaac: Rebirth Wiki，并依据 CC BY-SA 4.0 使用。完整声明和许可证随 Mod 一并提供。
 
-[h1]Version 0.7.2[/h1]
+[h1]Version v0.8.1[/h1]
 
 Improves text robustness across resolutions. HUD and F3 now share native 11/22/33px fonts drawn at 1:1: LanaPixel uses a hard-edged 11px design grid with exact 2x/3x nearest-neighbor variants, while Chinese fallback glyphs retain antialiasing. F3 grows height-first and then width-first; HUD downgrades at the saved position, shifts left only at the 11px floor, and paginates complete goals on extremely small screens. Mod Config Menu can adjust HUD line spacing from 0 to 8px without changing the saved font or position preference.
 

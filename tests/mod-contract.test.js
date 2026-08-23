@@ -18,9 +18,9 @@ test("mod has v0.8.1 Workshop metadata and registers gameplay callbacks", () => 
   assert.match(metadata, /<version>0\.8\.1<\/version>/);
   assert.match(mcm, /Achievement Tracker v0\.8\.1/);
   assert.doesNotMatch(mcm, /Achievement Tracker v0\.2\.0/);
-  assert.match(description, /Version 0\.8\.1/);
+  assert.match(description, /Version v0\.8\.1/);
   assert.match(changeNotes, /v0\.8\.1/);
-  assert.match(read("README.md"), /当前版本：\*\*0\.8\.1\*\*/);
+  assert.match(read("README.md"), /当前版本：\*\*v0\.8\.1\*\*/);
   for (const document of [description, changeNotes, read("README.md")]) {
     assert.match(document, /11[^\n]*22[^\n]*33|11\/22\/33/,
       "release copy must describe the shared native integer-multiple HUD/F3 tiers");
@@ -43,7 +43,7 @@ test("Workshop publication assets satisfy uploader limits", () => {
   const cover = fs.statSync(path.join(root, "docs/workshop/cover.png"));
   assert.ok(description.length < 8000, "Workshop description must stay below 8000 characters");
   assert.ok(cover.size < 1024 * 1024, "Workshop cover must stay below 1 MiB");
-  assert.match(description, /Version 0\.8\.1/);
+  assert.match(description, /Version v0\.8\.1/);
 });
 
 test("catalog exposes only achievement-backed goals and drops stale tracked ids", () => {
