@@ -26,6 +26,18 @@ local function addNumber(modName, category, label, current, onChange, minimum, m
   })
 end
 
+local function addFontSize(modName, category, label, current, onChange)
+  ModConfigMenu.AddSetting(modName, category, {
+    Type = ModConfigMenu.OptionType.NUMBER,
+    CurrentSetting = function() return fontIndex(current()) end,
+    Minimum = 1,
+    Maximum = 3,
+    ModifyBy = 1,
+    Display = function() return label .. ": " .. fontName(current()) end,
+    OnChange = function(value) onChange(NATIVE_PIXELS_BY_INDEX[value] or 11) end
+  })
+end
+
 function Mcm.setup(state, save)
   if ModConfigMenu == nil then return false end
   local modName = "Achievement Tracker"
@@ -53,26 +65,18 @@ function Mcm.setup(state, save)
     return "Current language / 当前语言: " .. languageName(languageIndex(state.settings.language))
   end)
 
-  addNumber(modName, general, "HUD font size / HUD 字体大小",
-    function() return fontIndex(state.settings.hud.fontPixels) end,
-    function(value)
-      state.settings.hud.fontPixels = NATIVE_PIXELS_BY_INDEX[value] or 11
+  addFontSize(modName, general, "HUD font size / HUD 字体大小",
+    function() return state.settings.hud.fontPixels end,
+    function(pixels)
+      state.settings.hud.fontPixels = pixels
       save()
-    end,
-    1, 3, 1)
-  ModConfigMenu.AddText(modName, general, function()
-    return "HUD: " .. fontName(state.settings.hud.fontPixels)
-  end)
-  addNumber(modName, general, "F3 font size / F3 字体大小",
-    function() return fontIndex(state.settings.f3.fontPixels) end,
-    function(value)
-      state.settings.f3.fontPixels = NATIVE_PIXELS_BY_INDEX[value] or 11
+    end)
+  addFontSize(modName, general, "F3 font size / F3 字体大小",
+    function() return state.settings.f3.fontPixels end,
+    function(pixels)
+      state.settings.f3.fontPixels = pixels
       save()
-    end,
-    1, 3, 1)
-  ModConfigMenu.AddText(modName, general, function()
-    return "F3: " .. fontName(state.settings.f3.fontPixels)
-  end)
+    end)
   addNumber(modName, general, "HUD X / 横向位置",
     function() return state.settings.hud.x end,
     function(value) state.settings.hud.x=math.max(0, math.min(600, value)); save() end,
