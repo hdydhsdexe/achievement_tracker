@@ -238,7 +238,7 @@ Assert-Equal $result.Slots[0].UnlockedCount 2 'dry-run reports unlock count'
 Assert-True (-not (Test-Path -LiteralPath $layout.Data)) 'dry-run must not create target directory'
 Write-Output 'PASS: DryRun is read-only'
 
-# A real import preserves arbitrary fields, backs up old bytes, produces BOM-free schema v8,
+# A real import preserves arbitrary fields, backs up old bytes, produces BOM-free schema v9,
 # handles every available slot, and leaves absent slot 2 untouched.
 $layout = New-Layout 'merge'
 $local = New-Directory (Join-Path $layout.Documents 'My Games\Binding of Isaac Repentance')
@@ -257,13 +257,13 @@ $options = Get-Options $layout
 $result = Invoke-WithOptions $options
 $merged = Get-Content -LiteralPath (Join-Path $data 'save1.dat') -Raw | ConvertFrom-Json
 $minimal = Get-Content -LiteralPath (Join-Path $data 'save3.dat') -Raw | ConvertFrom-Json
-Assert-Equal $merged.schemaVersion 8 'schema upgraded'
+Assert-Equal $merged.schemaVersion 9 'schema upgraded'
 Assert-Equal $merged.language 'zh' 'language preserved'
 Assert-Equal $merged.tracked[0] 'achievement_326' 'tracked goals preserved'
 Assert-True ([bool]$merged.observedCompleted.achievement_326) 'observations preserved'
 Assert-Equal $merged.achievementImport.saveSlot 1 'slot 1 snapshot'
 Assert-Equal $merged.achievementImport.unlockedIds.Count 2 'slot 1 unlocks'
-Assert-Equal $minimal.schemaVersion 8 'minimal slot 3 created'
+Assert-Equal $minimal.schemaVersion 9 'minimal slot 3 created'
 Assert-Equal $minimal.achievementImport.saveSlot 3 'slot 3 snapshot'
 Assert-True ((Get-Content -LiteralPath $slot2 -Raw) -eq '{"sentinel":true}') 'missing source slot 2 remains untouched'
 Assert-True (Test-Path -LiteralPath (Join-Path $result.BackupPath 'save1.dat')) 'existing slot is backed up'

@@ -6,23 +6,28 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("storage schema v8 migrates legacy HUD scaling and preserves native tiers", () => {
+test("storage schema v9 adds bounded HUD line spacing and preserves native tiers", () => {
   const storage = read("scripts/core/storage.lua");
 
-  assert.match(storage, /schemaVersion\s*=\s*8/);
-  assert.doesNotMatch(storage, /schemaVersion\s*=\s*7/);
-  assert.match(storage, /hud\s*=\s*\{[^}]*fontPixels\s*=\s*11/);
+  assert.match(storage, /schemaVersion\s*=\s*9/);
+  assert.doesNotMatch(storage, /schemaVersion\s*=\s*8/);
+  assert.match(storage, /hud\s*=\s*\{[^}]*fontPixels\s*=\s*11[^}]*lineSpacingPixels\s*=\s*0/);
   assert.match(storage, /f3\s*=\s*\{\s*fontPixels\s*=\s*11\s*\}/);
   assert.match(storage, /local NATIVE_FONT_PIXELS\s*=\s*\{\s*\[11\]=true,\s*\[22\]=true,\s*\[33\]=true\s*\}/);
   assert.match(storage, /local function migrateHudFontPixels/);
-  assert.match(storage, /local function migrateHudFontPixels\(decoded\)\s+local schemaVersion = tonumber\(decoded\.schemaVersion\)[\s\S]*?schemaVersion\s*==\s*8[\s\S]*?return decoded\.hud\.fontPixels/);
+  assert.match(storage, /local function migrateHudFontPixels\(decoded\)\s+local schemaVersion = tonumber\(decoded\.schemaVersion\)[\s\S]*?schemaVersion\s*>=\s*8[\s\S]*?return decoded\.hud\.fontPixels/);
   assert.match(storage, /math\.floor\([^\n]*oldScale[^\n]*\*\s*16[^\n]*\+\s*0\.5\)/);
   assert.match(storage, /oldPixels\s*>=\s*22[^\n]*and\s*22\s*or\s*11/);
   assert.match(storage, /data\.hud\.fontPixels\s*=\s*migrateHudFontPixels\(decoded\)/);
+  assert.match(storage, /local function normalizeHudLineSpacing\(value\)/);
+  assert.match(storage, /math\.floor\(value\s*\+\s*0\.5\)/);
+  assert.match(storage, /math\.max\(0,\s*math\.min\(8,/);
+  assert.match(storage, /data\.hud\.lineSpacingPixels\s*=\s*normalizeHudLineSpacing\(decoded\.hud\.lineSpacingPixels\)/);
+  assert.match(storage, /data\.hud\.lineSpacingPixels\s*=\s*normalizeHudLineSpacing\(data\.hud\.lineSpacingPixels\)/);
   assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /local function migrateF3FontPixels/);
   assert.match(storage, /schemaVersion\s*>=\s*7[\s\S]*?return decoded\.f3\.fontPixels/,
-    "schema 7 F3 native tiers must survive the schema 8 upgrade");
+    "schema 7 F3 native tiers must survive the schema 9 upgrade");
   assert.match(storage, /data\.f3\.fontPixels\s*=\s*migrateF3FontPixels\(decoded\)/);
   assert.match(storage, /MAX_ACHIEVEMENT_COUNT\s*=\s*16384/);
   assert.match(storage, /MAX_MOD_SAVE_DATA_BYTES\s*=\s*4\s*\*\s*1024\s*\*\s*1024/);

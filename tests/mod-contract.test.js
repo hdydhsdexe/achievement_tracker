@@ -25,6 +25,8 @@ test("mod has v0.7.2 Workshop metadata and registers gameplay callbacks", () => 
       "release copy must describe the shared native integer-multiple HUD/F3 tiers");
     assert.match(document, /HUD[^\n]*(?:11|整数|integer)|(?:11|整数|integer)[^\n]*HUD/i);
     assert.doesNotMatch(document, /native 8\/10\/12|原生 8、10、12|8\/10\/12px/);
+    assert.match(document, /line spacing|行间距/i,
+      "release copy must describe the adjustable HUD line spacing");
   }
   assert.match(main, /RegisterMod\("Achievement Tracker", 1\)/);
   for (const callback of ["MC_POST_GAME_STARTED", "MC_POST_UPDATE", "MC_POST_RENDER", "MC_POST_PICKUP_UPDATE", "MC_PRE_GAME_EXIT"]) {
@@ -747,6 +749,12 @@ test("HUD preserves position first, then left-shifts and paginates complete targ
   assert.match(hud, /for tierIndex = requestedIndex, 1, -1/);
   assert.match(hud, /for candidateX = x - 1, SCREEN_MARGIN, -1/);
   assert.match(hud, /local function paginateBlocks/);
+  assert.match(hud, /local function lineAdvance/);
+  assert.match(hud, /local function contentHeight/);
+  assert.match(hud, /local function maximumLineCount/);
+  assert.match(hud, /lineSpacingPixels/);
+  assert.match(hud, /tostring\(layout\.lineSpacingPixels\)/,
+    "changing line spacing must reset automatic page rotation");
   assert.match(hud, /pagedLayout\(state, SCREEN_MARGIN, screenWidth, availableHeight\)/,
     "pagination must start only after the 11px HUD has expanded to the full safe width");
   assert.match(hud, /layoutSignature/);
@@ -805,7 +813,7 @@ test("bundled LanaPixel assets are complete", () => {
   assert.ok(pages.length > 0, "LanaPixel font must include a texture page");
 });
 
-test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position settings", () => {
+test("Mod Config Menu exposes HUD line spacing beside native font and position settings", () => {
   const mcm = read("scripts/integrations/mcm.lua");
   assert.match(mcm, /Language/);
   assert.match(mcm, /HUD font size \/ HUD 字体大小/);
@@ -822,6 +830,9 @@ test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position s
   assert.doesNotMatch(mcm, /return "(?:HUD|F3): " \.\. fontName/,
     "font names should not be duplicated on separate read-only rows");
   assert.doesNotMatch(mcm, /tostring\(pixels\).*px/);
+  assert.match(mcm, /HUD line spacing \/ HUD 行间距/);
+  assert.match(mcm, /state\.settings\.hud\.lineSpacingPixels/);
+  assert.match(mcm, /0,\s*8,\s*1,\s*"px"/);
   assert.match(mcm, /HUD X/);
   assert.match(mcm, /HUD Y/);
   assert.match(mcm, /Minimum/);
@@ -838,6 +849,7 @@ test("persistent settings are loaded defensively and saved as JSON", () => {
   assert.match(storage, /activeRun/);
   assert.doesNotMatch(storage, /data\.hud\.fontScale\s*=/);
   assert.match(storage, /fontPixels/);
+  assert.match(storage, /lineSpacingPixels/);
 });
 
 test("failed run state survives quitting and is restored only for the same run", () => {

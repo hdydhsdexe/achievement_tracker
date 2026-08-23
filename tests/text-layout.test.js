@@ -237,7 +237,18 @@ function paginatedRows(content, availableLines) {
   return {pages, split, fixed};
 }
 
-function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, preferredY, fonts) {
+function hudHeight(lines, font, lineSpacingPixels) {
+  if (lines <= 0) return 0;
+  return lines * font.lineHeight + (lines - 1) * lineSpacingPixels;
+}
+
+function hudLineCapacity(availableHeight, font, lineSpacingPixels) {
+  return Math.max(1, Math.floor((availableHeight + lineSpacingPixels)
+    / (font.lineHeight + lineSpacingPixels)));
+}
+
+function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, preferredY,
+  fonts, lineSpacingPixels = 0) {
   const margin = 8;
   const maximumX = Math.max(margin, screenWidth - margin - 120);
   const preferred = Math.max(margin, Math.min(maximumX, preferredX));
@@ -248,7 +259,8 @@ function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, pr
     const content = routeBlocks(font, screenWidth - margin - x);
     const lines = content.header.length + content.footer.length
       + content.blocks.reduce((total, block) => total + block.length, 0);
-    return {pixelSize, font, x, content, lines, totalHeight: lines * font.lineHeight};
+    return {pixelSize, font, x, content, lines, lineSpacingPixels,
+      totalHeight: hudHeight(lines, font, lineSpacingPixels)};
   };
   for (let tierIndex = requestedIndex; tierIndex >= 0; tierIndex -= 1) {
     const result = staticAt(HUD_TIERS[tierIndex], preferred);
@@ -268,13 +280,14 @@ function fitNativeHud(requestedPixels, screenWidth, screenHeight, preferredX, pr
   }
 
   const font = fonts.get(11);
-  const availableLines = Math.floor(availableHeight / font.lineHeight);
+  const availableLines = hudLineCapacity(availableHeight, font, lineSpacingPixels);
   const content = routeBlocks(font, screenWidth - margin * 2);
   const pagination = paginatedRows(content, availableLines);
-  const fallback = {pixelSize: 11, font, x: margin, content, ...pagination};
+  const fallback = {pixelSize: 11, font, x: margin, content, lineSpacingPixels,
+    ...pagination};
   const pageLines = Math.max(...fallback.pages.map((page) =>
     page.length + fallback.content.header.length + fallback.content.footer.length));
-  const totalHeight = pageLines * font.lineHeight;
+  const totalHeight = hudHeight(pageLines, font, lineSpacingPixels);
   const y = Math.max(margin, Math.min(preferredY,
     screenHeight - margin - totalHeight));
   return {...fallback, y, lines: pageLines, totalHeight};
@@ -301,11 +314,32 @@ test("320x180 HUD pagination preserves every complete target row inside safe bou
   assert.equal(layout.split, false, "left-shifting must avoid splitting a target when possible");
   assert.deepEqual(layout.pages.flat(), layout.content.blocks.flat());
   for (const page of layout.pages) {
-    const height = (page.length + layout.content.header.length
-      + layout.content.footer.length) * layout.font.lineHeight;
+    const lines = page.length + layout.content.header.length + layout.content.footer.length;
+    const height = hudHeight(lines, layout.font, layout.lineSpacingPixels);
     assert.ok(height <= 164);
   }
   assert.ok(layout.y >= 8 && layout.y + layout.totalHeight <= 172);
+});
+
+test("HUD line spacing uses integer gaps in static and paged safe-area calculations", () => {
+  const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
+  const compact = fitNativeHud(11, 1920, 1080, 18, 82, fonts, 0);
+  const spaced = fitNativeHud(11, 1920, 1080, 18, 82, fonts, 8);
+  assert.equal(spaced.lines, compact.lines);
+  assert.equal(spaced.totalHeight - compact.totalHeight, (spaced.lines - 1) * 8);
+
+  const screens = [[320, 180], [408, 270], [480, 270], [640, 360],
+    [854, 480], [1920, 1080]];
+  for (const spacing of [0, 4, 8]) {
+    for (const requested of HUD_TIERS) {
+      for (const [width, height] of screens) {
+        const layout = fitNativeHud(requested, width, height, 600, 400, fonts, spacing);
+        assert.ok(layout.y >= 8 && layout.y + layout.totalHeight <= height - 8,
+          `${width}x${height} ${requested}px +${spacing}px must remain in the safe area`);
+        assert.deepEqual(layout.pages.flat(), layout.content.blocks.flat());
+      }
+    }
+  }
 });
 
 test("all bilingual warning conditions fit centered at a native tier", () => {
@@ -314,12 +348,15 @@ test("all bilingual warning conditions fit centered at a native tier", () => {
   for (const row of catalogRows()) {
     for (const language of ["zh", "en"]) {
       const message = `${row[language]}: condition lost (reason)`;
-      for (const requested of HUD_TIERS) {
-        for (const [width, height] of screens) {
-          const effective = [...HUD_TIERS].reverse().find((pixels) => pixels <= requested
-            && wrap(message, width - 16, fonts.get(pixels).records).length
-              * fonts.get(pixels).lineHeight <= height - 16);
-          assert.ok(effective, `${row.id} ${language} must fit ${width}x${height}`);
+      for (const spacing of [0, 8]) {
+        for (const requested of HUD_TIERS) {
+          for (const [width, height] of screens) {
+            const effective = [...HUD_TIERS].reverse().find((pixels) => pixels <= requested
+              && hudHeight(wrap(message, width - 16, fonts.get(pixels).records).length,
+                fonts.get(pixels), spacing) <= height - 16);
+            assert.ok(effective,
+              `${row.id} ${language} ${spacing}px spacing must fit ${width}x${height}`);
+          }
         }
       }
     }
