@@ -816,6 +816,11 @@ test("Mod Config Menu exposes separate HUD and F3 font sizes plus X/Y position s
   assert.match(mcm, /Small \/ 小/);
   assert.match(mcm, /Standard \/ 标准/);
   assert.match(mcm, /Large \/ 大/);
+  assert.match(mcm, /local function addFontSize/);
+  assert.match(mcm, /return label \.\. ": " \.\. fontName/,
+    "the selectable HUD/F3 rows must display names instead of numeric tier indexes");
+  assert.doesNotMatch(mcm, /return "(?:HUD|F3): " \.\. fontName/,
+    "font names should not be duplicated on separate read-only rows");
   assert.doesNotMatch(mcm, /tostring\(pixels\).*px/);
   assert.match(mcm, /HUD X/);
   assert.match(mcm, /HUD Y/);
