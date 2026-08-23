@@ -189,3 +189,37 @@ one self-contained BMFont without silently substituting a square.
 Live-game confirmation remains for representative fallback words, HUD/F3 font
 scales, narrow internal resolutions, and English rendering. The RED checkpoint
 is commit `565d361`; the GREEN checkpoint follows the completed implementation.
+
+## 2026-08-23 redundant achievement status cues
+
+The journeys were derived from the approved F3 status-clarity plan: a player
+must be able to distinguish completion, immediate availability, transform
+availability, another-character requirements, current-mode unavailability,
+tracking, and selection without relying on color alone.
+
+- RED: `npm.cmd test -- --test-name-pattern="F3 resolves one redundant visual state"`
+  ran the repository suite with 108 tests, 106 passing and 2 intended failures.
+  The failures identified the missing unified visual-state resolver and bundled
+  status atlas.
+- A follow-up RED run of the same contract produced 107/108 passing when review
+  found that the fixed 43% detail column would truncate the new English status;
+  GREEN dynamically reserves the measured status width without adding a row.
+- GREEN: `npm.cmd test` ran 108 tests with all 108 passing.
+- COVERAGE: `npm.cmd run test:coverage` ran the same 108 tests with all passing;
+  instrumented JavaScript reached 94.77% line, 82.61% branch, and 90.32%
+  function coverage. Runtime Lua remains contract-tested because the game API is
+  not available to the Node coverage runner.
+
+| What is guaranteed | Test | Type | Result |
+| --- | --- | --- | --- |
+| Completed and unavailable states outrank character relevance, so an unavailable convertible goal cannot receive the transform color or label | `F3 resolves one redundant visual state before rendering rows and details` | contract | PASS |
+| Five state colors map to five dedicated pixel symbols while tracking and selection use independent visual channels | `F3 resolves one redundant visual state before rendering rows and details` | resource/contract | PASS |
+| Chinese and English details expose completion certainty and current-run feasibility together | `F3 resolves one redundant visual state before rendering rows and details` | localization | PASS |
+| Three-column pagination, 11/22/33px native tiers, search, filtering, challenge ordering, and transformation refresh behavior remain intact | complete `npm.cmd test` suite | regression | PASS |
+
+The status actor XML and 36x8 PNG were also checked directly after generation.
+Live-game confirmation remains for final color appearance, nearest-neighbor icon
+scaling, and selection-frame alignment on the parchment at all three font tiers.
+No checkpoint commits were created because this implementation was requested as
+working-tree changes rather than a Git history operation; the RED/GREEN evidence
+is preserved here instead.

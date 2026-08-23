@@ -35,11 +35,17 @@ local SHOOT_KEYS = {
 local DARK_INK = KColor(1.00, 0.94, 0.78, 1)
 local INK = KColor(0.96, 0.86, 0.68, 1)
 local MUTED = KColor(0.72, 0.65, 0.56, 1)
-local STAMP_INK = KColor(0.78, 0.86, 0.62, 1)
-local DIMMED_INK = KColor(0.62, 0.60, 0.58, 1)
-local DIMMED_TINT = Color(0.48, 0.48, 0.48, 1)
+local COMPLETED_INK = KColor(0.66, 0.90, 0.64, 1)
+local CURRENT_INK = KColor(0.62, 0.86, 1.00, 1)
 local CONVERTIBLE_INK = KColor(1.00, 0.72, 0.30, 1)
+local OTHER_INK = KColor(0.82, 0.72, 1.00, 1)
+local UNAVAILABLE_INK = KColor(1.00, 0.56, 0.56, 1)
+local TRACKED_INK = KColor(1.00, 0.88, 0.54, 1)
+local COMPLETED_TINT = Color(0.72, 0.82, 0.62, 1)
+local CURRENT_TINT = Color(1, 1, 1, 1)
 local CONVERTIBLE_TINT = Color(1.00, 0.68, 0.28, 1)
+local OTHER_TINT = Color(0.74, 0.68, 0.88, 1)
+local UNAVAILABLE_TINT = Color(0.70, 0.45, 0.45, 1)
 
 local function maximumDetailLines(language, contentWidth, bodyPixels)
   local key = table.concat({ language, contentWidth, bodyPixels }, ":")
@@ -135,6 +141,28 @@ local function isCompletable(goal)
   return Catalog.isCompletable(goal, Isaac.GetChallenge())
 end
 
+local VISUAL_STATES = {
+  completed={ key="completed", label="completed", iconFrame=0,
+    ink=COMPLETED_INK, iconTint=COMPLETED_TINT },
+  current={ key="current", label="currentAvailable", iconFrame=1,
+    ink=CURRENT_INK, iconTint=CURRENT_TINT },
+  convertible={ key="convertible", label="convertiblePending", iconFrame=2,
+    ink=CONVERTIBLE_INK, iconTint=CONVERTIBLE_TINT },
+  other={ key="other", label="otherCharacterPending", iconFrame=3,
+    ink=OTHER_INK, iconTint=OTHER_TINT },
+  unavailable={ key="unavailable", label="currentModeUnavailable", iconFrame=4,
+    ink=UNAVAILABLE_INK, iconTint=UNAVAILABLE_TINT }
+}
+
+local function resolveVisualState(state, goal, context)
+  if isCompleted(state, goal) then return VISUAL_STATES.completed end
+  if not isCompletable(goal) then return VISUAL_STATES.unavailable end
+  local relevance = CharacterRelevance.classify(goal, context)
+  if relevance == "current" then return VISUAL_STATES.current end
+  if relevance == "convertible" then return VISUAL_STATES.convertible end
+  return VISUAL_STATES.other
+end
+
 local function completedSignature(state)
   local ids = {}
   for _, goal in ipairs(Catalog.goals) do
@@ -162,17 +190,16 @@ local function refreshGoals(state, context, preserveSelection)
   for _, match in ipairs(Catalog.search(state.menu.query)) do
     local goal = match.goal
     if matchesFilter(goal, filter) then
-      local completedGoal = isCompleted(state, goal)
-      local completable = isCompletable(goal)
+      local visualState = resolveVisualState(state, goal, context)
       local bucket, priorityRank = completed, 6
-      if Tracker.contains(state.tracker, goal.id) and (completedGoal or completable) then
+      if Tracker.contains(state.tracker, goal.id)
+          and visualState.key ~= "unavailable" then
         bucket, priorityRank = tracked, 1
-      elseif not completedGoal and not completable then
+      elseif visualState.key == "unavailable" then
         bucket, priorityRank = unavailable, 5
-      elseif not completedGoal then
-        local relevance = CharacterRelevance.classify(goal, context)
-        if relevance == "current" then bucket, priorityRank = currentPending, 2
-        elseif relevance == "convertible" then bucket, priorityRank = convertiblePending, 3
+      elseif visualState.key ~= "completed" then
+        if visualState.key == "current" then bucket, priorityRank = currentPending, 2
+        elseif visualState.key == "convertible" then bucket, priorityRank = convertiblePending, 3
         else bucket, priorityRank = otherCharacterPending, 4 end
       end
       table.insert(bucket, goal)
@@ -518,51 +545,48 @@ function Menu.render(state)
     local tileX, tileY = x + column * columnWidth,
       gridTop + row * layout.lineHeight
     local selected = index == state.menu.cursor
-    local completed = isCompleted(state, goal)
-    local completable = isCompletable(goal)
-    local relevance = CharacterRelevance.classify(goal, context)
-    local dimmed = not completed and relevance == "other"
-    dimmed = dimmed or (not completed and not completable)
-    local convertible = not completed and relevance == "convertible"
+    local visualState = resolveVisualState(state, goal, context)
     local tracked = Tracker.contains(state.tracker, goal.id)
     local reward = Rewards.display(goal)
-    local tint = completed and Color(0.72, 0.60, 0.48, 1)
-      or (convertible and CONVERTIBLE_TINT or Color(1, 1, 1, 1))
-    RewardIcons.render(reward, tileX + 8, tileY + 6, 12, dimmed and DIMMED_TINT or tint)
+    if selected then
+      RewardIcons.renderSelection(tileX + 1, tileY, columnWidth - 2,
+        layout.lineHeight - 1)
+    end
+    RewardIcons.render(reward, tileX + 8, tileY + 6, 12, visualState.iconTint)
     local marker = selected and ">" or " "
     local tracking = tracked and "*" or " "
-    local status = completed and "+" or (not completable and "!"
-      or (convertible and "~" or "?"))
+    local textX = tileX + 13
+    local markerWidth = Text.widthPixels(">", fontPixels)
+    local trackingX = textX + markerWidth
+    local trackingWidth = Text.widthPixels("*", fontPixels)
+    local statusSize = math.floor(fontPixels * 7 / 11 + 0.5)
+    local statusGap = math.max(1, math.floor(fontPixels / 11 + 0.5))
+    local statusX = trackingX + trackingWidth + statusGap + statusSize / 2
+    local nameX = statusX + statusSize / 2 + statusGap
+    local nameWidth = math.max(0, tileX + columnWidth - 2 - nameX)
     local name = Text.ellipsizePixels(Catalog.text(goal, language).name,
-      columnWidth - 31, fontPixels)
-    local color = dimmed and DIMMED_INK
-      or (completed and STAMP_INK
-        or (convertible and CONVERTIBLE_INK or (selected and DARK_INK or INK)))
-    Text.drawPixels(marker .. tracking .. status .. " " .. name,
-      tileX + 13, tileY, fontPixels, color, language)
+      nameWidth, fontPixels)
+    Text.drawPixels(marker, textX, tileY, fontPixels, DARK_INK, language)
+    Text.drawPixels(tracking, trackingX, tileY, fontPixels,
+      tracked and TRACKED_INK or INK, language)
+    RewardIcons.renderStatus(visualState.iconFrame, statusX,
+      tileY + layout.lineHeight / 2, statusSize, visualState.iconTint)
+    Text.drawPixels(name, nameX, tileY, fontPixels, visualState.ink, language)
   end
 
   local detailY = layout.detailY
   local selected = goals[state.menu.cursor]
   if selected then
     local reward = Rewards.display(selected)
-    local completed = isCompleted(state, selected)
-    local completable = isCompletable(selected)
-    local relevance = CharacterRelevance.classify(selected, context)
-    local dimmed = not completed and relevance == "other"
-    dimmed = dimmed or (not completed and not completable)
-    local convertible = not completed and relevance == "convertible"
-    local detailInk = dimmed and DIMMED_INK
-      or (convertible and CONVERTIBLE_INK or INK)
-    local statusLabel = completed and labels.completed
-      or (not completable and labels.unavailable
-        or (convertible and labels.availableAfterTransformation or labels.unconfirmed))
-    local statusInk = completed and STAMP_INK
-      or (convertible and CONVERTIBLE_INK or MUTED)
-    local leftWidth = math.floor(contentWidth * 0.43)
-    local leftHeader = labels.completionCondition .. " · " .. statusLabel
+    local visualState = resolveVisualState(state, selected, context)
+    local statusLabel = labels[visualState.label]
+    local statusWidth = Text.widthPixels(statusLabel, fontPixels)
+    local minimumRewardWidth = math.floor(fontPixels * 45 / 11 + 0.5)
+    local leftWidth = math.min(contentWidth - minimumRewardWidth,
+      math.max(math.floor(contentWidth * 0.43), statusWidth + 6))
+    local leftHeader = statusLabel
     Text.drawPixels(Text.ellipsizePixels(leftHeader, leftWidth - 6, fontPixels),
-      x, detailY, fontPixels, statusInk, language)
+      x, detailY, fontPixels, visualState.ink, language)
 
     local rewardX = x + leftWidth
     local rewardWidth = contentWidth - leftWidth
@@ -582,7 +606,7 @@ function Menu.render(state)
       contentWidth, fontPixels)
     for lineIndex, line in ipairs(detailLines) do
       Text.drawPixels(line, x, detailY + lineIndex * layout.lineHeight,
-        fontPixels, detailInk, language)
+        fontPixels, INK, language)
     end
   else
     local emptyLabel = state.menu.query ~= "" and labels.emptySearch or labels.emptyFilter
@@ -607,7 +631,7 @@ function Menu.render(state)
       math.max(20, contentWidth - statisticsWidth - 8), fontPixels),
     x, footerY, fontPixels, MUTED, language)
   Text.drawPixels(statistics, panelX + panelWidth - 12 - statisticsWidth,
-    footerY, fontPixels, STAMP_INK, language)
+    footerY, fontPixels, TRACKED_INK, language)
 end
 
 return Menu

@@ -607,18 +607,19 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /Keyboard\.KEY_TAB/);
   assert.match(menu, /filterIndex/);
   assert.match(menu, /RewardIcons\.render/);
-  assert.match(menu, /labels\.completionCondition/);
   assert.match(menu, /labels\.unlockReward/);
-  assert.match(menu, /labels\.unconfirmed/);
+  assert.match(menu, /labels\[visualState\.label\]/);
   assert.match(menu, /local INK = KColor/);
   assert.doesNotMatch(menu, /local WHITE = KColor/);
   assert.match(menu, /local DARK_INK = KColor\(1\.00, 0\.94, 0\.78, 1\)/);
   assert.match(menu, /local INK = KColor\(0\.96, 0\.86, 0\.68, 1\)/);
   assert.match(menu, /local MUTED = KColor\(0\.72, 0\.65, 0\.56, 1\)/);
-  assert.match(menu, /local STAMP_INK = KColor\(0\.78, 0\.86, 0\.62, 1\)/);
-  assert.match(menu, /local DIMMED_INK = KColor\(0\.62, 0\.60, 0\.58, 1\)/);
+  assert.match(menu, /local COMPLETED_INK = KColor\(0\.66, 0\.90, 0\.64, 1\)/);
+  assert.match(menu, /local CURRENT_INK = KColor\(0\.62, 0\.86, 1\.00, 1\)/);
   assert.match(menu, /local CONVERTIBLE_INK = KColor\(1\.00, 0\.72, 0\.30, 1\)/);
-  assert.doesNotMatch(menu, /local (?:GREEN|BLUE|ACCENT) = KColor/);
+  assert.match(menu, /local OTHER_INK = KColor\(0\.82, 0\.72, 1\.00, 1\)/);
+  assert.match(menu, /local UNAVAILABLE_INK = KColor\(1\.00, 0\.56, 0\.56, 1\)/);
+  assert.match(menu, /local TRACKED_INK = KColor\(1\.00, 0\.88, 0\.54, 1\)/);
   assert.match(menu, /Game\(\):IsPaused\(\)/);
   assert.match(menu, /MC_PRE_PAUSE_SCREEN_RENDER/);
   assert.match(menu, /local PANEL_WIDTH_RATIO = 0\.64/);
@@ -652,6 +653,58 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /contentBottom/);
   assert.doesNotMatch(menu, /MENU_FONT_PIXELS|Text\.scaleForPixels\(.*f3/);
   assert.doesNotMatch(menu, /Text\.draw\(Catalog\.text\(selected, language\)\.detail/);
+});
+
+test("F3 resolves one redundant visual state before rendering rows and details", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const text = read("scripts/ui/text.lua");
+  const icons = read("scripts/ui/reward_icons.lua");
+  const actor = read("resources/gfx/ui/achievement_status_icons.anm2");
+  const atlas = fs.readFileSync(path.join(root, "resources/gfx/ui/achievement_status_icons.png"));
+
+  assert.match(menu, /local VISUAL_STATES\s*=\s*{/);
+  assert.match(menu, /local function resolveVisualState\(state, goal, context\)/);
+  assert.match(menu, /if isCompleted\(state, goal\) then return VISUAL_STATES\.completed end[\s\S]*?if not isCompletable\(goal\) then return VISUAL_STATES\.unavailable end[\s\S]*?relevance == "current"[\s\S]*?relevance == "convertible"[\s\S]*?VISUAL_STATES\.other/,
+    "completed and unavailable must outrank current, convertible, and other-character states");
+  for (const [key, frame, label] of [
+    ["completed", 0, "completed"], ["current", 1, "currentAvailable"],
+    ["convertible", 2, "convertiblePending"], ["other", 3, "otherCharacterPending"],
+    ["unavailable", 4, "currentModeUnavailable"]
+  ]) {
+    assert.match(menu, new RegExp(`${key}=\\{ key="${key}", label="${label}", iconFrame=${frame}`));
+  }
+  assert.match(menu, /RewardIcons\.renderSelection\(tileX \+ 1, tileY, columnWidth - 2,/);
+  assert.match(menu, /RewardIcons\.renderStatus\(visualState\.iconFrame,/);
+  assert.match(menu, /local statusSize = math\.floor\(fontPixels \* 7 \/ 11 \+ 0\.5\)/,
+    "status symbols must scale by exact 1x, 2x, and 3x native tiers");
+  assert.match(menu, /Text\.drawPixels\(tracking, trackingX, tileY, fontPixels,[\s\S]*?TRACKED_INK/);
+  assert.match(menu, /local statusWidth = Text\.widthPixels\(statusLabel, fontPixels\)/);
+  assert.match(menu, /local minimumRewardWidth = math\.floor\(fontPixels \* 45 \/ 11 \+ 0\.5\)/);
+  assert.match(menu, /local leftWidth = math\.min\(contentWidth - minimumRewardWidth,[\s\S]*?statusWidth \+ 6\)\)/);
+  assert.match(menu, /local leftHeader = statusLabel/);
+  assert.doesNotMatch(menu, /completionCondition \.\. " · " \.\. statusLabel/,
+    "the full two-dimensional status must take width before the reward summary");
+  assert.match(menu, /Text\.drawPixels\(line, x, detailY \+ lineIndex \* layout\.lineHeight,[\s\S]*?fontPixels, INK, language\)/,
+    "condition copy must stay neutral instead of inheriting a state color");
+
+  for (const label of [
+    "未确认 · 当前可完成", "未确认 · 转换后可完成", "未确认 · 需其他角色", "未确认 · 当前模式不可完成",
+    "unconfirmed · available now", "unconfirmed · available after transformation",
+    "unconfirmed · requires another character", "unconfirmed · unavailable in current mode"
+  ]) assert.ok(text.includes(label), `missing visual-state label: ${label}`);
+
+  assert.match(icons, /function RewardIcons\.renderStatus\(frame, x, y, size, tint\)/);
+  assert.match(icons, /function RewardIcons\.renderSelection\(x, y, width, height\)/);
+  assert.match(icons, /Color\(1\.00, 0\.94, 0\.78, 0\.16\)/);
+  assert.match(icons, /Color\(0\.24, 0\.16, 0\.11, 0\.95\)/);
+  assert.match(icons, /gfx\/ui\/achievement_status_icons\.anm2/);
+  assert.equal(atlas.subarray(1, 4).toString("ascii"), "PNG");
+  assert.equal(atlas.readUInt32BE(16), 36);
+  assert.equal(atlas.readUInt32BE(20), 8);
+  assert.equal((actor.match(/XCrop=/g) || []).length, 6,
+    "the actor must contain five status frames plus one selection pixel frame");
+  assert.match(actor, /Animation Name="StatusIcon" FrameNum="5"/);
+  assert.match(actor, /Animation Name="SelectionPixel" FrameNum="1"/);
 });
 
 test("catalog fuzzy search indexes bilingual copy and reward metadata with scores", () => {
@@ -1000,8 +1053,8 @@ test("challenge runs show only their unlock while F3 marks challenge-only unlock
   assert.match(hud, /Catalog\.challengeGoal\(challengeId\)/);
   assert.match(hud, /trackedIds = challengeGoal and \{ challengeGoal\.id \} or \{\}/);
   assert.match(menu, /Catalog\.isCompletable\(goal, Isaac\.GetChallenge\(\)\)/);
-  assert.match(menu, /not completable and labels\.unavailable/);
-  assert.match(text, /unavailable\s*=\s*"不可完成"/);
+  assert.match(menu, /if not isCompletable\(goal\) then return VISUAL_STATES\.unavailable end/);
+  assert.match(text, /currentModeUnavailable\s*=\s*"未确认 · 当前模式不可完成"/);
 });
 
 test("character relevance normalizes paired and transformed PlayerType variants", () => {
@@ -1058,9 +1111,9 @@ test("F3 tracking mode ranks completable goals before unavailable challenges and
   assert.match(menu, /require\("scripts\.core\.character_relevance"\)/);
   assert.match(menu, /local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed/);
   assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)/);
-  assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\) and \(completedGoal or completable\)/,
+  assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]*?and visualState\.key ~= "unavailable"/,
     "tracking must not promote an unfinished unavailable challenge");
-  assert.match(menu, /elseif not completedGoal and not completable then[\s\S]*?bucket, priorityRank = unavailable, 5/);
+  assert.match(menu, /elseif visualState\.key == "unavailable" then[\s\S]*?bucket, priorityRank = unavailable, 5/);
   assert.match(menu, /CharacterRelevance\.classify\(goal, context\)/);
   assert.match(menu, /for _, bucket in ipairs\(\{ tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed \}\)/);
   assert.match(menu, /if left\.priorityRank ~= right\.priorityRank then[\s\S]*?left\.priorityRank < right\.priorityRank/,
@@ -1068,10 +1121,10 @@ test("F3 tracking mode ranks completable goals before unavailable challenges and
   assert.match(menu, /if left\.score ~= right\.score then return left\.score < right\.score end/);
   assert.match(menu, /trackedOrder\[goal\.id\]/,
     "the non-search tracked group must retain the HUD tracking order");
-  assert.match(menu, /local dimmed = not completed and relevance == "other"/);
-  assert.match(menu, /local DIMMED_INK = KColor/);
-  assert.match(menu, /local DIMMED_TINT = Color/);
-  assert.match(menu, /RewardIcons\.render\(reward,[^\n]+dimmed and DIMMED_TINT/);
+  assert.match(menu, /other=\{ key="other", label="otherCharacterPending", iconFrame=3/);
+  assert.match(menu, /local OTHER_INK = KColor/);
+  assert.match(menu, /local OTHER_TINT = Color/);
+  assert.match(menu, /RewardIcons\.render\(reward,[^\n]+visualState\.iconTint\)/);
   assert.match(menu, /Tracker\.toggle/,
     "other-character goals must remain selectable and trackable");
 });
@@ -1127,8 +1180,8 @@ test("F3 distinguishes convertible goals and refreshes them without moving the s
   assert.match(menu, /local CONVERTIBLE_INK = KColor/);
   assert.match(menu, /local CONVERTIBLE_TINT = Color/);
   assert.match(menu, /relevance == "convertible"/);
-  assert.match(menu, /and "~"/);
-  assert.match(menu, /labels\.availableAfterTransformation/);
+  assert.match(menu, /convertible=\{ key="convertible", label="convertiblePending", iconFrame=2/);
+  assert.match(menu, /labels\[visualState\.label\]/);
   assert.match(menu, /state\.menu\.relevanceSignature ~= context\.signature/);
   assert.match(menu, /local function completedSignature\(state\)[\s\S]*?isCompleted\(state, goal\)/);
   assert.match(menu, /state\.menu\.completionSignature = completedSignature\(state\)/);
@@ -1136,6 +1189,6 @@ test("F3 distinguishes convertible goals and refreshes them without moving the s
   assert.match(menu, /local selectedGoalId = preserveSelection[\s\S]*?\.id/);
   assert.match(menu, /if goal\.id == selectedGoalId then[\s\S]*?state\.menu\.cursor = index/);
   assert.match(menu, /state\.menu\.offset = math\.floor\(\(state\.menu\.cursor - 1\) \/ layout\.pageSize\) \* layout\.pageSize \+ 1/);
-  assert.match(text, /availableAfterTransformation\s*=\s*"转换后可完成"/);
-  assert.match(text, /availableAfterTransformation\s*=\s*"available after transformation"/);
+  assert.match(text, /convertiblePending\s*=\s*"未确认 · 转换后可完成"/);
+  assert.match(text, /convertiblePending\s*=\s*"unconfirmed · available after transformation"/);
 });

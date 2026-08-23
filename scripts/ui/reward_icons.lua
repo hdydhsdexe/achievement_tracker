@@ -139,6 +139,8 @@ local cardSpillSprite
 local nativeCardSprites = {}
 local backdropSprite
 local paperSprite
+local statusSprite
+local selectionPixelSprite
 
 local function cacheKey(reward)
   return table.concat({ reward.kind, tostring(reward.achievementId or ""),
@@ -376,6 +378,50 @@ function RewardIcons.render(reward, x, y, size, tint)
   return true
 end
 
+local function getStatusSprite()
+  if not statusSprite then
+    statusSprite = Sprite()
+    statusSprite:Load("gfx/ui/achievement_status_icons.anm2", true)
+  end
+  return statusSprite
+end
+
+local function getSelectionPixelSprite()
+  if not selectionPixelSprite then
+    selectionPixelSprite = Sprite()
+    selectionPixelSprite:Load("gfx/ui/achievement_status_icons.anm2", true)
+    selectionPixelSprite:SetFrame("SelectionPixel", 0)
+  end
+  return selectionPixelSprite
+end
+
+function RewardIcons.renderStatus(frame, x, y, size, tint)
+  local sprite = getStatusSprite()
+  sprite:SetFrame("StatusIcon", frame)
+  local scale = size / 7
+  sprite.Scale = Vector(scale, scale)
+  sprite.Color = tint or Color(1, 1, 1, 1)
+  sprite:Render(Vector(x, y))
+end
+
+local function renderSelectionPixel(x, y, width, height, tint)
+  if width <= 0 or height <= 0 then return end
+  local sprite = getSelectionPixelSprite()
+  sprite.Scale = Vector(width, height)
+  sprite.Color = tint
+  sprite:Render(Vector(x, y))
+end
+
+function RewardIcons.renderSelection(x, y, width, height)
+  local fill = Color(1.00, 0.94, 0.78, 0.16)
+  local border = Color(0.24, 0.16, 0.11, 0.95)
+  renderSelectionPixel(x + 1, y + 1, width - 2, height - 2, fill)
+  renderSelectionPixel(x, y, width, 1, border)
+  renderSelectionPixel(x, y + height - 1, width, 1, border)
+  renderSelectionPixel(x, y, 1, height, border)
+  renderSelectionPixel(x + width - 1, y, 1, height, border)
+end
+
 function RewardIcons.renderPaper(panelX, panelY, panelWidth, panelHeight)
   if not backdropSprite then
     backdropSprite = Sprite()
@@ -401,6 +447,8 @@ function RewardIcons.clear()
   nativeCardSprites = {}
   backdropSprite = nil
   paperSprite = nil
+  statusSprite = nil
+  selectionPixelSprite = nil
 end
 
 return RewardIcons
