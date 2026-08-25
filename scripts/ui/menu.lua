@@ -128,7 +128,8 @@ end
 function Menu.new()
   return { open=false, cursor=1, offset=1, goals=nil, filterIndex=1,
     query="", searchFocused=false, relevanceContext=nil,
-    relevanceSignature=nil, completionSignature=nil, repeatKeys={},
+    relevanceSignature=nil, completionSignature=nil, opportunitySignature=nil,
+    repeatKeys={},
     mouseDown=false, mouseX=nil, mouseY=nil }
 end
 
@@ -172,6 +173,15 @@ local function completedSignature(state)
   return table.concat(ids, ",")
 end
 
+local function sceneOpportunitySignature(state)
+  local parts = {}
+  for _, opportunity in ipairs(state.sceneOpportunities or {}) do
+    parts[#parts + 1] = table.concat({ opportunity.goalId or "",
+      tostring(opportunity.priority or 99) }, ":")
+  end
+  return table.concat(parts, "|")
+end
+
 local function matchesFilter(goal, filter)
   if filter == "all" then return true end
   return Rewards.filterKind(Rewards.display(goal)) == filter
@@ -182,37 +192,58 @@ local function refreshGoals(state, context, preserveSelection)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
-  local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed = {}, {}, {}, {}, {}, {}
+  local tracked, scenePending, currentPending, convertiblePending,
+    otherCharacterPending, unavailable, completed = {}, {}, {}, {}, {}, {}, {}
   local searchMeta = {}
   local trackedOrder = {}
   for index, id in ipairs(state.tracker.ids) do trackedOrder[id] = index end
+  local sceneGoalIds = {}
+  for index, opportunity in ipairs(state.sceneOpportunities or {}) do
+    local current = sceneGoalIds[opportunity.goalId]
+    local priority = opportunity.priority or 99
+    if not current or priority < current.priority then
+      sceneGoalIds[opportunity.goalId] = { priority=priority, order=index }
+    end
+  end
   context = context or CharacterRelevance.buildContext(Game(), Catalog.goals)
   local filter = FILTERS[state.menu.filterIndex] or "all"
   for _, match in ipairs(Catalog.search(state.menu.query)) do
     local goal = match.goal
     if matchesFilter(goal, filter) then
       local visualState = resolveVisualState(state, goal, context)
-      local bucket, priorityRank = completed, 6
+      local bucket, priorityRank = completed, 7
       if Tracker.contains(state.tracker, goal.id)
           and visualState.key ~= "unavailable" then
         bucket, priorityRank = tracked, 1
+      elseif sceneGoalIds[goal.id] and visualState.key ~= "completed"
+          and visualState.key ~= "unavailable" then
+        bucket, priorityRank = scenePending, 2
       elseif visualState.key == "unavailable" then
-        bucket, priorityRank = unavailable, 5
+        bucket, priorityRank = unavailable, 6
       elseif visualState.key ~= "completed" then
-        if visualState.key == "current" then bucket, priorityRank = currentPending, 2
-        elseif visualState.key == "convertible" then bucket, priorityRank = convertiblePending, 3
-        else bucket, priorityRank = otherCharacterPending, 4 end
+        if visualState.key == "current" then bucket, priorityRank = currentPending, 3
+        elseif visualState.key == "convertible" then bucket, priorityRank = convertiblePending, 4
+        else bucket, priorityRank = otherCharacterPending, 5 end
       end
       table.insert(bucket, goal)
       searchMeta[goal.id] = { score=match.score, priorityRank=priorityRank,
-        stableOrder=trackedOrder[goal.id] or match.catalogIndex }
+        stableOrder=trackedOrder[goal.id] or (sceneGoalIds[goal.id]
+          and sceneGoalIds[goal.id].order) or match.catalogIndex }
     end
   end
   table.sort(tracked, function(left, right)
     return trackedOrder[left.id] < trackedOrder[right.id]
   end)
+  table.sort(scenePending, function(left, right)
+    local leftMeta, rightMeta = sceneGoalIds[left.id], sceneGoalIds[right.id]
+    if leftMeta.priority ~= rightMeta.priority then
+      return leftMeta.priority < rightMeta.priority
+    end
+    return leftMeta.order < rightMeta.order
+  end)
   local goals = {}
-  for _, bucket in ipairs({ tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed }) do
+  for _, bucket in ipairs({ tracked, scenePending, currentPending, convertiblePending,
+    otherCharacterPending, unavailable, completed }) do
     for _, goal in ipairs(bucket) do table.insert(goals, goal) end
   end
   if state.menu.query ~= "" then
@@ -229,6 +260,7 @@ local function refreshGoals(state, context, preserveSelection)
   state.menu.relevanceContext = context
   state.menu.relevanceSignature = context.signature
   state.menu.completionSignature = completedSignature(state)
+  state.menu.opportunitySignature = sceneOpportunitySignature(state)
   state.menu.cursor = math.max(1, math.min(state.menu.cursor, #goals))
   if selectedGoalId then
     for index, goal in ipairs(goals) do
@@ -412,8 +444,10 @@ function Menu.update(state, save)
   end
   local context = CharacterRelevance.buildContext(Game(), Catalog.goals)
   local completionSignature = completedSignature(state)
+  local opportunitySignature = sceneOpportunitySignature(state)
   if state.menu.relevanceSignature ~= context.signature
-    or state.menu.completionSignature ~= completionSignature then
+    or state.menu.completionSignature ~= completionSignature
+    or state.menu.opportunitySignature ~= opportunitySignature then
     refreshGoals(state, context, true)
   end
   local searchConsumed = false

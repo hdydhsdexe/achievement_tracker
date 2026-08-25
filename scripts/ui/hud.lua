@@ -11,6 +11,7 @@ local HUD_BODY = KColor(0.96, 0.86, 0.68, 1)
 local HUD_MUTED = KColor(0.72, 0.65, 0.56, 1)
 local HUD_COMPLETED = KColor(0.60, 1.00, 0.65, 1)
 local HUD_WARNING = KColor(1.00, 0.84, 0.28, 1)
+local HUD_OPPORTUNITY = KColor(1.00, 0.88, 0.54, 1)
 local HUD_FAILED = KColor(1.00, 0.38, 0.34, 1)
 local SCREEN_MARGIN = 8
 local MIN_HUD_WIDTH = 120
@@ -56,6 +57,20 @@ end
 local function maximumLineCount(availableHeight, fontPixels, lineSpacingPixels)
   return math.max(1, math.floor((availableHeight + lineSpacingPixels)
     / lineAdvance(fontPixels, lineSpacingPixels)))
+end
+
+local function opportunityBlock(state, language, maxWidth, fontPixels)
+  local opportunity = state.sceneOpportunities and state.sceneOpportunities[1]
+  if opportunity and not opportunity.message then
+    for _, candidate in ipairs(state.sceneOpportunities) do
+      if candidate.message then opportunity = candidate; break end
+    end
+  end
+  if not opportunity or not opportunity.message then return nil end
+  local value = opportunity.message[language] or opportunity.message.en
+  if type(value) ~= "string" or value == "" then return nil end
+  return wrappedRows("! " .. value, 0,
+    opportunity.danger and HUD_FAILED or HUD_OPPORTUNITY, maxWidth, fontPixels)
 end
 
 local function buildBlocks(state, fontPixels, x, screenWidth)
@@ -118,6 +133,8 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
       table.insert(blocks, block)
     end
   end
+  local opportunity = opportunityBlock(state, language, maxWidth, fontPixels)
+  if opportunity then table.insert(blocks, opportunity) end
   return {
     headerRows=headerRows, blocks=blocks, controls=labels.controls,
     language=language, maxWidth=maxWidth, fontPixels=fontPixels

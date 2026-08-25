@@ -928,7 +928,7 @@ test("vanilla unlock inference uses reward availability and sorts untracked comp
   assert.match(achievements, /a\(326,[^\n]+reward\("card",28\)/);
   assert.match(achievements, /a\(361,[^\n]+reward\("card",52\)/);
   assert.match(achievements, /a\(386,[^\n]+reward\("collectible",538\)/);
-  assert.match(menu, /local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed/);
+  assert.match(menu, /local tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed/);
   assert.match(menu, /state\.profileCompleted/);
 });
 
@@ -1109,13 +1109,14 @@ test("character relevance overrides malformed merged catalog conditions", () => 
 test("F3 tracking mode ranks completable goals before unavailable challenges and completed goals", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.core\.character_relevance"\)/);
-  assert.match(menu, /local tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed/);
+  assert.match(menu, /local tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed/);
   assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)/);
   assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]*?and visualState\.key ~= "unavailable"/,
     "tracking must not promote an unfinished unavailable challenge");
-  assert.match(menu, /elseif visualState\.key == "unavailable" then[\s\S]*?bucket, priorityRank = unavailable, 5/);
+  assert.match(menu, /elseif sceneGoalIds\[goal\.id\][\s\S]*?bucket, priorityRank = scenePending, 2/);
+  assert.match(menu, /elseif visualState\.key == "unavailable" then[\s\S]*?bucket, priorityRank = unavailable, 6/);
   assert.match(menu, /CharacterRelevance\.classify\(goal, context\)/);
-  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, currentPending, convertiblePending, otherCharacterPending, unavailable, completed \}\)/);
+  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed \}\)/);
   assert.match(menu, /if left\.priorityRank ~= right\.priorityRank then[\s\S]*?left\.priorityRank < right\.priorityRank/,
     "availability priority must outrank fuzzy-search score");
   assert.match(menu, /if left\.score ~= right\.score then return left\.score < right\.score end/);

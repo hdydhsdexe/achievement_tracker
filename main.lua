@@ -9,6 +9,7 @@ local Hud = require("scripts.ui.hud")
 local Mcm = require("scripts.integrations.mcm")
 local Menu = require("scripts.ui.menu")
 local LongTermProgress = require("scripts.core.long_term_progress")
+local Opportunities = require("scripts.core.opportunities")
 local Sensors = require("scripts.core.sensors")
 local Routes = require("scripts.core.routes")
 local Storage = require("scripts.core.storage")
@@ -24,7 +25,8 @@ local State = {
   activeWarning = nil,
   lastEvaluation = -1,
   profileCompleted = {},
-  routeContext = nil
+  routeContext = nil,
+  sceneOpportunities = {}
 }
 
 local function save()
@@ -66,6 +68,15 @@ end
 
 local function completionAllowed()
   if Isaac.GetChallenge() ~= 0 then return false end
+  local seeds = GameInstance:GetSeeds()
+  if seeds and seeds.IsCustomRun then
+    local ok, custom = pcall(function() return seeds:IsCustomRun() end)
+    if ok and custom then return false end
+  end
+  if GameInstance.GetVictoryLap then
+    local ok, victoryLap = pcall(function() return GameInstance:GetVictoryLap() end)
+    if ok and victoryLap > 0 then return false end
+  end
   if GameInstance.AchievementUnlocksDisallowed then
     local ok, disallowed = pcall(function() return GameInstance:AchievementUnlocksDisallowed() end)
     if ok and disallowed then return false end
@@ -118,7 +129,10 @@ local function refreshRouteFloor()
   local reset = previous and not ascent and (current.stage < previous.stage
     or (current.stage == previous.stage and current.seed and previous.seed
       and current.seed ~= previous.seed))
-  if reset then Routes.resetAttempt(State.run) end
+  if reset then
+    Routes.resetAttempt(State.run)
+    Opportunities.resetAttempt(State.run)
+  end
   State.run.routeFloor = current
 end
 
@@ -150,6 +164,7 @@ function AchievementTracker:onGameStarted(isContinued)
   State.activeWarning = nil
   State.lastEvaluation = -1
   State.routeContext = nil
+  State.sceneOpportunities = {}
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
   Unlocks.refreshAchievementImport(Catalog.goals, State.settings.achievementImport)
@@ -186,6 +201,9 @@ function AchievementTracker:onUpdate()
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
   if Routes.updateRun(State.run, routeContext, trackingTaintedUnlock()) then save() end
+  if Opportunities.updateRun(State.run, GameInstance) then save() end
+  State.sceneOpportunities = Opportunities.evaluate(GameInstance, State.run,
+    State.profileCompleted, completionAllowed(), routeContext)
   syncBossRushCompletion()
   for _, id in ipairs(State.tracker.ids) do
     local goal = Catalog.get(id)
@@ -275,11 +293,16 @@ end
 
 function AchievementTracker:onNewRoom()
   syncBossRushCompletion()
+  local changed = Opportunities.onNewRoom(State.run, GameInstance)
   if LongTermProgress.canObserve(GameInstance)
-    and LongTermProgress.observeRoom(State.settings, State.run, GameInstance) then save() end
+    and LongTermProgress.observeRoom(State.settings, State.run, GameInstance) then changed = true end
+  State.lastEvaluation = -1
+  if changed then save() end
 end
 
 function AchievementTracker:onNpcDeath(npc)
+  local opportunityChanged = Opportunities.observeNpc(State.run, npc, GameInstance)
+  State.lastEvaluation = -1
   if not npc:IsBoss() then return end
   local routeChanged = Routes.observeNpc(State.run, npc, GameInstance)
   local mark = Routes.markFromNpc(npc, GameInstance)
@@ -292,7 +315,7 @@ function AchievementTracker:onNpcDeath(npc)
   end
   observeAndSave("boss", npc.Type, npc.Variant)
   recordCompletionMark(mark)
-  if routeChanged or (LongTermProgress.canObserve(GameInstance)
+  if opportunityChanged or routeChanged or (LongTermProgress.canObserve(GameInstance)
     and (mark == "MOMS_HEART" or mark == "ISAAC" or mark == "SATAN" or mark == "HUSH"
       or (EntityType and EntityType.ENTITY_BABY_PLUM
         and npc.Type == EntityType.ENTITY_BABY_PLUM))) then save() end
@@ -300,14 +323,14 @@ end
 
 function AchievementTracker:onAchievementUnlocked(achievementId)
   if not State.settings then return end
-  if Unlocks.recordImportedAchievement(Catalog.goals, State.settings.achievementImport,
-    achievementId) then
-    State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted,
-      State.settings.achievementImport)
-    CompletionMarks.infer(Catalog.goals, State.profileCompleted, State.settings.completionMarks)
-    refreshCompletionFromMarks()
-    save()
-  end
+  local importedChanged = Unlocks.recordImportedAchievement(Catalog.goals,
+    State.settings.achievementImport, achievementId)
+  State.profileCompleted = Unlocks.scan(Catalog.goals, State.settings.observedCompleted,
+    State.settings.achievementImport)
+  CompletionMarks.infer(Catalog.goals, State.profileCompleted, State.settings.completionMarks)
+  refreshCompletionFromMarks()
+  State.lastEvaluation = -1
+  if importedChanged then save() end
 end
 
 function AchievementTracker:onExit(shouldSave)
