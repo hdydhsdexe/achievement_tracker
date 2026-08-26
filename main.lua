@@ -84,6 +84,29 @@ local function completionAllowed()
   return true
 end
 
+local VICTORY_LAP_OPPORTUNITY_IDS = {
+  achievement_321=true,
+  achievement_360=true,
+  achievement_337=true,
+}
+
+local function victoryLapOpportunitiesAllowed()
+  if Isaac.GetChallenge() ~= 0 or not GameInstance.GetVictoryLap then return false end
+  local seeds = GameInstance:GetSeeds()
+  if seeds and seeds.IsCustomRun then
+    local ok, custom = pcall(function() return seeds:IsCustomRun() end)
+    if ok and custom then return false end
+  end
+  local allowed = completionAllowed()
+  if not allowed then
+    local ok, victoryLap = pcall(function() return GameInstance:GetVictoryLap() end)
+    allowed = ok and victoryLap > 0
+  end
+  return allowed and VICTORY_LAP_OPPORTUNITY_IDS.achievement_321
+    and VICTORY_LAP_OPPORTUNITY_IDS.achievement_360
+    and VICTORY_LAP_OPPORTUNITY_IDS.achievement_337
+end
+
 local function recordCompletionMark(mark)
   if not mark or not completionAllowed() then return false end
   local changed = false
@@ -195,15 +218,15 @@ function AchievementTracker:onUpdate()
   if not State.settings then return end
   local player = Isaac.GetPlayer(0)
   if player then Sensors.update(State.run, player) end
+  if Opportunities.updateRun(State.run, GameInstance) then save() end
   local second = math.floor(GameInstance.TimeCounter / 30)
   if second == State.lastEvaluation then return end
   State.lastEvaluation = second
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
   if Routes.updateRun(State.run, routeContext, trackingTaintedUnlock()) then save() end
-  if Opportunities.updateRun(State.run, GameInstance) then save() end
   State.sceneOpportunities = Opportunities.evaluate(GameInstance, State.run,
-    State.profileCompleted, completionAllowed(), routeContext)
+    State.profileCompleted, completionAllowed(), routeContext, victoryLapOpportunitiesAllowed())
   syncBossRushCompletion()
   for _, id in ipairs(State.tracker.ids) do
     local goal = Catalog.get(id)
@@ -258,6 +281,17 @@ function AchievementTracker:onPickupUpdate(pickup)
   if LongTermProgress.canObserve(GameInstance)
     and LongTermProgress.observePickup(State.settings, State.run, pickup) then save() end
   if Routes.observePickup(State.run, pickup, GameInstance, trackingTaintedUnlock()) then save() end
+  if Opportunities.observePickup(State.run, pickup, GameInstance) then
+    State.lastEvaluation = -1
+    save()
+  end
+end
+
+function AchievementTracker:onUseItem(collectible)
+  if State.settings and Opportunities.onUseItem(State.run, collectible) then
+    State.lastEvaluation = -1
+    save()
+  end
 end
 
 function AchievementTracker:onUsePill(pillEffect)
@@ -344,6 +378,7 @@ AchievementTracker:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, AchievementTra
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_UPDATE, AchievementTracker.onUpdate)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_RENDER, AchievementTracker.onRender)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, AchievementTracker.onPickupUpdate)
+AchievementTracker:AddCallback(ModCallbacks.MC_USE_ITEM, AchievementTracker.onUseItem)
 AchievementTracker:AddCallback(ModCallbacks.MC_USE_PILL, AchievementTracker.onUsePill)
 AchievementTracker:AddCallback(ModCallbacks.MC_USE_CARD, AchievementTracker.onUseCard)
 AchievementTracker:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, AchievementTracker.onPlayerInit)

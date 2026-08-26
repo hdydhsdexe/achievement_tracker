@@ -13,11 +13,17 @@ local ENTITY_HORNFEL = enum(EntityType, "ENTITY_HORNFEL", 906)
 local ENTITY_MINECART = enum(EntityType, "ENTITY_MINECART", 965)
 local ENTITY_MOM = enum(EntityType, "ENTITY_MOM", 45)
 local ENTITY_MOMS_HEART = enum(EntityType, "ENTITY_MOMS_HEART", 78)
+local ENTITY_LAMB = enum(EntityType, "ENTITY_THE_LAMB", 273)
+local ENTITY_URIEL = enum(EntityType, "ENTITY_URIEL", 271)
+local ENTITY_GABRIEL = enum(EntityType, "ENTITY_GABRIEL", 272)
+local ENTITY_PICKUP = enum(EntityType, "ENTITY_PICKUP", 5)
 local ENTITY_SLOT = enum(EntityType, "ENTITY_SLOT", 6)
 local BATTERY_BUM = enum(SlotVariant, "BATTERY_BUM", 13)
 local ROOM_SACRIFICE = enum(RoomType, "ROOM_SACRIFICE", 13)
 local ROOM_BOSS = enum(RoomType, "ROOM_BOSS", 5)
 local ROOM_BOSSRUSH = enum(RoomType, "ROOM_BOSSRUSH", 17)
+local ROOM_ANGEL = enum(RoomType, "ROOM_ANGEL", 15)
+local ROOM_SHOP = enum(RoomType, "ROOM_SHOP", 2)
 local STAGE_BASEMENT1 = enum(LevelStage, "STAGE1_1", 1)
 local STAGE_DARK_ROOM = enum(LevelStage, "STAGE6", 11)
 local STAGE_HOME = enum(LevelStage, "STAGE8", 13)
@@ -29,6 +35,23 @@ local COLLECTIBLE_BLANK_CARD = enum(CollectibleType, "COLLECTIBLE_BLANK_CARD", 2
 local COLLECTIBLE_PANDORAS_BOX = enum(CollectibleType, "COLLECTIBLE_PANDORAS_BOX", 297)
 local COLLECTIBLE_BROKEN_SHOVEL = enum(CollectibleType, "COLLECTIBLE_BROKEN_SHOVEL", 550)
 local COLLECTIBLE_MOMS_SHOVEL = enum(CollectibleType, "COLLECTIBLE_MOMS_SHOVEL", 552)
+local COLLECTIBLE_BALL_OF_BANDAGES = enum(CollectibleType, "COLLECTIBLE_BALL_OF_BANDAGES", 207)
+local COLLECTIBLE_CUBE_OF_MEAT = enum(CollectibleType, "COLLECTIBLE_CUBE_OF_MEAT", 73)
+local COLLECTIBLE_POTATO_PEELER = enum(CollectibleType, "COLLECTIBLE_POTATO_PEELER", 487)
+local COLLECTIBLE_KEY_PIECE_1 = enum(CollectibleType, "COLLECTIBLE_KEY_PIECE_1", 238)
+local COLLECTIBLE_KEY_PIECE_2 = enum(CollectibleType, "COLLECTIBLE_KEY_PIECE_2", 239)
+local COLLECTIBLE_R_KEY = enum(CollectibleType, "COLLECTIBLE_R_KEY", 636)
+local COLLECTIBLE_IPECAC = enum(CollectibleType, "COLLECTIBLE_IPECAC", 149)
+local COLLECTIBLE_BOBS_ROTTEN_HEAD = enum(CollectibleType, "COLLECTIBLE_BOBS_ROTTEN_HEAD", 42)
+local COLLECTIBLE_PYROMANIAC = enum(CollectibleType, "COLLECTIBLE_PYROMANIAC", 223)
+local COLLECTIBLE_HOST_HAT = enum(CollectibleType, "COLLECTIBLE_HOST_HAT", 375)
+local COLLECTIBLE_HOLY_MANTLE = enum(CollectibleType, "COLLECTIBLE_HOLY_MANTLE", 313)
+local FAMILIAR_BANDAGE_GIRL = enum(FamiliarVariant, "BALL_OF_BANDAGES_3", 71)
+local FAMILIAR_MEATBOY = enum(FamiliarVariant, "CUBE_OF_MEAT_3", 46)
+local PICKUP_COLLECTIBLE = enum(PickupVariant, "PICKUP_COLLECTIBLE", 100)
+local PICKUP_BED = enum(PickupVariant, "PICKUP_BED", 380)
+local PILLEFFECT_HORF = enum(PillEffect, "PILLEFFECT_HORF", 44)
+local GRID_STATUE = enum(GridEntityType, "GRID_STATUE", 21)
 local TRINKET_MISSING_POSTER = enum(TrinketType, "TRINKET_MISSING_POSTER", 23)
 local CARD_MAGICIAN = enum(Card, "CARD_MAGICIAN", 2)
 local CARD_SUN = enum(Card, "CARD_SUN", 5)
@@ -77,13 +100,37 @@ local COPY = {
     "Try completing Boss Rush to obtain the second shovel piece!"),
   forgottenGrave=message("尝试站在碎土块上使用妈妈的铲子！",
     "Try using Mom's Shovel while standing on the dirt patch!"),
+  bandageGirl=message("尝试拾取第四个绷带球，组成超级绷带女孩！",
+    "Try picking up a fourth Ball of Bandages to build Super Bandage Girl!"),
+  meatBoy=message("尝试拾取第四个肉块，组成超级食肉男孩！",
+    "Try picking up a fourth Cube of Meat to build Super Meat Boy!"),
+  angelStatue=message("尝试炸毁天使雕像，取得钥匙碎片！",
+    "Try bombing the angel statue to obtain a Key Piece!"),
+  angelFight=message("尝试击败天使并拾取掉落的钥匙碎片！",
+    "Try defeating the angel and picking up the dropped Key Piece!"),
+  keyPiece=message("尝试拾取地上的钥匙碎片！",
+    "Try picking up the Key Piece on the floor!"),
+  shopSpend=message("尝试在本商店再消费%d枚硬币，累计达到40枚！",
+    "Try spending %d more coins in this shop to reach 40!"),
+  goldenRazor=message("尝试把已经达到过99的硬币全部花光！",
+    "Try spending every coin after having reached 99!"),
+  bed=message("尝试使用这张床睡一觉！",
+    "Try sleeping in this bed!"),
+  victoryLap=message("尝试在击败羔羊后选择继续跑圈！",
+    "Try choosing another Victory Lap after defeating The Lamb!"),
+  lilSpewer=message("尝试在生命不多时用爆炸伤害击杀自己！",
+    "Try killing yourself with explosion damage when it would be lethal!"),
 }
 
 local function normalizeRun(run)
   if not run then return {} end
   run.sceneOpportunityEvents = run.sceneOpportunityEvents or {}
-  run.sceneOpportunityEvents.forgotten = run.sceneOpportunityEvents.forgotten or {}
-  return run.sceneOpportunityEvents
+  local events = run.sceneOpportunityEvents
+  events.forgotten = events.forgotten or {}
+  events.shopPurchases = events.shopPurchases or {}
+  events.shopPickupPrices = events.shopPickupPrices or {}
+  events.shopSpent = tonumber(events.shopSpent) or 0
+  return events
 end
 
 local function completed(profileCompleted, goalId)
@@ -94,7 +141,7 @@ local function roomKey(game)
   local level = game:GetLevel()
   local ok, descriptor = pcall(function() return level:GetCurrentRoomDesc() end)
   if ok and descriptor and descriptor.ListIndex ~= nil then
-    return tostring(descriptor.ListIndex)
+    return table.concat({ level:GetStage(), level:GetStageType(), descriptor.ListIndex }, ":")
   end
   return table.concat({ level:GetStage(), level:GetStageType(),
     level:GetCurrentRoomIndex() }, ":")
@@ -184,6 +231,20 @@ local function make(goalId, copy, priority, danger)
   return { goalId=goalId, message=copy, priority=priority, danger=danger == true }
 end
 
+local function formatted(copy, value)
+  return message(string.format(copy.zh, value), string.format(copy.en, value))
+end
+
+local function addPairedGoals(result, profileCompleted, firstGoalId, secondGoalId,
+  copy, priority, danger)
+  if not completed(profileCompleted, firstGoalId) then
+    result[#result + 1] = make(firstGoalId, copy, priority, danger)
+  end
+  if not completed(profileCompleted, secondGoalId) then
+    result[#result + 1] = make(secondGoalId, copy, priority, danger)
+  end
+end
+
 local function uniqueByGoal(opportunities)
   local result, seen = {}, {}
   for _, opportunity in ipairs(opportunities) do
@@ -193,6 +254,250 @@ local function uniqueByGoal(opportunities)
     end
   end
   return result
+end
+
+local function hasRoomBomb(game)
+  for _, player in ipairs(players(game)) do
+    if (player.GetNumBombs and player:GetNumBombs() > 0)
+      or (player.HasGoldenBomb and player:HasGoldenBomb()) then return true end
+  end
+  return false
+end
+
+local function hasAngelStatue(game)
+  local room = game:GetRoom()
+  if not room.GetGridSize or not room.GetGridEntity then return false end
+  for index = 0, room:GetGridSize() - 1 do
+    local grid = room:GetGridEntity(index)
+    if grid and grid.GetType and grid:GetType() == GRID_STATUE
+      and (grid.State == nil or grid.State == 0) then return true end
+  end
+  return false
+end
+
+local function needsKeyPiece(game, keyPiece)
+  for _, player in ipairs(players(game)) do
+    if not hasCollectible(player, keyPiece) then return true end
+  end
+  return false
+end
+
+local function addAngelRoom(result, game, profileCompleted)
+  if game:GetRoom():GetType() ~= ROOM_ANGEL
+    or (completed(profileCompleted, "achievement_58")
+      and completed(profileCompleted, "achievement_370")) then return end
+  local needsOne = needsKeyPiece(game, COLLECTIBLE_KEY_PIECE_1)
+  local needsTwo = needsKeyPiece(game, COLLECTIBLE_KEY_PIECE_2)
+  if not needsOne and not needsTwo then return end
+
+  local copy
+  if firstEntity(ENTITY_PICKUP, PICKUP_COLLECTIBLE) then
+    for _, pickup in ipairs(entities()) do
+      if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_COLLECTIBLE
+        and ((pickup.SubType == COLLECTIBLE_KEY_PIECE_1 and needsOne)
+          or (pickup.SubType == COLLECTIBLE_KEY_PIECE_2 and needsTwo)) and alive(pickup) then
+        copy = COPY.keyPiece
+        break
+      end
+    end
+  end
+  if not copy and ((needsOne and firstEntity(ENTITY_URIEL))
+      or (needsTwo and firstEntity(ENTITY_GABRIEL))) then
+    copy = COPY.angelFight
+  end
+  if not copy and hasRoomBomb(game) and hasAngelStatue(game) then
+    copy = COPY.angelStatue
+  end
+  if copy then
+    addPairedGoals(result, profileCompleted, "achievement_58", "achievement_370", copy, 1)
+  end
+end
+
+local function findUsableBed()
+  for _, pickup in ipairs(entities()) do
+    if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_BED
+      and alive(pickup) and not pickup.Touched then return pickup end
+  end
+  return nil
+end
+
+local function addBed(result, profileCompleted)
+  if (not completed(profileCompleted, "achievement_359")
+      or not completed(profileCompleted, "achievement_385")) and findUsableBed() then
+    addPairedGoals(result, profileCompleted, "achievement_359", "achievement_385", COPY.bed, 2)
+  end
+end
+
+local function hasLevelThreeFamiliar(player, collectible, familiarVariant)
+  if not player.GetCollectibleNum then return false end
+  local count = player:GetCollectibleNum(collectible, true)
+  local effects = player.GetEffects and player:GetEffects() or nil
+  if effects and effects.GetCollectibleEffectNum then
+    count = count + effects:GetCollectibleEffectNum(collectible)
+  end
+  if count >= 3 then return true end
+  for _, entity in ipairs(entities()) do
+    if entity.Variant == familiarVariant and alive(entity) then
+      local familiar = entity.ToFamiliar and entity:ToFamiliar() or nil
+      if familiar and familiar.Player == player then return true end
+    end
+  end
+  return false
+end
+
+local function addSuperFamiliar(result, game, profileCompleted)
+  local bandagePedestal, meatPedestal = false, false
+  for _, pickup in ipairs(entities()) do
+    if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_COLLECTIBLE and alive(pickup) then
+      if pickup.SubType == COLLECTIBLE_BALL_OF_BANDAGES then bandagePedestal = true end
+      if pickup.SubType == COLLECTIBLE_CUBE_OF_MEAT then meatPedestal = true end
+    end
+  end
+  for _, player in ipairs(players(game)) do
+    if bandagePedestal and not completed(profileCompleted, "achievement_19")
+      and hasLevelThreeFamiliar(player, COLLECTIBLE_BALL_OF_BANDAGES,
+        FAMILIAR_BANDAGE_GIRL) then
+      result[#result + 1] = make("achievement_19", COPY.bandageGirl, 1)
+    end
+    if not completed(profileCompleted, "achievement_144")
+      and hasLevelThreeFamiliar(player, COLLECTIBLE_CUBE_OF_MEAT, FAMILIAR_MEATBOY) then
+      if meatPedestal then
+        result[#result + 1] = make("achievement_144", COPY.meatBoy, 1)
+      elseif activeReady(player, COLLECTIBLE_POTATO_PEELER)
+        and player.GetMaxHearts and player:GetMaxHearts() >= 2 then
+        result[#result + 1] = make("achievement_144", COPY.meatBoy, 1)
+      end
+    end
+  end
+end
+
+local function shopRoomKey(game)
+  return roomKey(game)
+end
+
+local function collectingPickup(pickup)
+  if not pickup.GetSprite then return false end
+  local ok, sprite = pcall(function() return pickup:GetSprite() end)
+  return ok and sprite and sprite.IsPlaying and sprite:IsPlaying("Collect")
+end
+
+function Opportunities.observePickup(run, pickup, game)
+  if not run or not pickup or not game or game:GetRoom():GetType() ~= ROOM_SHOP
+    or pickup.Type ~= ENTITY_PICKUP then return false end
+  local events = normalizeRun(run)
+  local key = shopRoomKey(game)
+  if events.shopRoomKey ~= key then
+    events.shopRoomKey = key
+    events.shopSpent = 0
+    events.shopPurchases = {}
+    events.shopPickupPrices = {}
+  end
+  if pickup.InitSeed == nil then return false end
+  local seed = table.concat({ tostring(pickup.InitSeed), tostring(pickup.Index or "") }, ":")
+  if pickup.Price > 0 then events.shopPickupPrices[seed] = pickup.Price end
+  if not collectingPickup(pickup) or events.shopPurchases[seed] then return false end
+  local price = pickup.Price > 0 and pickup.Price or events.shopPickupPrices[seed]
+  if not price or price <= 0 then return false end
+  events.shopPurchases[seed] = true
+  if pickup.Price > 0 then
+    events.shopSpent = events.shopSpent + pickup.Price
+  else
+    events.shopSpent = events.shopSpent + price
+  end
+  return true
+end
+
+local function addMemberCard(result, game, run, profileCompleted)
+  if completed(profileCompleted, "achievement_582")
+    or game:GetRoom():GetType() ~= ROOM_SHOP then return end
+  local events = normalizeRun(run)
+  if events.shopRoomKey ~= shopRoomKey(game) then return end
+  local remaining = 40 - events.shopSpent
+  if remaining <= 0 then return end
+  local available = 0
+  for _, pickup in ipairs(entities()) do
+    if pickup.Type == ENTITY_PICKUP and alive(pickup) and pickup.Price > 0
+      and not collectingPickup(pickup) then available = available + pickup.Price end
+  end
+  for _, player in ipairs(players(game)) do
+    if player.GetNumCoins and player:GetNumCoins() >= remaining and available >= remaining then
+      result[#result + 1] = make("achievement_582", formatted(COPY.shopSpend, remaining), 2)
+      return
+    end
+  end
+end
+
+local function heldHorfPill(player, game)
+  if not player.GetPill or not game.GetItemPool then return false end
+  local pool = game:GetItemPool()
+  if not pool or not pool.GetPillEffect then return false end
+  for slot = 0, 3 do
+    local okColor, color = pcall(function() return player:GetPill(slot) end)
+    if okColor and color and color ~= 0 then
+      local okEffect, effect = pcall(function() return pool:GetPillEffect(color, player) end)
+      if okEffect and effect == PILLEFFECT_HORF then return true end
+    end
+  end
+  return false
+end
+
+local function explosionImmune(player)
+  return hasCollectible(player, COLLECTIBLE_PYROMANIAC)
+    or hasCollectible(player, COLLECTIBLE_HOST_HAT)
+end
+
+local function hasMantleShield(player)
+  local effects = player.GetEffects and player:GetEffects() or nil
+  return effects and effects.GetCollectibleEffectNum
+    and effects:GetCollectibleEffectNum(COLLECTIBLE_HOLY_MANTLE) > 0
+end
+
+local function lethalExplosionHealth(player)
+  if not player.GetHearts or not player.GetSoulHearts then return false end
+  local health = player:GetHearts() + player:GetSoulHearts()
+  if player.GetBoneHearts then health = health + player:GetBoneHearts() * 2 end
+  return health == 1 and not hasMantleShield(player)
+end
+
+local function addLilSpewer(result, game, profileCompleted)
+  if completed(profileCompleted, "achievement_384") then return end
+  for _, player in ipairs(players(game)) do
+    if lethalExplosionHealth(player) and not explosionImmune(player) then
+      local ipecac = hasCollectible(player, COLLECTIBLE_IPECAC)
+      local bobsHead = activeReady(player, COLLECTIBLE_BOBS_ROTTEN_HEAD)
+      local horf = heldHorfPill(player, game)
+      if ipecac or bobsHead or horf then
+        result[#result + 1] = make("achievement_384", COPY.lilSpewer, 1, true)
+        return
+      end
+    end
+  end
+end
+
+local function victoryLapGoalId(victoryLap)
+  local goals = {
+    [0] = "achievement_321",
+    [1] = "achievement_321",
+    [2] = "achievement_360",
+    [3] = "achievement_337",
+  }
+  return goals[victoryLap]
+end
+
+local function addVictoryLap(result, game, run, profileCompleted, allowed)
+  if not allowed or game:GetRoom():GetType() ~= ROOM_BOSS
+    or game:GetLevel():GetStage() ~= STAGE_DARK_ROOM
+    or game:GetLevel():GetStageType() ~= STAGE_ORIGINAL then return end
+  local room = game:GetRoom()
+  if not room.IsClear or not room:IsClear() then return end
+  local events = normalizeRun(run)
+  if events.lambDefeatedRoom ~= roomKey(game) then return end
+  local ok, victoryLap = pcall(function() return game:GetVictoryLap() end)
+  if not ok then return end
+  local goalId = victoryLapGoalId(victoryLap)
+  if goalId and not completed(profileCompleted, goalId) then
+    result[#result + 1] = make(goalId, COPY.victoryLap, 1)
+  end
 end
 
 local function addPlayerOpportunities(result, game, profileCompleted)
@@ -316,9 +621,26 @@ local function addForgotten(result, game, run, profileCompleted)
   end
 end
 
+local function addGoldenRazor(result, game, run, profileCompleted)
+  if completed(profileCompleted, "achievement_583") then return end
+  local events = normalizeRun(run)
+  local player = game:GetNumPlayers() > 0 and Isaac.GetPlayer(0) or nil
+  if events.goldenRazorReached99 and player and player.GetNumCoins
+    and player:GetNumCoins() > 0 then
+    result[#result + 1] = make("achievement_583", COPY.goldenRazor, 2)
+  end
+end
+
 function Opportunities.observeNpc(run, npc, game)
   if not run or not npc or not game then return false end
   local events = normalizeRun(run)
+  local changed = false
+  if npc.Type == ENTITY_LAMB and game:GetRoom():GetType() == ROOM_BOSS
+    and game:GetLevel():GetStage() == STAGE_DARK_ROOM then
+    local key = roomKey(game)
+    changed = events.lambDefeatedRoom ~= key
+    events.lambDefeatedRoom = key
+  end
   local forgotten = events.forgotten
   if npc.IsBoss and npc:IsBoss() and game:GetLevel():GetStage() == STAGE_BASEMENT1
     and game:GetRoom():GetType() == ROOM_BOSS
@@ -328,17 +650,31 @@ function Opportunities.observeNpc(run, npc, game)
     local changed = forgotten.bossRoomDeathAt ~= deathAt or forgotten.bossRoomKey ~= key
     forgotten.bossRoomDeathAt = deathAt
     forgotten.bossRoomKey = key
-    return changed
+    return true
   end
-  return false
+  return changed
 end
 
 function Opportunities.updateRun(run, game)
   if not run or not game then return false end
-  local forgotten = normalizeRun(run).forgotten
+  local events = normalizeRun(run)
+  local changed = false
+  local player = game:GetNumPlayers() > 0 and Isaac.GetPlayer(0) or nil
+  if player and player.GetNumCoins then
+    if player:GetNumCoins() >= 99 and not events.goldenRazorReached99 then
+      events.goldenRazorReached99 = true
+      changed = true
+    end
+    if events.goldenRazorReached99 and player:GetNumCoins() == 0 then
+      events.goldenRazorReached99 = nil
+      changed = true
+    end
+  end
+
+  local forgotten = events.forgotten
   if forgotten.firstBossDefeatedInTime or not forgotten.bossRoomDeathAt
     or forgotten.bossRoomKey ~= roomKey(game)
-    or game:GetRoom():GetType() ~= ROOM_BOSS then return false end
+    or game:GetRoom():GetType() ~= ROOM_BOSS then return changed end
   local room = game:GetRoom()
   local cleared, clearKnown = false, false
   if room.IsClear then
@@ -349,7 +685,7 @@ function Opportunities.updateRun(run, game)
     local ok, bosses = pcall(function() return room:GetAliveBossesCount() end)
     if ok then cleared = bosses == 0 end
   end
-  if not cleared then return false end
+  if not cleared then return changed end
   forgotten.firstBossDefeatedInTime = math.floor(game.TimeCounter / 30) <= 60
   forgotten.bossRoomDeathAt = nil
   forgotten.bossRoomKey = nil
@@ -358,42 +694,81 @@ end
 
 function Opportunities.onNewRoom(run, game)
   if not run or not game then return false end
-  local forgotten = normalizeRun(run).forgotten
+  local events = normalizeRun(run)
+  local changed = false
+  local key = shopRoomKey(game)
+  if events.shopRoomKey ~= key then
+    events.shopRoomKey = key
+    events.shopSpent = 0
+    events.shopPurchases = {}
+    events.shopPickupPrices = {}
+    changed = true
+  end
+  if events.lambDefeatedRoom and events.lambDefeatedRoom ~= roomKey(game) then
+    events.lambDefeatedRoom = nil
+    changed = true
+  end
+  local forgotten = events.forgotten
   if forgotten.bossRoomKey and forgotten.bossRoomKey ~= roomKey(game) then
     forgotten.bossRoomDeathAt = nil
     forgotten.bossRoomKey = nil
-    return true
+    changed = true
   end
-  return false
+  return changed
+end
+
+function Opportunities.onUseItem(run, collectible)
+  if not run or collectible ~= COLLECTIBLE_R_KEY then return false end
+  local events = normalizeRun(run)
+  local changed = events.goldenRazorReached99 ~= nil
+    or events.lambDefeatedRoom ~= nil or events.shopSpent ~= 0
+  events.goldenRazorReached99 = nil
+  events.lambDefeatedRoom = nil
+  events.shopSpent = 0
+  events.shopPurchases = {}
+  events.shopPickupPrices = {}
+  return changed
 end
 
 function Opportunities.resetAttempt(run)
   if not run then return end
-  normalizeRun(run).forgotten = {}
+  run.sceneOpportunityEvents = { forgotten={} }
 end
 
-function Opportunities.evaluate(game, run, profileCompleted, completionAllowed, context)
-  if not completionAllowed then return {} end
+function Opportunities.evaluate(game, run, profileCompleted, completionAllowed, context,
+  victoryLapAllowed)
+  if not victoryLapAllowed then
+    if not completionAllowed then return {} end
+  end
   local result = {}
 
-  if not completed(profileCompleted, "achievement_410") and not game:IsGreedMode()
-    and game:GetRoom():GetType() == ROOM_BOSS and firstEntity(ENTITY_BABY_PLUM) then
-    result[#result + 1] = make("achievement_410", COPY.plum, 1)
-  end
-  if not completed(profileCompleted, "achievement_408")
-    and firstEntity(ENTITY_SIREN, SIREN_SKULL_VARIANT) then
-    result[#result + 1] = make("achievement_408", COPY.siren, 1)
-  end
-  if not completed(profileCompleted, "achievement_546") and firstEntity(ENTITY_HORNFEL) then
-    local minecart = firstEntity(ENTITY_MINECART)
-    result[#result + 1] = make("achievement_546",
-      minecart and COPY.hornfel or COPY.hornfelUrgent, 1)
-  end
+  if completionAllowed then
+    if not completed(profileCompleted, "achievement_410") and not game:IsGreedMode()
+      and game:GetRoom():GetType() == ROOM_BOSS and firstEntity(ENTITY_BABY_PLUM) then
+      result[#result + 1] = make("achievement_410", COPY.plum, 1)
+    end
+    if not completed(profileCompleted, "achievement_408")
+      and firstEntity(ENTITY_SIREN, SIREN_SKULL_VARIANT) then
+      result[#result + 1] = make("achievement_408", COPY.siren, 1)
+    end
+    if not completed(profileCompleted, "achievement_546") and firstEntity(ENTITY_HORNFEL) then
+      local minecart = firstEntity(ENTITY_MINECART)
+      result[#result + 1] = make("achievement_546",
+        minecart and COPY.hornfel or COPY.hornfelUrgent, 1)
+    end
 
-  addPlayerOpportunities(result, game, profileCompleted)
-  addBatteryBum(result, game, profileCompleted)
-  addTaintedUnlocks(result, game, context, profileCompleted)
-  addForgotten(result, game, run, profileCompleted)
+    addPlayerOpportunities(result, game, profileCompleted)
+    addBatteryBum(result, game, profileCompleted)
+    addTaintedUnlocks(result, game, context, profileCompleted)
+    addForgotten(result, game, run, profileCompleted)
+    addAngelRoom(result, game, profileCompleted)
+    addBed(result, profileCompleted)
+    addSuperFamiliar(result, game, profileCompleted)
+    addMemberCard(result, game, run, profileCompleted)
+    addGoldenRazor(result, game, run, profileCompleted)
+    addLilSpewer(result, game, profileCompleted)
+  end
+  addVictoryLap(result, game, run, profileCompleted, victoryLapAllowed)
 
   result = uniqueByGoal(result)
   for index, opportunity in ipairs(result) do opportunity.stableOrder = index end

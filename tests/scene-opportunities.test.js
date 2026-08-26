@@ -110,3 +110,160 @@ test("tainted and Forgotten opportunities reuse route and run context conservati
   assert.match(opportunities, /routeEvents\.crackedKeyPrepared/);
   assert.match(opportunities, /not game:IsGreedMode\(\)[\s\S]*?ROOM_BOSS[\s\S]*?ENTITY_BABY_PLUM/);
 });
+
+test("second-batch copy remains centralized and bilingual action copy keeps its prefixes", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const copy = opportunities.match(/local COPY\s*=\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const requiredKeys = [
+    "bandageGirl", "meatBoy", "angelStatue", "angelFight", "keyPiece",
+    "shopSpend", "goldenRazor", "bed", "victoryLap", "lilSpewer",
+  ];
+  for (const key of requiredKeys) {
+    assert.match(copy, new RegExp(`\\b${key}\\s*=\\s*message\\(`), `missing COPY.${key}`);
+  }
+
+  const messages = [...copy.matchAll(/message\("([^"]+)",\s*"([^"]+)"\)/g)];
+  assert.ok(messages.length >= 24, "first- and second-batch action copy must stay in COPY");
+  for (const [, zh, en] of messages) {
+    assert.match(zh, /^尝试/, `Chinese opportunity must start with 尝试: ${zh}`);
+    assert.match(en, /^Try\b/, `English opportunity must start with Try: ${en}`);
+  }
+});
+
+test("Golden Razor records 99 coins for the current attempt, withdraws at zero, and resets on R Key", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const main = read("main.lua");
+
+  assert.match(opportunities, /goldenRazorReached99/);
+  assert.match(opportunities, /GetNumCoins\(\)\s*>=\s*99[\s\S]*?goldenRazorReached99\s*=\s*true/,
+    "the run marker must be captured before the player's balance falls");
+  assert.match(opportunities, /goldenRazorReached99[\s\S]*?GetNumCoins\(\)\s*>\s*0[\s\S]*?achievement_583/,
+    "the opportunity is actionable only after 99 and before reaching zero");
+  assert.match(opportunities, /GetNumCoins\(\)\s*==\s*0[\s\S]*?goldenRazorReached99\s*=\s*nil/,
+    "the prompt and marker must be withdrawn once the balance reaches zero");
+  assert.match(opportunities, /COLLECTIBLE_R_KEY/);
+  assert.match(opportunities, /function Opportunities\.onUseItem[\s\S]*?COLLECTIBLE_R_KEY[\s\S]*?goldenRazorReached99\s*=\s*nil/);
+  assert.match(main, /MC_USE_ITEM/);
+  assert.match(main, /Opportunities\.onUseItem\(/);
+  assert.ok(main.indexOf("Opportunities.updateRun(State.run, GameInstance)")
+    < main.indexOf("if second == State.lastEvaluation then return end"),
+  "the 99-coin marker must be sampled every frame, not only once per second");
+});
+
+test("angel-room opportunity follows statue, live angel, and dropped key-piece phases for both goals", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+
+  for (const token of [
+    "ROOM_ANGEL", "ENTITY_URIEL", "ENTITY_GABRIEL",
+    "COLLECTIBLE_KEY_PIECE_1", "COLLECTIBLE_KEY_PIECE_2",
+  ]) {
+    assert.match(opportunities, new RegExp(`\\b${token}\\b`), `missing angel phase token ${token}`);
+  }
+  assert.match(opportunities, /local function addAngelRoom[\s\S]*?COPY\.keyPiece[\s\S]*?COPY\.angelFight[\s\S]*?COPY\.angelStatue/,
+    "the furthest actionable phase must win when entity snapshots overlap");
+  assert.match(opportunities, /achievement_58/);
+  assert.match(opportunities, /achievement_370/);
+  assert.match(opportunities, /addPairedGoals\([\s\S]*?achievement_58[\s\S]*?achievement_370/,
+    "Dad's Key and Filigree Feather must both be promoted without duplicate HUD copy");
+  assert.match(opportunities, /HasGoldenBomb\(\)/,
+    "a golden bomb is sufficient to make the intact statue actionable");
+});
+
+test("bed opportunities pair first-use and ten-use goals from the same bed encounter", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+
+  assert.match(opportunities, /BED/);
+  assert.match(opportunities, /local function (?:addBed|findUsableBed)/,
+    "bed detection should be isolated because vanilla exposes it as a special pickup");
+  assert.match(opportunities, /addPairedGoals\([\s\S]*?achievement_359[\s\S]*?achievement_385/,
+    "Wooden Cross and Blanket must share the bed opportunity");
+  assert.match(opportunities, /not completed\(profileCompleted, "achievement_359"\)/);
+  assert.match(opportunities, /not completed\(profileCompleted, "achievement_385"\)/);
+});
+
+test("level-three familiar opportunities require a matching pedestal or a usable Potato Peeler", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+
+  for (const token of [
+    "FAMILIAR_BANDAGE_GIRL", "FAMILIAR_MEATBOY", "COLLECTIBLE_BALL_OF_BANDAGES",
+    "COLLECTIBLE_CUBE_OF_MEAT", "COLLECTIBLE_POTATO_PEELER",
+  ]) {
+    assert.match(opportunities, new RegExp(`\\b${token}\\b`), `missing familiar opportunity token ${token}`);
+  }
+  assert.match(opportunities, /local function addSuperFamiliar[\s\S]*?SubType\s*==\s*COLLECTIBLE_BALL_OF_BANDAGES[\s\S]*?achievement_19/);
+  assert.match(opportunities, /local function addSuperFamiliar[\s\S]*?SubType\s*==\s*COLLECTIBLE_CUBE_OF_MEAT[\s\S]*?achievement_144/);
+  assert.match(opportunities, /COLLECTIBLE_POTATO_PEELER[\s\S]*?GetMaxHearts\(\)\s*>=\s*2/,
+    "Potato Peeler is only actionable when a red-heart container can be spent");
+  assert.match(opportunities, /GetCollectibleEffectNum\(collectible\)/,
+    "Potato Peeler's persistent Cube of Meat effects must count toward level three");
+});
+
+test("victory-lap exception is narrow and maps the current Lamb choice to one milestone", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const main = read("main.lua");
+
+  assert.match(opportunities, /local function victoryLapGoalId/);
+  assert.match(opportunities, /\[0\]\s*=\s*"achievement_321"/);
+  assert.match(opportunities, /\[1\]\s*=\s*"achievement_321"/);
+  assert.match(opportunities, /\[2\]\s*=\s*"achievement_360"/);
+  assert.match(opportunities, /\[3\]\s*=\s*"achievement_337"/);
+  assert.match(opportunities, /ROOM_BOSS[\s\S]*?STAGE_DARK_ROOM[\s\S]*?IsClear\(\)/,
+    "lap goals must appear only at the cleared Lamb decision, not throughout a lap");
+  assert.match(opportunities, /victoryLapGoalId[\s\S]*?result\[#result \+ 1\]/);
+  assert.match(main, /completionAllowed[\s\S]*?achievement_321[\s\S]*?achievement_360[\s\S]*?achievement_337/,
+    "only the three lap milestones may bypass the ordinary victory-lap suppression");
+});
+
+test("Member Card uses a per-shop-room purchase ledger and counts positive-price goods once", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const main = read("main.lua");
+
+  assert.match(opportunities, /shopPurchases/);
+  assert.match(opportunities, /shopRoomKey/);
+  assert.match(opportunities, /function Opportunities\.observePickup/);
+  assert.match(opportunities, /ROOM_SHOP/);
+  assert.match(opportunities, /pickup\.Price\s*>\s*0/,
+    "free pickups and non-coin prices must not advance the shop ledger");
+  assert.match(opportunities, /pickup\.InitSeed/);
+  assert.match(opportunities, /tostring\(pickup\.InitSeed\)/,
+    "large InitSeed values must remain JSON object keys instead of sparse array indexes");
+  assert.match(opportunities, /pickup\.Index/,
+    "copied shop pickups that share InitSeed must still have distinct purchase identities");
+  assert.match(opportunities, /IsPlaying\("Collect"\)/);
+  assert.match(opportunities, /shopPurchases\[seed\]/,
+    "the same collecting animation must not be charged twice");
+  assert.match(opportunities, /shopSpent\s*=\s*[\s\S]*?\+\s*pickup\.Price/);
+  assert.match(opportunities, /40\s*-\s*events\.shopSpent/,
+    "the prompt should show the remaining spend in this shop");
+  assert.match(opportunities, /function Opportunities\.onNewRoom[\s\S]*?shopRoomKey[\s\S]*?shopSpent\s*=\s*0/,
+    "changing rooms starts a new single-shop ledger");
+  assert.match(main, /Opportunities\.observePickup\(/);
+});
+
+test("Lil Spewer only advertises a lethal self-explosion source and is explicitly dangerous", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+
+  for (const token of [
+    "COLLECTIBLE_IPECAC", "COLLECTIBLE_BOBS_ROTTEN_HEAD", "PILLEFFECT_HORF",
+    "COLLECTIBLE_PYROMANIAC",
+  ]) {
+    assert.match(opportunities, new RegExp(`\\b${token}\\b`), `missing Lil Spewer token ${token}`);
+  }
+  assert.match(opportunities, /PILLEFFECT_HORF[\s\S]*?44/);
+  assert.match(opportunities, /local function addLilSpewer[\s\S]*?not explosionImmune\(player\)/);
+  assert.match(opportunities, /achievement_384[\s\S]*?(?:danger\s*=\s*true|COPY\.lilSpewer\s*,\s*\d+\s*,\s*true)/,
+    "self-kill guidance must render through the dangerous opportunity style");
+  assert.match(opportunities, /COLLECTIBLE_HOLY_MANTLE[\s\S]*?GetCollectibleEffectNum/,
+    "an active one-hit shield must suppress lethal self-damage guidance");
+  assert.match(opportunities, /COLLECTIBLE_IPECAC[\s\S]*?COLLECTIBLE_BOBS_ROTTEN_HEAD[\s\S]*?PILLEFFECT_HORF/,
+    "Ipecac, Bob's Rotten Head, and Horf pill are the only approved sources");
+});
+
+test("second-batch aggregation deduplicates goals and never writes the user's tracker", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+
+  assert.match(opportunities, /result\s*=\s*uniqueByGoal\(result\)/);
+  assert.match(opportunities, /seen\[opportunity\.goalId\]/);
+  assert.doesNotMatch(opportunities, /Tracker\.(?:track|toggle|untrack)/);
+  assert.doesNotMatch(opportunities, /settings\.tracked\s*=/);
+});
