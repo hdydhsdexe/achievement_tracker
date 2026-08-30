@@ -11,7 +11,7 @@
     "size": 10,
     "rendering": "antialiased"
   },
-  "glyphCount": 1190,
+  "glyphCount": 1193,
   "fallbackGlyphs": [
     {
       "character": "†",
@@ -32,6 +32,10 @@
     {
       "character": "噗",
       "codepoint": "U+5657"
+    },
+    {
+      "character": "噜",
+      "codepoint": "U+565C"
     },
     {
       "character": "囤",

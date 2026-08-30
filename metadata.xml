@@ -3,6 +3,6 @@
   <name>Achievement Tracker / 成就条件追踪器</name>
   <directory>achievement_tracker</directory>
   <id>3788047099</id>
-  <description>Track achievement requirements, routes, and warnings in-game. 支持中英文、忏悔与忏悔+。</description>
-  <version>0.8.1</version>
+  <description>Track achievement requirements, routes, progress, and scene opportunities in-game. 支持中英文、忏悔与忏悔+。</description>
+  <version>0.8.5</version>
 </metadata>

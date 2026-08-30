@@ -46,15 +46,32 @@ local COLLECTIBLE_BOBS_ROTTEN_HEAD = enum(CollectibleType, "COLLECTIBLE_BOBS_ROT
 local COLLECTIBLE_PYROMANIAC = enum(CollectibleType, "COLLECTIBLE_PYROMANIAC", 223)
 local COLLECTIBLE_HOST_HAT = enum(CollectibleType, "COLLECTIBLE_HOST_HAT", 375)
 local COLLECTIBLE_HOLY_MANTLE = enum(CollectibleType, "COLLECTIBLE_HOLY_MANTLE", 313)
+local COLLECTIBLE_MAGIC_MUSHROOM = enum(CollectibleType, "COLLECTIBLE_MAGIC_MUSHROOM", 12)
+local COLLECTIBLE_PLACEBO = enum(CollectibleType, "COLLECTIBLE_PLACEBO", 348)
+local COLLECTIBLE_GUPPYS_HEAD = enum(CollectibleType, "COLLECTIBLE_GUPPYS_HEAD", 145)
+local COLLECTIBLE_JAR_OF_FLIES = enum(CollectibleType, "COLLECTIBLE_JAR_OF_FLIES", 434)
 local FAMILIAR_BANDAGE_GIRL = enum(FamiliarVariant, "BALL_OF_BANDAGES_3", 71)
 local FAMILIAR_MEATBOY = enum(FamiliarVariant, "CUBE_OF_MEAT_3", 46)
 local PICKUP_COLLECTIBLE = enum(PickupVariant, "PICKUP_COLLECTIBLE", 100)
 local PICKUP_BED = enum(PickupVariant, "PICKUP_BED", 380)
+local PICKUP_MOMSCHEST = enum(PickupVariant, "PICKUP_MOMSCHEST", 390)
 local PILLEFFECT_HORF = enum(PillEffect, "PILLEFFECT_HORF", 44)
+local PILLEFFECT_GULP = enum(PillEffect, "PILLEFFECT_GULP", 43)
+local PILLEFFECT_ONE_MAKES_YOU_LARGER = enum(PillEffect, "PILLEFFECT_LARGER", 32)
 local GRID_STATUE = enum(GridEntityType, "GRID_STATUE", 21)
+local ITEM_PASSIVE = enum(ItemType, "ITEM_PASSIVE", 1)
+local ITEM_FAMILIAR = enum(ItemType, "ITEM_FAMILIAR", 4)
+local PRICE_ONE_HEART = enum(PickupPrice, "PRICE_ONE_HEART", -1)
+local PRICE_TWO_HEARTS = enum(PickupPrice, "PRICE_TWO_HEARTS", -2)
+local PRICE_THREE_SOULHEARTS = enum(PickupPrice, "PRICE_THREE_SOULHEARTS", -3)
+local PRICE_ONE_HEART_AND_TWO_SOULHEARTS = enum(PickupPrice,
+  "PRICE_ONE_HEART_AND_TWO_SOULHEARTS", -4)
+local PRICE_FREE = enum(PickupPrice, "PRICE_FREE", -1000)
+local PRICE_FREE_SHOPITEM = enum(PickupPrice, "PRICE_FREE_SHOPITEM", -1001)
 local TRINKET_MISSING_POSTER = enum(TrinketType, "TRINKET_MISSING_POSTER", 23)
 local CARD_MAGICIAN = enum(Card, "CARD_MAGICIAN", 2)
 local CARD_SUN = enum(Card, "CARD_SUN", 5)
+local CARD_STRENGTH = enum(Card, "CARD_STRENGTH", 12)
 local TEAR_HOMING = enum(TearFlags, "TEAR_HOMING", 1 << 2)
 
 local function message(zh, en)
@@ -120,6 +137,22 @@ local COPY = {
     "Try choosing another Victory Lap after defeating The Lamb!"),
   lilSpewer=message("尝试在生命不多时用爆炸伤害击杀自己！",
     "Try killing yourself with explosion damage when it would be lethal!"),
+  zip=message("尝试在剩余%02d:%02d内找到并击败羔羊！",
+    "Try finding and defeating The Lamb within %02d:%02d!"),
+  itsTheKey=message("尝试击败羔羊，并保持本局未拾取心、硬币或炸弹！",
+    "Try defeating The Lamb without picking up Hearts, Coins, or Bombs!"),
+  zipAndKey=message("尝试在剩余%02d:%02d内击败羔羊，并保持未拾取心、硬币或炸弹！",
+    "Try defeating The Lamb within %02d:%02d without picking up Hearts, Coins, or Bombs!"),
+  uBrokeIt=message("尝试拾取这个道具，使本局获得的道具达到50个！",
+    "Try picking up this item to reach 50 items in this run!"),
+  hugeGrowth=message("尝试使用当前的变大来源，完成第5次体型增大！",
+    "Try using the available growth source for your fifth size increase!"),
+  marbles=message("尝试使用咕噜！胶囊，完成本局第5次吞咽！",
+    "Try using Gulp! for the fifth time in this run!"),
+  rottenPenny=message("尝试使用当前主动道具，让蓝苍蝇达到20只！",
+    "Try using the available active item to reach 20 Blue Flies!"),
+  momsChest=message("尝试打开妈妈的箱子，解锁红钥匙！",
+    "Try opening Mom's Chest to unlock Red Key!"),
 }
 
 local function normalizeRun(run)
@@ -381,6 +414,186 @@ local function collectingPickup(pickup)
   return ok and sprite and sprite.IsPlaying and sprite:IsPlaying("Collect")
 end
 
+local function heldPillSlot(player, game, pillEffect, identifiedOnly)
+  if not player.GetPill or not game.GetItemPool then return nil end
+  local pool = game:GetItemPool()
+  if not pool or not pool.GetPillEffect then return nil end
+  for slot = 0, 3 do
+    local okColor, color = pcall(function() return player:GetPill(slot) end)
+    if okColor and color and color ~= 0 then
+      local identified = not identifiedOnly or not pool.IsPillIdentified
+        or pool:IsPillIdentified(color)
+      local okEffect, effect = pcall(function() return pool:GetPillEffect(color, player) end)
+      if identified and okEffect and effect == pillEffect then return slot end
+    end
+  end
+  return nil
+end
+
+local function addZip(result, game, profileCompleted)
+  local level = game:GetLevel()
+  if not completed(profileCompleted, "achievement_326")
+    and level:GetStage() == STAGE_DARK_ROOM
+    and level:GetStageType() == STAGE_ORIGINAL
+    and game.TimeCounter < 20 * 60 * 30 then
+    local remainingFrames = 20 * 60 * 30 - game.TimeCounter
+    local remainingSeconds = math.ceil(remainingFrames / 30)
+    local minutes, seconds = math.floor(remainingSeconds / 60), remainingSeconds % 60
+    local copy = message(string.format(COPY.zip.zh, minutes, seconds),
+      string.format(COPY.zip.en, minutes, seconds))
+    local opportunity = make("achievement_326", copy, 1)
+    result[#result + 1] = opportunity
+    return { opportunity=opportunity, minutes=minutes, seconds=seconds }
+  end
+  return nil
+end
+
+local function addItsTheKey(result, game, run, profileCompleted, zipState)
+  if completed(profileCompleted, "achievement_327")
+    or game:GetLevel():GetStage() ~= STAGE_DARK_ROOM
+    or game:GetLevel():GetStageType() ~= STAGE_ORIGINAL
+    or game:GetRoom():GetType() ~= ROOM_BOSS or not firstEntity(ENTITY_LAMB) then return end
+  local disqualified = run and run.disqualified or {}
+  if not disqualified.heart and not disqualified.coin and not disqualified.bomb then
+    if zipState then
+      local copy = message(string.format(COPY.zipAndKey.zh,
+        zipState.minutes, zipState.seconds), string.format(COPY.zipAndKey.en,
+        zipState.minutes, zipState.seconds))
+      zipState.opportunity.message = copy
+      addPairedGoals(result, profileCompleted, "achievement_326", "achievement_327", copy, 1)
+    else
+      result[#result + 1] = make("achievement_327", COPY.itsTheKey, 1)
+    end
+  end
+end
+
+local function pedestalAffordable(pickup, player)
+  local shopItem = pickup.IsShopItem and pickup:IsShopItem()
+  if not shopItem then return true end
+  local price = pickup.Price
+  if price == nil then return false end
+  if price == 0 or price == PRICE_FREE or price == PRICE_FREE_SHOPITEM then return true end
+  if price > 0 then
+    return player.GetNumCoins and player:GetNumCoins() >= price
+  end
+  if price == PRICE_ONE_HEART then
+    return player.GetMaxHearts and player:GetMaxHearts() >= 2
+  end
+  if price == PRICE_TWO_HEARTS then
+    return player.GetMaxHearts and player:GetMaxHearts() >= 4
+  end
+  if price == PRICE_THREE_SOULHEARTS then
+    return player.GetSoulHearts and player:GetSoulHearts() >= 6
+  end
+  if price == PRICE_ONE_HEART_AND_TWO_SOULHEARTS then
+    return player.GetMaxHearts and player:GetMaxHearts() >= 2
+      and player.GetSoulHearts and player:GetSoulHearts() >= 4
+  end
+  return false
+end
+
+local function addFinalItem(result, game, run, profileCompleted)
+  if completed(profileCompleted, "achievement_330")
+    or not (run and run.progress and run.progress.items == 49) then return end
+  local player = game:GetNumPlayers() > 0 and Isaac.GetPlayer(0) or nil
+  if not player then return end
+  local itemConfig = Isaac.GetItemConfig and Isaac.GetItemConfig() or nil
+  for _, pickup in ipairs(entities()) do
+    if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_COLLECTIBLE
+      and pickup.SubType > 0 and alive(pickup) and not pickup.Touched
+      and (pickup.Wait == nil or pickup.Wait <= 0) and not collectingPickup(pickup) then
+      local config = itemConfig and itemConfig:GetCollectible(pickup.SubType) or nil
+      local counts = config and (config.Type == ITEM_PASSIVE or config.Type == ITEM_FAMILIAR)
+      if counts and pedestalAffordable(pickup, player) then
+        result[#result + 1] = make("achievement_330", COPY.uBrokeIt, 1)
+        return
+      end
+    end
+  end
+end
+
+local function addGrowth(result, game, run, profileCompleted)
+  if not (run and run.progress and run.progress.growth == 4)
+    or completed(profileCompleted, "achievement_361")
+    or (run.completedGoals and run.completedGoals.achievement_361) then return end
+  for _, player in ipairs(players(game)) do
+    local pill = heldPillSlot(player, game, PILLEFFECT_ONE_MAKES_YOU_LARGER, true)
+    local strength = cardSlot(player, CARD_STRENGTH)
+    local placeboReady = activeReady(player, COLLECTIBLE_PLACEBO)
+    local blankCardReady = activeReady(player, COLLECTIBLE_BLANK_CARD)
+    if pill ~= nil or strength ~= nil or (pill ~= nil and placeboReady)
+      or (strength ~= nil and blankCardReady) then
+      result[#result + 1] = make("achievement_361", COPY.hugeGrowth, 1)
+      return
+    end
+  end
+  for _, pickup in ipairs(entities()) do
+    if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_COLLECTIBLE
+      and pickup.SubType == COLLECTIBLE_MAGIC_MUSHROOM and alive(pickup)
+      and not pickup.Touched and (pickup.Wait == nil or pickup.Wait <= 0)
+      and not collectingPickup(pickup) then
+      for _, player in ipairs(players(game)) do
+        if pedestalAffordable(pickup, player) then
+          result[#result + 1] = make("achievement_361", COPY.hugeGrowth, 1)
+          return
+        end
+      end
+    end
+  end
+end
+
+local function addMarbles(result, game, run, profileCompleted)
+  if not (run and run.progress and run.progress.gulp == 4)
+    or completed(profileCompleted, "achievement_386")
+    or (run.completedGoals and run.completedGoals.achievement_386) then return end
+  for _, player in ipairs(players(game)) do
+    local gulp = heldPillSlot(player, game, PILLEFFECT_GULP, true)
+    if gulp ~= nil then
+      local placeboReady = activeReady(player, COLLECTIBLE_PLACEBO)
+      result[#result + 1] = make("achievement_386", COPY.marbles, placeboReady and 1 or 2)
+      return
+    end
+  end
+end
+
+local function addBlueFlies(result, game, run, profileCompleted)
+  if completed(profileCompleted, "achievement_388")
+    or (run and run.completedGoals and run.completedGoals.achievement_388) then return end
+  for _, player in ipairs(players(game)) do
+    if player.GetNumBlueFlies and player:GetNumBlueFlies() < 20 then
+      local guppyReady = activeReady(player, COLLECTIBLE_GUPPYS_HEAD)
+      if guppyReady and player:GetNumBlueFlies() >= 18 then
+        result[#result + 1] = make("achievement_388", COPY.rottenPenny, 1)
+        return
+      end
+      local jarReady, jarSlot = activeReady(player, COLLECTIBLE_JAR_OF_FLIES)
+      if jarSlot ~= nil and jarReady and player.GetJarFlies
+        and player:GetNumBlueFlies() + player:GetJarFlies() >= 20 then
+        result[#result + 1] = make("achievement_388", COPY.rottenPenny, 1)
+        return
+      end
+    end
+  end
+end
+
+local function addMomsChest(result, game, profileCompleted)
+  if completed(profileCompleted, "achievement_415") then return end
+  if game:GetLevel():GetStage() == STAGE_HOME then
+    for _, pickup in ipairs(entities()) do
+      if pickup.Type == ENTITY_PICKUP and pickup.Variant == PICKUP_MOMSCHEST
+        and alive(pickup) and not pickup.Touched then
+        local sprite = pickup.GetSprite and pickup:GetSprite() or nil
+        local opened = sprite and ((sprite.IsPlaying and sprite:IsPlaying("Open"))
+          or (sprite.IsFinished and sprite:IsFinished("Open")))
+        if not opened then
+          result[#result + 1] = make("achievement_415", COPY.momsChest, 1)
+          return
+        end
+      end
+    end
+  end
+end
+
 function Opportunities.observePickup(run, pickup, game)
   if not run or not pickup or not game or game:GetRoom():GetType() ~= ROOM_SHOP
     or pickup.Type ~= ENTITY_PICKUP then return false end
@@ -428,17 +641,7 @@ local function addMemberCard(result, game, run, profileCompleted)
 end
 
 local function heldHorfPill(player, game)
-  if not player.GetPill or not game.GetItemPool then return false end
-  local pool = game:GetItemPool()
-  if not pool or not pool.GetPillEffect then return false end
-  for slot = 0, 3 do
-    local okColor, color = pcall(function() return player:GetPill(slot) end)
-    if okColor and color and color ~= 0 then
-      local okEffect, effect = pcall(function() return pool:GetPillEffect(color, player) end)
-      if okEffect and effect == PILLEFFECT_HORF then return true end
-    end
-  end
-  return false
+  return heldPillSlot(player, game, PILLEFFECT_HORF, false) ~= nil
 end
 
 local function explosionImmune(player)
@@ -767,6 +970,13 @@ function Opportunities.evaluate(game, run, profileCompleted, completionAllowed, 
     addMemberCard(result, game, run, profileCompleted)
     addGoldenRazor(result, game, run, profileCompleted)
     addLilSpewer(result, game, profileCompleted)
+    local zipState = addZip(result, game, profileCompleted)
+    addItsTheKey(result, game, run, profileCompleted, zipState)
+    addFinalItem(result, game, run, profileCompleted)
+    addGrowth(result, game, run, profileCompleted)
+    addMarbles(result, game, run, profileCompleted)
+    addBlueFlies(result, game, run, profileCompleted)
+    addMomsChest(result, game, profileCompleted)
   end
   addVictoryLap(result, game, run, profileCompleted, victoryLapAllowed)
 

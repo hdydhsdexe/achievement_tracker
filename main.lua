@@ -217,7 +217,11 @@ end
 function AchievementTracker:onUpdate()
   if not State.settings then return end
   local player = Isaac.GetPlayer(0)
-  if player then Sensors.update(State.run, player) end
+  local runChanged = player and Sensors.update(State.run, player) or false
+  for index = 0, GameInstance:GetNumPlayers() - 1 do
+    if Sensors.observeBlueFlies(State.run, Isaac.GetPlayer(index)) then runChanged = true end
+  end
+  if runChanged then save() end
   if Opportunities.updateRun(State.run, GameInstance) then save() end
   local second = math.floor(GameInstance.TimeCounter / 30)
   if second == State.lastEvaluation then return end
@@ -277,7 +281,10 @@ end
 
 function AchievementTracker:onPickupUpdate(pickup)
   if not State.settings then return end
-  Sensors.onPickupUpdate(State.run, pickup)
+  if Sensors.onPickupUpdate(State.run, pickup) then
+    State.lastEvaluation = -1
+    save()
+  end
   if LongTermProgress.canObserve(GameInstance)
     and LongTermProgress.observePickup(State.settings, State.run, pickup) then save() end
   if Routes.observePickup(State.run, pickup, GameInstance, trackingTaintedUnlock()) then save() end
@@ -287,25 +294,34 @@ function AchievementTracker:onPickupUpdate(pickup)
   end
 end
 
-function AchievementTracker:onUseItem(collectible)
-  if State.settings and Opportunities.onUseItem(State.run, collectible) then
+function AchievementTracker:onUseItem(collectible, rng, player)
+  if not State.settings then return end
+  local changed = Opportunities.onUseItem(State.run, collectible)
+  changed = Sensors.onUseItem(State.run, collectible, player, Isaac.GetFrameCount()) or changed
+  if changed then
     State.lastEvaluation = -1
     save()
   end
 end
 
-function AchievementTracker:onUsePill(pillEffect)
-  if State.settings then Sensors.onUsePill(State.run, pillEffect) end
+function AchievementTracker:onUsePill(pillEffect, player)
+  if State.settings and Sensors.onUsePill(State.run, pillEffect, player, Isaac.GetFrameCount()) then
+    State.lastEvaluation = -1
+    save()
+  end
 end
 
-function AchievementTracker:onUseCard(card)
-  if not State.settings or not LongTermProgress.canObserve(GameInstance) then return end
-  local changed = LongTermProgress.increment(State.settings, 196, 1)
-  local deathCard = Card and Card.CARD_DEATH or 13
-  if card == deathCard then
-    changed = LongTermProgress.increment(State.settings, 7, 1) or changed
+function AchievementTracker:onUseCard(card, player)
+  if not State.settings then return end
+  local changed = Sensors.onUseCard(State.run, card, player, Isaac.GetFrameCount())
+  if LongTermProgress.canObserve(GameInstance) then
+    changed = LongTermProgress.increment(State.settings, 196, 1) or changed
+    local deathCard = Card and Card.CARD_DEATH or 13
+    if card == deathCard then
+      changed = LongTermProgress.increment(State.settings, 7, 1) or changed
+    end
   end
-  if changed then save() end
+  if changed then State.lastEvaluation = -1; save() end
 end
 
 local function observeAndSave(kind, value, variant)

@@ -43,7 +43,7 @@ function Mcm.setup(state, save)
   local modName = "Achievement Tracker"
   local general = "General / 常规"
   ModConfigMenu.RemoveCategory(modName)
-  ModConfigMenu.AddText(modName, general, function() return "Achievement Tracker v0.8.1 / 成就条件追踪" end)
+  ModConfigMenu.AddText(modName, general, function() return "Achievement Tracker v0.8.5 / 成就条件追踪" end)
 
   ModConfigMenu.AddSetting(modName, general, {
     Type = ModConfigMenu.OptionType.BOOLEAN,
