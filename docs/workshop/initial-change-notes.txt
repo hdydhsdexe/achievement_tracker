@@ -1,17 +1,15 @@
-Text display robustness update / 文字显示鲁棒性更新 — v0.8.1
+Third scene-opportunity update / 第三批场景机会更新 — v0.8.5
 
-- Added shared native 11/22/33px HUD/F3 fonts drawn at 1:1 with texture smoothing disabled.
-- Built LanaPixel at its 11px design grid and generated exact 2x/3x nearest-neighbor variants; Chinese fallback glyphs retain antialiasing.
-- Reflowed full bilingual conditions, expanded the panel height-first, and automatically downgraded oversized tiers.
-- HUD now downgrades by native tier, shifts left only at the 11px floor, and paginates complete goals on tiny screens.
-- Added a 0–8px HUD line spacing slider; layout fitting, pagination, and centered warnings all honor it.
-- Migrated HUD and F3 settings to schema 9 without overwriting position preferences.
-- Global game, GPU, or display filtering may still soften the final image; the mod does not override Filter.
+- Added actionable prompts for Zip!, It's the Key, U Broke It!, Huge Growth, Marbles, Rotten Penny, and Red Key.
+- Combined Zip! and It's the Key into one HUD message when both Dark Room conditions remain valid while keeping both goals promoted in F3.
+- Persisted conservative run evidence for item count, size growth, Gulp! uses, restricted pickups, and 20 Blue Flies.
+- Deduplicated same-frame Placebo and Blank Card observations and saved changed evidence immediately.
+- Added the required “噜” fallback glyph to all native 11/22/33px HUD/F3 font atlases.
+- Retained the Mod Config Menu 0–8px HUD line spacing setting and existing save schema compatibility.
 
-- 新增关闭纹理平滑并按 1:1 绘制的 HUD/F3 共享原生 11/22/33px 字库。
-- LanaPixel 以 11px 设计栅格生成，22/33px 为精确 2×/3× 最近邻版本；中文后备字形保留抗锯齿。
-- 完整换行中英成就条件，面板先增高、再加宽，并在字号过大时自动降档。
-- HUD 按原生档位降档，仅在 11px 仍不足时左移，并在极小画面按完整目标分页。
-- 新增 0–8px HUD 行间距滑块，布局适配、分页和居中警告均使用该设置。
-- HUD 与 F3 设置升级到 schema 9，保留用户原始位置偏好。
-- 游戏、显卡或显示器的全局滤波仍可能使最终画面变软；本 Mod 不覆盖 Filter 设置。
+- 为“冲！”、“这就是钥匙”、“你玩坏它了！”、“大大大！”、“弹珠袋”、“腐烂硬币”和“红钥匙”新增可立即执行的场景提示。
+- 两个暗室条件同时有效时合并 HUD 提示，同时仍在 F3 中分别前移两个成就。
+- 保守保存道具数量、体型增长、咕噜！使用、禁拾取条件和 20 只蓝苍蝇的本局证据。
+- 对同一帧的安慰剂与空白卡牌观察去重，并在证据变化后立即保存。
+- 为 HUD/F3 原生 11/22/33px 字库补充所需的“噜”后备字形。
+- 保留 Mod Config Menu 的 0–8px HUD 行间距设置和现有存档 schema 兼容性。

@@ -267,3 +267,104 @@ test("second-batch aggregation deduplicates goals and never writes the user's tr
   assert.doesNotMatch(opportunities, /Tracker\.(?:track|toggle|untrack)/);
   assert.doesNotMatch(opportunities, /settings\.tracked\s*=/);
 });
+
+test("third-batch copy and evaluation cover all seven restored achievement opportunities", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const copy = opportunities.match(/local COPY\s*=\s*\{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
+  for (const key of [
+    "zip", "itsTheKey", "zipAndKey", "uBrokeIt", "hugeGrowth", "marbles",
+    "rottenPenny", "momsChest",
+  ]) {
+    assert.match(copy, new RegExp(`\\b${key}\\s*=\\s*message\\(`), `missing COPY.${key}`);
+  }
+  for (const id of [326, 327, 330, 361, 386, 388, 415]) {
+    assert.match(opportunities, new RegExp(`achievement_${id}`), `missing achievement_${id}`);
+  }
+  assert.match(opportunities, /local zipState = addZip\(result, game, profileCompleted\)/);
+  for (const call of ["addItsTheKey", "addFinalItem", "addGrowth", "addMarbles",
+    "addBlueFlies", "addMomsChest"]) {
+    assert.match(opportunities, new RegExp(`${call}\\(result, game`), `missing ${call} evaluation`);
+  }
+});
+
+test("Dark Room timing and restricted-pickup goals merge without losing either F3 goal", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const zip = opportunities.match(/local function addZip[\s\S]*?\r?\nend\r?\n\r?\nlocal function addItsTheKey/)?.[0] ?? "";
+  const key = opportunities.match(/local function addItsTheKey[\s\S]*?\r?\nend\r?\n\r?\nlocal function pedestalAffordable/)?.[0] ?? "";
+
+  assert.match(zip, /STAGE_DARK_ROOM/);
+  assert.match(zip, /STAGE_ORIGINAL/);
+  assert.match(zip, /game\.TimeCounter < 20 \* 60 \* 30/);
+  assert.match(zip, /math\.ceil\(remainingFrames \/ 30\)/);
+  assert.match(zip, /make\("achievement_326", copy, 1\)/);
+
+  assert.match(key, /ROOM_BOSS/);
+  assert.match(key, /ENTITY_LAMB/);
+  for (const pickup of ["heart", "coin", "bomb"])
+    assert.match(key, new RegExp(`not disqualified\\.${pickup}`));
+  assert.match(key, /zipState\.opportunity\.message = copy/);
+  assert.match(key, /addPairedGoals\(result, profileCompleted, "achievement_326", "achievement_327", copy, 1\)/);
+});
+
+test("item, growth, and Gulp opportunities require an actionable final step", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const affordability = opportunities.match(/local function pedestalAffordable[\s\S]*?\r?\nend\r?\n\r?\nlocal function addFinalItem/)?.[0] ?? "";
+  const finalItem = opportunities.match(/local function addFinalItem[\s\S]*?\r?\nend\r?\n\r?\nlocal function addGrowth/)?.[0] ?? "";
+  const growth = opportunities.match(/local function addGrowth[\s\S]*?\r?\nend\r?\n\r?\nlocal function addMarbles/)?.[0] ?? "";
+  const marbles = opportunities.match(/local function addMarbles[\s\S]*?\r?\nend\r?\n\r?\nlocal function addBlueFlies/)?.[0] ?? "";
+
+  assert.match(affordability, /GetNumCoins\(\) >= price/);
+  for (const price of ["PRICE_ONE_HEART", "PRICE_TWO_HEARTS", "PRICE_THREE_SOULHEARTS",
+    "PRICE_ONE_HEART_AND_TWO_SOULHEARTS"]) assert.match(affordability, new RegExp(price));
+  assert.match(finalItem, /run\.progress\.items == 49/);
+  assert.match(finalItem, /config\.Type == ITEM_PASSIVE or config\.Type == ITEM_FAMILIAR/);
+  assert.match(finalItem, /pedestalAffordable\(pickup, player\)/);
+  assert.match(growth, /run\.progress\.growth == 4/);
+  for (const source of ["PILLEFFECT_ONE_MAKES_YOU_LARGER", "CARD_STRENGTH",
+    "COLLECTIBLE_PLACEBO", "COLLECTIBLE_BLANK_CARD", "COLLECTIBLE_MAGIC_MUSHROOM"])
+    assert.match(growth, new RegExp(source));
+  assert.match(marbles, /run\.progress\.gulp == 4/);
+  assert.match(marbles, /heldPillSlot\(player, game, PILLEFFECT_GULP, true\)/);
+});
+
+test("restored run sensors persist counters, deduplicate callbacks, and trigger reevaluation", () => {
+  const sensors = read("scripts/core/sensors.lua");
+  const main = read("main.lua");
+
+  assert.match(sensors, /progress=\{ items=0, growth=0, gulp=0 \}, progressUseKeys=\{\}/);
+  assert.match(sensors, /run\.progressUseKeys = run\.progressUseKeys or \{\}/);
+  assert.match(sensors, /run\.progress\.growth = tonumber\(run\.progress\.growth\) or 0/);
+  assert.match(sensors, /if run\.progressUseKeys\[progressKey\] == useKey then return false end/);
+  assert.match(sensors, /table\.concat\(\{ tostring\(frameCount or Isaac\.GetFrameCount\(\)\)/);
+  for (const handler of ["onUsePill", "onUseCard", "onUseItem", "observeBlueFlies"])
+    assert.match(sensors, new RegExp(`function Sensors\\.${handler}`));
+  assert.match(sensors, /pickup\.SubType == COLLECTIBLE_MAGIC_MUSHROOM/);
+  assert.match(sensors, /completedGoals\.achievement_361 = true/);
+  assert.match(sensors, /completedGoals\.achievement_386 = true/);
+  assert.match(sensors, /completedGoals\.achievement_388 = true/);
+
+  assert.match(main, /Sensors\.onUseItem\(State\.run, collectible, player, Isaac\.GetFrameCount\(\)\)/);
+  assert.match(main, /Sensors\.onUsePill\(State\.run, pillEffect, player, Isaac\.GetFrameCount\(\)\)/);
+  assert.match(main, /Sensors\.onUseCard\(State\.run, card, player, Isaac\.GetFrameCount\(\)\)/);
+  assert.match(main, /for index = 0, GameInstance:GetNumPlayers\(\) - 1 do[\s\S]*?Sensors\.observeBlueFlies/);
+  assert.match(main, /if Sensors\.onPickupUpdate[\s\S]*?State\.lastEvaluation = -1[\s\S]*?save\(\)/);
+});
+
+test("Blue Fly and Mom's Chest opportunities require an unfinished actionable source", () => {
+  const opportunities = read("scripts/core/opportunities.lua");
+  const sensors = read("scripts/core/sensors.lua");
+  const flies = opportunities.match(/local function addBlueFlies[\s\S]*?\r?\nend\r?\n\r?\nlocal function addMomsChest/)?.[0] ?? "";
+  const chest = opportunities.match(/local function addMomsChest[\s\S]*?\r?\nend\r?\n\r?\nfunction Opportunities\.observePickup/)?.[0] ?? "";
+
+  assert.match(flies, /COLLECTIBLE_GUPPYS_HEAD/);
+  assert.match(flies, /GetNumBlueFlies\(\) >= 18/);
+  assert.match(flies, /COLLECTIBLE_JAR_OF_FLIES/);
+  assert.match(flies, /GetNumBlueFlies\(\) \+ player:GetJarFlies\(\) >= 20/);
+  assert.match(sensors, /GetNumBlueFlies\(\) >= 20[\s\S]*?achievement_388 = true/);
+
+  assert.match(chest, /STAGE_HOME/);
+  assert.match(chest, /PICKUP_MOMSCHEST/);
+  assert.match(chest, /sprite:IsPlaying\("Open"\)/);
+  assert.match(chest, /sprite:IsFinished\("Open"\)/);
+  assert.match(chest, /make\("achievement_415", COPY\.momsChest, 1\)/);
+});

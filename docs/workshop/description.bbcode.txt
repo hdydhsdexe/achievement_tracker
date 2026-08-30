@@ -8,6 +8,7 @@ Track the requirements behind Isaac achievements directly in-game instead of con
 
 [list]
 [*]Persistent HUD with concrete achievement conditions, progress, route steps, and failure warnings.
+[*]Contextual “Try” prompts promote achievements that can be advanced immediately, covering three batches of bosses, room entities, usable items, pickup restrictions, Victory Laps, Dark Room timing, run counters, and Mom's Chest.
 [*]F3 visual goal menu with mouse and keyboard controls, category filters, and bilingual fuzzy search.
 [*]Detailed completion-mark routes covering the main path, alternate path, Mother, Beast, Greed Mode, Boss Rush, Hush, Delirium, Mega Satan, and tainted-character unlocks.
 [*]Context-aware route alternatives for relevant items, cards, trinkets, transformations, and multiplayer characters.
@@ -18,6 +19,7 @@ Track the requirements behind Isaac achievements directly in-game instead of con
 
 [list]
 [*]HUD 持续显示具体成就条件、进度、路线步骤与失败警告。
+[*]遇到可以立即推进的成就场景时显示“尝试”动作提示，三批判断覆盖 Boss、房间实体、可用道具、拾取限制、胜利跑圈、暗室限时、本局计数和妈妈的箱子。
 [*]F3 可打开可视化目标菜单，支持键鼠操作、分类筛选和中英双语模糊搜索。
 [*]覆盖主线、支线、Mother、祸兽、贪婪模式、Boss Rush、死寂、精神错乱、超级撒但和堕化角色解锁路线。
 [*]根据当前角色、多人状态以及持有或房间中出现的关键道具、卡牌和饰品提供路线替代提示。
@@ -72,8 +74,8 @@ The bundled bitmap font combines glyphs generated from LanaPixel and Source Han 
 
 内置位图字体使用依据 SIL Open Font License 1.1 授权的 LanaPixel 与 Source Han Sans SC 生成。成就图标来源归属英文 The Binding of Isaac: Rebirth Wiki，并依据 CC BY-SA 4.0 使用。完整声明和许可证随 Mod 一并提供。
 
-[h1]Version v0.8.1[/h1]
+[h1]Version v0.8.5[/h1]
 
-Improves text robustness across resolutions. HUD and F3 now share native 11/22/33px fonts drawn at 1:1: LanaPixel uses a hard-edged 11px design grid with exact 2x/3x nearest-neighbor variants, while Chinese fallback glyphs retain antialiasing. F3 grows height-first and then width-first; HUD downgrades at the saved position, shifts left only at the 11px floor, and paginates complete goals on extremely small screens. Mod Config Menu can adjust HUD line spacing from 0 to 8px without changing the saved font or position preference.
+Adds the third batch of scene opportunities and conservative run-progress evidence. Zip! and It's the Key now share a combined Dark Room prompt when both remain actionable; item-count, size-growth, Gulp!, Blue Fly, and Mom's Chest milestones can also move forward in HUD and F3 at the moment they can be completed. Changed run evidence is saved immediately and restored safely on continue. HUD and F3 retain the shared native 11/22/33px fonts, and Mod Config Menu retains the 0–8px HUD line spacing control.
 
-改善不同分辨率下的文字显示。HUD 与 F3 共用原生 11/22/33px 字库并按 1:1 绘制：LanaPixel 以 11px 硬边设计栅格为基准，22/33px 为精确 2×/3× 最近邻版本，中文后备字形保留抗锯齿。F3 面板先增高、再加宽；HUD 在保存位置先降档，仅在 11px 仍不足时左移，并在极小画面按完整目标分页。Mod Config Menu 可将 HUD 行间距调整为 0–8px，不会覆盖保存的字号或位置偏好。
+新增第三批场景机会与保守的本局进度证据。“冲！”和“这就是钥匙”同时可完成时会合并暗室提示；道具数量、体型增长、咕噜！、蓝苍蝇和妈妈的箱子也会在可立即完成时前移到 HUD 与 F3。发生变化的本局证据会立即保存，并可在续局时安全恢复。HUD 与 F3 继续共用原生 11/22/33px 字库，Mod Config Menu 继续提供 0–8px HUD 行间距设置。
