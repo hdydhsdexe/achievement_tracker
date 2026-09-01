@@ -664,10 +664,11 @@ test("F3 resolves one redundant visual state before rendering rows and details",
 
   assert.match(menu, /local VISUAL_STATES\s*=\s*{/);
   assert.match(menu, /local function resolveVisualState\(state, goal, context\)/);
-  assert.match(menu, /if isCompleted\(state, goal\) then return VISUAL_STATES\.completed end[\s\S]*?if not isCompletable\(goal\) then return VISUAL_STATES\.unavailable end[\s\S]*?relevance == "current"[\s\S]*?relevance == "convertible"[\s\S]*?VISUAL_STATES\.other/,
-    "completed and unavailable must outrank current, convertible, and other-character states");
+  assert.match(menu, /if isCompleted\(state, goal\) then return VISUAL_STATES\.completed end[\s\S]*?if not isCompletable\(goal\) then return VISUAL_STATES\.unavailable end[\s\S]*?routeResult[\s\S]*?relevance == "general"[\s\S]*?relevance == "current"[\s\S]*?relevance == "convertible"[\s\S]*?VISUAL_STATES\.unavailable/,
+    "completed, mode, route, and wrong-character failures must resolve before actionable states");
   for (const [key, frame, label] of [
     ["completed", 0, "completed"], ["current", 1, "currentAvailable"],
+    ["general", 1, "generalAvailable"],
     ["convertible", 2, "convertiblePending"], ["other", 3, "otherCharacterPending"],
     ["unavailable", 4, "currentModeUnavailable"]
   ]) {
@@ -688,8 +689,8 @@ test("F3 resolves one redundant visual state before rendering rows and details",
     "condition copy must stay neutral instead of inheriting a state color");
 
   for (const label of [
-    "未确认 · 当前可完成", "未确认 · 转换后可完成", "未确认 · 需其他角色", "未确认 · 当前模式不可完成",
-    "unconfirmed · available now", "unconfirmed · available after transformation",
+    "未确认 · 当前可完成", "未确认 · 一般角色可完成", "未确认 · 转换后可完成", "未确认 · 需其他角色", "未确认 · 当前模式不可完成",
+    "unconfirmed · available now", "unconfirmed · available to any character", "unconfirmed · available after transformation",
     "unconfirmed · requires another character", "unconfirmed · unavailable in current mode"
   ]) assert.ok(text.includes(label), `missing visual-state label: ${label}`);
 
@@ -1106,23 +1107,23 @@ test("character relevance overrides malformed merged catalog conditions", () => 
   assert.match(later, /a\(270,[^\n]+as Isaac Defeat Mega Satan/);
 });
 
-test("F3 tracking mode ranks completable goals before unavailable challenges and completed goals", () => {
+test("F3 tracking mode keeps every tracked goal before actionable and unavailable groups", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.core\.character_relevance"\)/);
-  assert.match(menu, /local tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed/);
+  assert.match(menu, /local tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
   assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)/);
-  assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]*?and visualState\.key ~= "unavailable"/,
-    "tracking must not promote an unfinished unavailable challenge");
+  assert.doesNotMatch(menu, /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]{0,120}?visualState\.key ~= "unavailable"/,
+    "tracking must promote an unavailable goal too");
   assert.match(menu, /elseif sceneGoalIds\[goal\.id\][\s\S]*?bucket, priorityRank = scenePending, 2/);
   assert.match(menu, /elseif visualState\.key == "unavailable" then[\s\S]*?bucket, priorityRank = unavailable, 6/);
   assert.match(menu, /CharacterRelevance\.classify\(goal, context\)/);
-  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed \}\)/);
+  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}\)/);
   assert.match(menu, /if left\.priorityRank ~= right\.priorityRank then[\s\S]*?left\.priorityRank < right\.priorityRank/,
     "availability priority must outrank fuzzy-search score");
   assert.match(menu, /if left\.score ~= right\.score then return left\.score < right\.score end/);
   assert.match(menu, /trackedOrder\[goal\.id\]/,
     "the non-search tracked group must retain the HUD tracking order");
-  assert.match(menu, /other=\{ key="other", label="otherCharacterPending", iconFrame=3/);
+  assert.match(menu, /general=\{ key="general", label="generalAvailable", iconFrame=1/);
   assert.match(menu, /local OTHER_INK = KColor/);
   assert.match(menu, /local OTHER_TINT = Color/);
   assert.match(menu, /RewardIcons\.render\(reward,[^\n]+visualState\.iconTint\)/);

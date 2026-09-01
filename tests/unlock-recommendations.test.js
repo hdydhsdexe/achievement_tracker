@@ -63,22 +63,86 @@ test("recommendation module exposes four stable tiers and defaults unknown goals
   assert.match(source, /function Recommendations\.rank\(goal\)/);
 });
 
-test("F3 sorts untracked status buckets by recommendations without disturbing explicit orders", () => {
+test("F3 applies the approved group order and recommendation sorting boundaries", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.data\.recommendations"\)/);
   for (const bucket of [
-    "currentPending", "convertiblePending", "otherCharacterPending", "unavailable", "completed",
+    "scenePending", "currentCharacterPending", "convertiblePending", "generalPending",
   ]) {
     assert.match(menu, new RegExp(`sortByRecommendation\\(${bucket}\\)`));
   }
-  assert.doesNotMatch(menu, /sortByRecommendation\((?:tracked|scenePending)\)/);
+  assert.doesNotMatch(menu, /sortByRecommendation\((?:tracked|unavailable|completed)\)/);
+  assert.match(menu,
+    /\{ tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}/);
   assert.match(menu, /recommendationRank=Recommendations\.rank\(goal\)/);
+
+  const sceneSort = menu.match(/table\.sort\(scenePending,[\s\S]*?\r?\n  end\)/)?.[0] ?? "";
+  const recommendationIndex = sceneSort.indexOf("Recommendations.rank");
+  const opportunityIndex = sceneSort.indexOf("leftMeta.priority");
+  assert.ok(recommendationIndex >= 0 && opportunityIndex > recommendationIndex,
+    "recommendation tier must outrank opportunity urgency inside the scene group");
 
   const searchSort = menu.match(/if state\.menu\.query ~= "" then[\s\S]*?\r?\n  end\r?\n  state\.menu\.goals/)?.[0] ?? "";
   const scoreIndex = searchSort.indexOf("left.score ~= right.score");
-  const recommendationIndex = searchSort.indexOf("left.recommendationRank ~= right.recommendationRank");
-  assert.ok(scoreIndex >= 0 && recommendationIndex > scoreIndex,
+  const searchRecommendationIndex = searchSort.indexOf("left.recommendationRank ~= right.recommendationRank");
+  assert.ok(scoreIndex >= 0 && searchRecommendationIndex > scoreIndex,
     "fuzzy-search relevance must remain ahead of recommendation rank");
+});
+
+test("F3 treats general goals separately and sends wrong mode, character, or route to unavailable", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const relevance = read("scripts/core/character_relevance.lua");
+  const text = read("scripts/ui/text.lua");
+
+  assert.match(menu, /require\("scripts\.core\.routes"\)/);
+  assert.match(menu, /Routes\.evaluate\(goal, state\.routeContext, state\.settings\.completionMarks/);
+  assert.match(menu, /routeResult[\s\S]*?severity == "failed"[\s\S]*?VISUAL_STATES\.unavailable/);
+  assert.match(menu, /relevance == "general"[\s\S]*?VISUAL_STATES\.general/);
+  assert.match(menu, /relevance == "other"[\s\S]*?VISUAL_STATES\.unavailable/);
+  assert.match(relevance, /next\(required\) == nil then return "general"/);
+  assert.match(text, /generalAvailable\s*=\s*"未确认 · 一般角色可完成"/);
+  assert.match(text, /generalAvailable\s*=\s*"unconfirmed · available to any character"/);
+});
+
+test("tracked goals stay first even when unavailable while untracked completed goals stay last", () => {
+  const menu = read("scripts/ui/menu.lua");
+  const trackedIndex = menu.indexOf("if Tracker.contains(state.tracker, goal.id)");
+  const completedIndex = menu.indexOf('visualState.key == "completed"', trackedIndex);
+  const unavailableIndex = menu.indexOf('visualState.key == "unavailable"', trackedIndex);
+  assert.ok(trackedIndex >= 0 && completedIndex > trackedIndex && unavailableIndex > trackedIndex,
+    "tracking must be considered before completion and availability buckets");
+  assert.doesNotMatch(menu,
+    /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]{0,120}?visualState\.key ~= "unavailable"/);
+});
+
+test("discovered transformation sources remain actionable only while retrievable", () => {
+  const relevance = read("scripts/core/character_relevance.lua");
+  const sensors = read("scripts/core/sensors.lua");
+  const main = read("main.lua");
+
+  assert.match(sensors, /characterSources=\{\s*ground=\{\},\s*historical=\{\},\s*floor=nil\s*\}/);
+  assert.match(sensors, /run\.characterSources = run\.characterSources or/);
+  assert.match(relevance, /function CharacterRelevance\.updateSources\(run, game\)/);
+  assert.match(relevance, /Isaac\.GetRoomEntities\(\)/);
+  assert.match(relevance, /pickup\.InitSeed/);
+  assert.match(relevance, /sprite:IsPlaying\("Collect"\)/);
+  assert.match(relevance, /source\.roomType == ROOM_TREASURE or source\.roomType == ROOM_BOSS/);
+  assert.match(relevance, /ledger\.ground\[key\] = nil/,
+    "a collecting, rerolled, or disappeared source must be withdrawn from the room ledger");
+  assert.match(relevance, /function CharacterRelevance\.resetAttempt\(run\)/);
+  assert.match(main, /CharacterRelevance\.updateSources\(State\.run, GameInstance\)/);
+  assert.match(main, /CharacterRelevance\.resetAttempt\(State\.run\)/);
+});
+
+test("prior-floor treasure and boss sources promote only matching Beast goals", () => {
+  const relevance = read("scripts/core/character_relevance.lua");
+  assert.match(relevance, /context\.ascentConvertible/);
+  assert.match(relevance, /local function isSingleBeastGoal\(goal\)/);
+  assert.match(relevance, /#requirements ~= 1[\s\S]*?requirement\.mark == "BEAST"/);
+  assert.match(relevance,
+    /isSingleBeastGoal\(goal\)[\s\S]*?context\.ascentConvertible\[player\][\s\S]*?return "convertible"/);
+  assert.match(relevance, /not ascent or currentStage >= source\.stage/,
+    "an ascent source must stop applying after its stored floor was passed");
 });
 
 test("F3 renders four full-row priority backgrounds beneath status and selection layers", () => {
