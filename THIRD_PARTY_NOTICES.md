@@ -23,3 +23,13 @@ SHA-256 checksum for each icon.
 The Binding of Isaac names, artwork, and related game assets remain the property
 of their respective rights holders. Their inclusion here is solely to identify
 in-game achievements in this non-commercial game mod.
+
+## Unlock recommendations
+
+The built-in unlock priorities are derived from the `beginner-9.10` profile in
+[Momo-Tori/isaac_unlock_planner](https://github.com/Momo-Tori/isaac_unlock_planner)
+at commit `fc005d0c608715629e494d93810eedfd05c9fd14`. That project is available under
+the MIT License and attributes the underlying beginner recommendations to the
+Bilibili sources documented in its own third-party notice. This Mod includes
+only the resulting achievement-ID priority mapping; it does not copy the
+planner's application code or artwork.

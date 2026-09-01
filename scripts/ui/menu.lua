@@ -3,6 +3,7 @@ local CompletionMarks = require("scripts.core.completion_marks")
 local CharacterRelevance = require("scripts.core.character_relevance")
 local Rewards = require("scripts.core.rewards")
 local LongTermProgress = require("scripts.core.long_term_progress")
+local Recommendations = require("scripts.data.recommendations")
 local RewardIcons = require("scripts.ui.reward_icons")
 local Text = require("scripts.ui.text")
 local Tracker = require("scripts.core.tracker")
@@ -24,6 +25,8 @@ local SCREEN_HORIZONTAL_MARGIN = 12
 local DETAIL_GAP = 4
 local F3_FONT_PIXELS = { 11, 22, 33 }
 local detailLineCache = {}
+local catalogOrder = {}
+for index, goal in ipairs(Catalog.goals) do catalogOrder[goal.id] = index end
 local SHOOT_KEYS = {
   [ButtonAction.ACTION_SHOOTLEFT]=Keyboard.KEY_LEFT,
   [ButtonAction.ACTION_SHOOTRIGHT]=Keyboard.KEY_RIGHT,
@@ -187,6 +190,14 @@ local function matchesFilter(goal, filter)
   return Rewards.filterKind(Rewards.display(goal)) == filter
 end
 
+local function sortByRecommendation(goals)
+  table.sort(goals, function(left, right)
+    local leftRank, rightRank = Recommendations.rank(left), Recommendations.rank(right)
+    if leftRank ~= rightRank then return leftRank > rightRank end
+    return catalogOrder[left.id] < catalogOrder[right.id]
+  end)
+end
+
 local function refreshGoals(state, context, preserveSelection)
   local layout = fitMenuLayout(state)
   local selectedGoalId = preserveSelection and state.menu.goals
@@ -227,6 +238,7 @@ local function refreshGoals(state, context, preserveSelection)
       end
       table.insert(bucket, goal)
       searchMeta[goal.id] = { score=match.score, priorityRank=priorityRank,
+        recommendationRank=Recommendations.rank(goal),
         stableOrder=trackedOrder[goal.id] or (sceneGoalIds[goal.id]
           and sceneGoalIds[goal.id].order) or match.catalogIndex }
     end
@@ -241,6 +253,11 @@ local function refreshGoals(state, context, preserveSelection)
     end
     return leftMeta.order < rightMeta.order
   end)
+  sortByRecommendation(currentPending)
+  sortByRecommendation(convertiblePending)
+  sortByRecommendation(otherCharacterPending)
+  sortByRecommendation(unavailable)
+  sortByRecommendation(completed)
   local goals = {}
   for _, bucket in ipairs({ tracked, scenePending, currentPending, convertiblePending,
     otherCharacterPending, unavailable, completed }) do
@@ -253,6 +270,9 @@ local function refreshGoals(state, context, preserveSelection)
         return left.priorityRank < right.priorityRank
       end
       if left.score ~= right.score then return left.score < right.score end
+      if left.recommendationRank ~= right.recommendationRank then
+        return left.recommendationRank > right.recommendationRank
+      end
       return left.stableOrder < right.stableOrder
     end)
   end
@@ -583,6 +603,9 @@ function Menu.render(state)
     local visualState = resolveVisualState(state, goal, context)
     local tracked = Tracker.contains(state.tracker, goal.id)
     local reward = Rewards.display(goal)
+    local priority = Recommendations.priority(goal)
+    RewardIcons.renderPriorityBackground(priority, tileX + 1, tileY,
+      columnWidth - 2, layout.lineHeight - 1)
     if selected then
       RewardIcons.renderSelection(tileX + 1, tileY, columnWidth - 2,
         layout.lineHeight - 1)
@@ -614,12 +637,14 @@ function Menu.render(state)
   if selected then
     local reward = Rewards.display(selected)
     local visualState = resolveVisualState(state, selected, context)
+    local priority = Recommendations.priority(selected)
     local statusLabel = labels[visualState.label]
     local statusWidth = Text.widthPixels(statusLabel, fontPixels)
     local minimumRewardWidth = math.floor(fontPixels * 45 / 11 + 0.5)
     local leftWidth = math.min(contentWidth - minimumRewardWidth,
       math.max(math.floor(contentWidth * 0.43), statusWidth + 6))
     local leftHeader = statusLabel
+    leftHeader = labels.recommendationPriorities[priority] .. " · " .. leftHeader
     Text.drawPixels(Text.ellipsizePixels(leftHeader, leftWidth - 6, fontPixels),
       x, detailY, fontPixels, visualState.ink, language)
 

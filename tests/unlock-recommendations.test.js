@@ -74,7 +74,7 @@ test("F3 sorts untracked status buckets by recommendations without disturbing ex
   assert.doesNotMatch(menu, /sortByRecommendation\((?:tracked|scenePending)\)/);
   assert.match(menu, /recommendationRank=Recommendations\.rank\(goal\)/);
 
-  const searchSort = menu.match(/if state\.menu\.query ~= "" then[\s\S]*?\n  end\n  state\.menu\.goals/)?.[0] ?? "";
+  const searchSort = menu.match(/if state\.menu\.query ~= "" then[\s\S]*?\r?\n  end\r?\n  state\.menu\.goals/)?.[0] ?? "";
   const scoreIndex = searchSort.indexOf("left.score ~= right.score");
   const recommendationIndex = searchSort.indexOf("left.recommendationRank ~= right.recommendationRank");
   assert.ok(scoreIndex >= 0 && recommendationIndex > scoreIndex,
@@ -92,7 +92,7 @@ test("F3 renders four full-row priority backgrounds beneath status and selection
   }
   assert.match(icons, /function RewardIcons\.renderPriorityBackground\(priority, x, y, width, height\)/);
 
-  const tileRender = menu.match(/for index = state\.menu\.offset, last do[\s\S]*?\n  end\n\n  local detailY/)?.[0] ?? "";
+  const tileRender = menu.match(/for index = state\.menu\.offset, last do[\s\S]*?\r?\n  end\r?\n\r?\n  local detailY/)?.[0] ?? "";
   const backgroundIndex = tileRender.indexOf("RewardIcons.renderPriorityBackground");
   const selectionIndex = tileRender.indexOf("RewardIcons.renderSelection");
   const statusIndex = tileRender.indexOf("RewardIcons.renderStatus");
