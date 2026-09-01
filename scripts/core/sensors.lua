@@ -45,6 +45,7 @@ function Sensors.newRun(startSeed)
   return { startSeed=startSeed, disqualified={}, observedPickups={}, failedGoals={},
     completedGoals={}, progress={ items=0, growth=0, gulp=0 }, progressUseKeys={},
     routeItems={}, routeEvents={}, routeFloor=nil,
+    characterSources={ ground={}, historical={}, floor=nil },
     longTermObservedPickups={}, longTermObservedRooms={} }
 end
 
@@ -56,6 +57,9 @@ function Sensors.normalizeRun(run)
   run.progress = run.progress or {}
   run.routeItems = run.routeItems or {}
   run.routeEvents = run.routeEvents or {}
+  run.characterSources = run.characterSources or { ground={}, historical={}, floor=nil }
+  run.characterSources.ground = run.characterSources.ground or {}
+  run.characterSources.historical = run.characterSources.historical or {}
   run.progressUseKeys = run.progressUseKeys or {}
   run.longTermObservedPickups = run.longTermObservedPickups or {}
   run.longTermObservedRooms = run.longTermObservedRooms or {}

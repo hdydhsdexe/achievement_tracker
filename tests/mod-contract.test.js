@@ -617,7 +617,6 @@ test("F3 visual menu filters rewards and renders condition-to-reward details", (
   assert.match(menu, /local COMPLETED_INK = KColor\(0\.66, 0\.90, 0\.64, 1\)/);
   assert.match(menu, /local CURRENT_INK = KColor\(0\.62, 0\.86, 1\.00, 1\)/);
   assert.match(menu, /local CONVERTIBLE_INK = KColor\(1\.00, 0\.72, 0\.30, 1\)/);
-  assert.match(menu, /local OTHER_INK = KColor\(0\.82, 0\.72, 1\.00, 1\)/);
   assert.match(menu, /local UNAVAILABLE_INK = KColor\(1\.00, 0\.56, 0\.56, 1\)/);
   assert.match(menu, /local TRACKED_INK = KColor\(1\.00, 0\.88, 0\.54, 1\)/);
   assert.match(menu, /Game\(\):IsPaused\(\)/);
@@ -669,7 +668,7 @@ test("F3 resolves one redundant visual state before rendering rows and details",
   for (const [key, frame, label] of [
     ["completed", 0, "completed"], ["current", 1, "currentAvailable"],
     ["general", 1, "generalAvailable"],
-    ["convertible", 2, "convertiblePending"], ["other", 3, "otherCharacterPending"],
+    ["convertible", 2, "convertiblePending"],
     ["unavailable", 4, "currentModeUnavailable"]
   ]) {
     assert.match(menu, new RegExp(`${key}=\\{ key="${key}", label="${label}", iconFrame=${frame}`));
@@ -689,9 +688,9 @@ test("F3 resolves one redundant visual state before rendering rows and details",
     "condition copy must stay neutral instead of inheriting a state color");
 
   for (const label of [
-    "未确认 · 当前可完成", "未确认 · 一般角色可完成", "未确认 · 转换后可完成", "未确认 · 需其他角色", "未确认 · 当前模式不可完成",
-    "unconfirmed · available now", "unconfirmed · available to any character", "unconfirmed · available after transformation",
-    "unconfirmed · requires another character", "unconfirmed · unavailable in current mode"
+    "未确认 · 本角色可完成", "未确认 · 一般角色可完成", "未确认 · 转换后可完成", "未确认 · 当前条件不可完成",
+    "unconfirmed · available to this character", "unconfirmed · available to any character", "unconfirmed · available after transformation",
+    "unconfirmed · unavailable now"
   ]) assert.ok(text.includes(label), `missing visual-state label: ${label}`);
 
   assert.match(icons, /function RewardIcons\.renderStatus\(frame, x, y, size, tint\)/);
@@ -929,7 +928,7 @@ test("vanilla unlock inference uses reward availability and sorts untracked comp
   assert.match(achievements, /a\(326,[^\n]+reward\("card",28\)/);
   assert.match(achievements, /a\(361,[^\n]+reward\("card",52\)/);
   assert.match(achievements, /a\(386,[^\n]+reward\("collectible",538\)/);
-  assert.match(menu, /local tracked, scenePending, currentPending, convertiblePending,[\s\S]*?otherCharacterPending, unavailable, completed/);
+  assert.match(menu, /local tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
   assert.match(menu, /state\.profileCompleted/);
 });
 
@@ -1055,7 +1054,7 @@ test("challenge runs show only their unlock while F3 marks challenge-only unlock
   assert.match(hud, /trackedIds = challengeGoal and \{ challengeGoal\.id \} or \{\}/);
   assert.match(menu, /Catalog\.isCompletable\(goal, Isaac\.GetChallenge\(\)\)/);
   assert.match(menu, /if not isCompletable\(goal\) then return VISUAL_STATES\.unavailable end/);
-  assert.match(text, /currentModeUnavailable\s*=\s*"未确认 · 当前模式不可完成"/);
+  assert.match(text, /currentModeUnavailable\s*=\s*"未确认 · 当前条件不可完成"/);
 });
 
 test("character relevance normalizes paired and transformed PlayerType variants", () => {
@@ -1124,11 +1123,9 @@ test("F3 tracking mode keeps every tracked goal before actionable and unavailabl
   assert.match(menu, /trackedOrder\[goal\.id\]/,
     "the non-search tracked group must retain the HUD tracking order");
   assert.match(menu, /general=\{ key="general", label="generalAvailable", iconFrame=1/);
-  assert.match(menu, /local OTHER_INK = KColor/);
-  assert.match(menu, /local OTHER_TINT = Color/);
   assert.match(menu, /RewardIcons\.render\(reward,[^\n]+visualState\.iconTint\)/);
   assert.match(menu, /Tracker\.toggle/,
-    "other-character goals must remain selectable and trackable");
+    "unavailable goals must remain selectable and trackable");
 });
 
 test("character context includes every supported transformation source", () => {
@@ -1159,7 +1156,7 @@ test("character context models Clicker pools, unlock filtering, chains, and mult
   const relevance = read("scripts/core/character_relevance.lua");
   assert.match(relevance, /local NORMAL_CLICKER_TYPES\s*=/);
   assert.match(relevance, /local TAINTED_CLICKER_TYPES\s*=/);
-  assert.match(relevance, /function CharacterRelevance\.buildContext\(game, goals\)/);
+  assert.match(relevance, /function CharacterRelevance\.buildContext\(game, goals, run\)/);
   assert.match(relevance, /game:GetNumPlayers\(\)/);
   assert.match(relevance, /Isaac\.GetPlayer\(index\)/);
   assert.match(relevance, /goal\.observation\.kind == "player"/);

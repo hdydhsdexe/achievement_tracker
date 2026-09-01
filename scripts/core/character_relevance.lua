@@ -133,6 +133,11 @@ local FIXED_TRANSFORMATIONS = {
 }
 
 local CLICKER = collectibleType("COLLECTIBLE_CLICKER", 482)
+local ENTITY_PICKUP = EntityType and EntityType.ENTITY_PICKUP or 5
+local PICKUP_COLLECTIBLE = PickupVariant and PickupVariant.PICKUP_COLLECTIBLE or 100
+local PICKUP_TRINKET = PickupVariant and PickupVariant.PICKUP_TRINKET or 350
+local ROOM_TREASURE = RoomType and RoomType.ROOM_TREASURE or 4
+local ROOM_BOSS = RoomType and RoomType.ROOM_BOSS or 5
 
 -- These are also recoverable from catalog observation metadata. The fallback
 -- fills a handful of generated rows whose observations are not yet complete.
@@ -270,9 +275,174 @@ local function addClickerPool(fromType, reachable, reachableSet, persistentData,
   end
 end
 
-function CharacterRelevance.buildContext(game, goals)
-  local context = { current={}, convertible={}, signature="" }
+local function normalizeSourceLedger(run)
+  if type(run) ~= "table" then return { ground={}, historical={}, floor=nil } end
+  if type(run.characterSources) ~= "table" then
+    run.characterSources = { ground={}, historical={}, floor=nil }
+  end
+  local ledger = run.characterSources
+  if type(ledger.ground) ~= "table" then ledger.ground = {} end
+  if type(ledger.historical) ~= "table" then ledger.historical = {} end
+  if type(ledger.floor) ~= "table" then ledger.floor = nil end
+  return ledger
+end
+
+local function floorState(game)
+  local level = game and game:GetLevel()
+  if not level then return nil end
+  local okSeed, seed = pcall(function() return level:GetDungeonPlacementSeed() end)
+  if not okSeed or seed == nil then
+    local okRoom, roomSeed = pcall(function() return level:GetCurrentRoomDesc().SpawnSeed end)
+    seed = okRoom and roomSeed or "unknown"
+  end
+  local okAscent, ascent = pcall(function() return level:IsAscent() end)
+  local stage, stageType = level:GetStage(), level:GetStageType()
+  local key = table.concat({ tostring(stage), tostring(stageType), tostring(seed) }, ":")
+  return { key=key, stage=stage, stageType=stageType,
+    ascent=okAscent and ascent == true }
+end
+
+local function sourceDefinition(pickup)
+  if not pickup or pickup.Type ~= ENTITY_PICKUP or pickup.SubType == nil then return nil end
+  local kind
+  if pickup.Variant == PICKUP_COLLECTIBLE then kind = "collectible"
+  elseif pickup.Variant == PICKUP_TRINKET then kind = "trinket"
+  else return nil end
+  for _, source in ipairs(FIXED_TRANSFORMATIONS) do
+    if source.kind == kind and source.id == pickup.SubType then return source end
+  end
+  if kind == "collectible" and pickup.SubType == CLICKER then
+    return { key="clicker", kind="collectible", id=CLICKER }
+  end
+  return nil
+end
+
+local function pickupAlive(pickup)
+  if pickup.Exists and not pickup:Exists() then return false end
+  if pickup.IsDead and pickup:IsDead() then return false end
+  if pickup.Touched then return false end
+  local sprite = pickup.GetSprite and pickup:GetSprite() or nil
+  if sprite and sprite:IsPlaying("Collect") then return false end
+  return true
+end
+
+local function pickupKey(floor, roomIndex, pickup)
+  return table.concat({ floor.key, tostring(roomIndex), tostring(pickup.InitSeed),
+    tostring(pickup.Index or "") }, ":")
+end
+
+local function sameSource(left, right)
+  return left and left.sourceKey == right.sourceKey and left.roomType == right.roomType
+    and left.roomIndex == right.roomIndex and left.stage == right.stage
+    and left.stageType == right.stageType and left.floorKey == right.floorKey
+end
+
+function CharacterRelevance.updateSources(run, game)
+  if type(run) ~= "table" or not game then return false end
+  local ledger = normalizeSourceLedger(run)
+  local floor = floorState(game)
+  if not floor then return false end
+  local changed = false
+  if ledger.floor and ledger.floor.key ~= floor.key then
+    if not ledger.floor.ascent then
+      for key, source in pairs(ledger.ground) do
+        if source.roomType == ROOM_TREASURE or source.roomType == ROOM_BOSS then
+          ledger.historical[key] = source
+        end
+      end
+    end
+    ledger.ground = {}
+    changed = true
+  end
+  ledger.floor = floor
+
+  local level, room = game:GetLevel(), game:GetRoom()
+  local roomIndex, roomType = level:GetCurrentRoomIndex(), room:GetType()
+  local seen = {}
+  for _, entity in ipairs(Isaac.GetRoomEntities()) do
+    local pickup = entity.ToPickup and entity:ToPickup() or nil
+    local definition = sourceDefinition(pickup)
+    if definition and pickupAlive(pickup) then
+      local key = pickupKey(floor, roomIndex, pickup)
+      local source = { sourceKey=definition.key, roomType=roomType,
+        roomIndex=roomIndex, stage=floor.stage, stageType=floor.stageType,
+        floorKey=floor.key, pickupSeed=tostring(pickup.InitSeed) }
+      seen[key] = true
+      if not sameSource(ledger.ground[key], source) then
+        ledger.ground[key] = source
+        changed = true
+      end
+    end
+  end
+  for key, source in pairs(ledger.ground) do
+    if source.floorKey == floor.key and source.roomIndex == roomIndex and not seen[key] then
+      ledger.ground[key] = nil
+      changed = true
+    end
+  end
+  for key, source in pairs(ledger.historical) do
+    local passed = floor.ascent and floor.stage < source.stage
+    local revisited = floor.ascent and floor.stage == source.stage
+      and roomIndex == source.roomIndex
+    if passed or revisited then
+      ledger.historical[key] = nil
+      changed = true
+    end
+  end
+  return changed
+end
+
+function CharacterRelevance.resetAttempt(run)
+  if type(run) ~= "table" then return end
+  run.characterSources = { ground={}, historical={}, floor=nil }
+end
+
+local function availableSourceKeys(ledger, historical)
+  local result = {}
+  local sources = historical and ledger.historical or ledger.ground
+  local ascent = ledger.floor and ledger.floor.ascent == true
+  local currentStage = ledger.floor and ledger.floor.stage or 0
+  for _, source in pairs(sources or {}) do
+    if not historical or not ascent or currentStage >= source.stage then
+      result[source.sourceKey] = true
+    end
+  end
+  return result
+end
+
+local function reachableTypes(currentType, fixedTargets, hasClicker, persistentData,
+    achievements, current, clickerCandidates)
+  local reachable, reachableSet = {}, {}
+  addReachable(reachable, reachableSet, currentType)
+  local expandedPools = {}
+  local queueIndex = 1
+  while queueIndex <= #reachable do
+    local fromType = reachable[queueIndex]
+    queueIndex = queueIndex + 1
+    for _, target in ipairs(fixedTargets) do
+      addReachable(reachable, reachableSet, target)
+    end
+    if hasClicker then
+      addClickerPool(fromType, reachable, reachableSet, persistentData,
+        achievements, current, clickerCandidates, expandedPools)
+    end
+  end
+  return reachableSet
+end
+
+local function sortedSourceKeys(sources)
+  local keys = {}
+  for key in pairs(sources) do keys[#keys + 1] = key end
+  table.sort(keys)
+  return table.concat(keys, ",")
+end
+
+function CharacterRelevance.buildContext(game, goals, run)
+  local context = { current={}, convertible={}, ascentConvertible={}, signature="" }
   if not game then return context end
+  local ledger = normalizeSourceLedger(run)
+  local groundSources = availableSourceKeys(ledger, false)
+  local historicalSources = availableSourceKeys(ledger, true)
   local players = {}
   for index = 0, game:GetNumPlayers() - 1 do
     local player = Isaac.GetPlayer(index)
@@ -287,59 +457,79 @@ function CharacterRelevance.buildContext(game, goals)
   local signatureParts = {}
   for index, player in ipairs(players) do
     local currentType = CharacterRelevance.normalize(player:GetPlayerType())
-    local reachable, reachableSet = {}, {}
-    local fixedTargets, sourceFlags = {}, {}
-    addReachable(reachable, reachableSet, currentType)
+    local fixedTargets, historicalTargets, sourceFlags = {}, {}, {}
     for _, source in ipairs(FIXED_TRANSFORMATIONS) do
-      local present = playerHasSource(player, source)
+      local held = playerHasSource(player, source)
+      local present = held or groundSources[source.key]
+      local historical = present or historicalSources[source.key]
       table.insert(sourceFlags, source.key .. "=" .. (present and "1" or "0"))
       if present then table.insert(fixedTargets, source.target) end
+      if historical then table.insert(historicalTargets, source.target) end
     end
-    local hasClicker = player:HasCollectible(CLICKER)
+    local heldClicker = player:HasCollectible(CLICKER)
+    local hasClicker = heldClicker or groundSources.clicker
+    local historicalClicker = hasClicker or historicalSources.clicker
     table.insert(sourceFlags, "clicker=" .. (hasClicker and "1" or "0"))
-    local clickerCandidates, expandedPools = {}, {}
-    local queueIndex = 1
-    while queueIndex <= #reachable do
-      local fromType = reachable[queueIndex]
-      queueIndex = queueIndex + 1
-      for _, target in ipairs(fixedTargets) do
-        addReachable(reachable, reachableSet, target)
-      end
-      if hasClicker then
-        addClickerPool(fromType, reachable, reachableSet, persistentData,
-          achievements, context.current, clickerCandidates, expandedPools)
-      end
-    end
+    local clickerCandidates, historicalClickerCandidates = {}, {}
+    local reachableSet = reachableTypes(currentType, fixedTargets, hasClicker,
+      persistentData, achievements, context.current, clickerCandidates)
+    local historicalSet = reachableTypes(currentType, historicalTargets, historicalClicker,
+      persistentData, achievements, context.current, historicalClickerCandidates)
     for value in pairs(reachableSet) do
       if value ~= currentType then addType(context.convertible, value) end
     end
+    for value in pairs(historicalSet) do
+      if value ~= currentType and not reachableSet[value] then
+        addType(context.ascentConvertible, value)
+      end
+    end
     table.insert(signatureParts, tostring(index) .. ":" .. tostring(currentType)
       .. ":" .. table.concat(sourceFlags, ",")
-      .. ":pool=" .. sortedTypes(clickerCandidates))
+      .. ":pool=" .. sortedTypes(clickerCandidates)
+      .. ":ascentPool=" .. sortedTypes(historicalClickerCandidates))
   end
-  for value in pairs(context.current) do context.convertible[value] = nil end
+  for value in pairs(context.current) do
+    context.convertible[value] = nil
+    context.ascentConvertible[value] = nil
+  end
   context.signature = "current=" .. sortedTypes(context.current)
     .. "|convertible=" .. sortedTypes(context.convertible)
+    .. "|ascentConvertible=" .. sortedTypes(context.ascentConvertible)
+    .. "|ground=" .. sortedSourceKeys(groundSources)
+    .. "|historical=" .. sortedSourceKeys(historicalSources)
     .. "|players=" .. table.concat(signatureParts, ";")
   return context
 end
 
+local function isSingleBeastGoal(goal)
+  local requirements = goal and goal.completionRequirements or {}
+  if #requirements ~= 1 then return false end
+  local requirement = requirements[1]
+  return requirement.mark == "BEAST" and requirement.playerType ~= nil
+end
+
 function CharacterRelevance.classify(goal, context)
   local required = CharacterRelevance.requiredPlayerTypes(goal)
-  if next(required) == nil then return "current" end
-  context = context or { current={}, convertible={} }
+  if next(required) == nil then return "general" end
+  context = context or { current={}, convertible={}, ascentConvertible={} }
   for player in pairs(required) do
     if context.current[player] then return "current" end
   end
   for player in pairs(required) do
     if context.convertible[player] then return "convertible" end
   end
+  if isSingleBeastGoal(goal) then
+    for player in pairs(required) do
+      if context.ascentConvertible[player] then return "convertible" end
+    end
+  end
   return "other"
 end
 
 function CharacterRelevance.isRelevant(goal, game)
-  return CharacterRelevance.classify(goal,
-    CharacterRelevance.buildContext(game)) == "current"
+  local relevance = CharacterRelevance.classify(goal,
+    CharacterRelevance.buildContext(game))
+  return relevance == "general" or relevance == "current"
 end
 
 return CharacterRelevance

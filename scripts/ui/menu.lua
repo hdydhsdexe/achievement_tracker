@@ -1,6 +1,7 @@
 local Catalog = require("scripts.data.goals")
 local CompletionMarks = require("scripts.core.completion_marks")
 local CharacterRelevance = require("scripts.core.character_relevance")
+local Routes = require("scripts.core.routes")
 local Rewards = require("scripts.core.rewards")
 local LongTermProgress = require("scripts.core.long_term_progress")
 local Recommendations = require("scripts.data.recommendations")
@@ -42,13 +43,11 @@ local MUTED = KColor(0.72, 0.65, 0.56, 1)
 local COMPLETED_INK = KColor(0.66, 0.90, 0.64, 1)
 local CURRENT_INK = KColor(0.62, 0.86, 1.00, 1)
 local CONVERTIBLE_INK = KColor(1.00, 0.72, 0.30, 1)
-local OTHER_INK = KColor(0.82, 0.72, 1.00, 1)
 local UNAVAILABLE_INK = KColor(1.00, 0.56, 0.56, 1)
 local TRACKED_INK = KColor(1.00, 0.88, 0.54, 1)
 local COMPLETED_TINT = Color(0.72, 0.82, 0.62, 1)
 local CURRENT_TINT = Color(1, 1, 1, 1)
 local CONVERTIBLE_TINT = Color(1.00, 0.68, 0.28, 1)
-local OTHER_TINT = Color(0.74, 0.68, 0.88, 1)
 local UNAVAILABLE_TINT = Color(0.70, 0.45, 0.45, 1)
 
 local function maximumDetailLines(language, contentWidth, bodyPixels)
@@ -132,6 +131,7 @@ function Menu.new()
   return { open=false, cursor=1, offset=1, goals=nil, filterIndex=1,
     query="", searchFocused=false, relevanceContext=nil,
     relevanceSignature=nil, completionSignature=nil, opportunitySignature=nil,
+    routeSignature=nil,
     repeatKeys={},
     mouseDown=false, mouseX=nil, mouseY=nil }
 end
@@ -151,21 +151,40 @@ local VISUAL_STATES = {
     ink=COMPLETED_INK, iconTint=COMPLETED_TINT },
   current={ key="current", label="currentAvailable", iconFrame=1,
     ink=CURRENT_INK, iconTint=CURRENT_TINT },
+  general={ key="general", label="generalAvailable", iconFrame=1,
+    ink=CURRENT_INK, iconTint=CURRENT_TINT },
   convertible={ key="convertible", label="convertiblePending", iconFrame=2,
     ink=CONVERTIBLE_INK, iconTint=CONVERTIBLE_TINT },
-  other={ key="other", label="otherCharacterPending", iconFrame=3,
-    ink=OTHER_INK, iconTint=OTHER_TINT },
   unavailable={ key="unavailable", label="currentModeUnavailable", iconFrame=4,
     ink=UNAVAILABLE_INK, iconTint=UNAVAILABLE_TINT }
 }
 
+local function routeEvaluationContext(routeContext, relevanceContext)
+  if not routeContext then return nil end
+  local result, players = {}, {}
+  for key, value in pairs(routeContext) do result[key] = value end
+  for player in pairs(routeContext.players or {}) do players[player] = true end
+  for player in pairs(relevanceContext.convertible or {}) do players[player] = true end
+  for player in pairs(relevanceContext.ascentConvertible or {}) do players[player] = true end
+  result.players = players
+  return result
+end
+
 local function resolveVisualState(state, goal, context)
   if isCompleted(state, goal) then return VISUAL_STATES.completed end
   if not isCompletable(goal) then return VISUAL_STATES.unavailable end
+  local routeResult = state.routeContext and Routes.evaluate(goal,
+    routeEvaluationContext(state.routeContext, context), state.settings.completionMarks,
+    Text.resolveLanguage(state.settings.language)) or nil
+  if routeResult and routeResult.severity == "failed" then
+    return VISUAL_STATES.unavailable
+  end
   local relevance = CharacterRelevance.classify(goal, context)
+  if relevance == "general" then return VISUAL_STATES.general end
   if relevance == "current" then return VISUAL_STATES.current end
   if relevance == "convertible" then return VISUAL_STATES.convertible end
-  return VISUAL_STATES.other
+  if relevance == "other" then return VISUAL_STATES.unavailable end
+  return VISUAL_STATES.unavailable
 end
 
 local function completedSignature(state)
@@ -203,8 +222,8 @@ local function refreshGoals(state, context, preserveSelection)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
-  local tracked, scenePending, currentPending, convertiblePending,
-    otherCharacterPending, unavailable, completed = {}, {}, {}, {}, {}, {}, {}
+  local tracked, scenePending, currentCharacterPending, convertiblePending,
+    generalPending, unavailable, completed = {}, {}, {}, {}, {}, {}, {}
   local searchMeta = {}
   local trackedOrder = {}
   for index, id in ipairs(state.tracker.ids) do trackedOrder[id] = index end
@@ -216,15 +235,14 @@ local function refreshGoals(state, context, preserveSelection)
       sceneGoalIds[opportunity.goalId] = { priority=priority, order=index }
     end
   end
-  context = context or CharacterRelevance.buildContext(Game(), Catalog.goals)
+  context = context or CharacterRelevance.buildContext(Game(), Catalog.goals, state.run)
   local filter = FILTERS[state.menu.filterIndex] or "all"
   for _, match in ipairs(Catalog.search(state.menu.query)) do
     local goal = match.goal
     if matchesFilter(goal, filter) then
       local visualState = resolveVisualState(state, goal, context)
       local bucket, priorityRank = completed, 7
-      if Tracker.contains(state.tracker, goal.id)
-          and visualState.key ~= "unavailable" then
+      if Tracker.contains(state.tracker, goal.id) then
         bucket, priorityRank = tracked, 1
       elseif sceneGoalIds[goal.id] and visualState.key ~= "completed"
           and visualState.key ~= "unavailable" then
@@ -232,13 +250,14 @@ local function refreshGoals(state, context, preserveSelection)
       elseif visualState.key == "unavailable" then
         bucket, priorityRank = unavailable, 6
       elseif visualState.key ~= "completed" then
-        if visualState.key == "current" then bucket, priorityRank = currentPending, 3
+        if visualState.key == "current" then bucket, priorityRank = currentCharacterPending, 3
         elseif visualState.key == "convertible" then bucket, priorityRank = convertiblePending, 4
-        else bucket, priorityRank = otherCharacterPending, 5 end
+        elseif visualState.key == "general" then bucket, priorityRank = generalPending, 5 end
       end
       table.insert(bucket, goal)
       searchMeta[goal.id] = { score=match.score, priorityRank=priorityRank,
-        recommendationRank=Recommendations.rank(goal),
+        recommendationRank=priorityRank >= 2 and priorityRank <= 5
+          and Recommendations.rank(goal) or 0,
         stableOrder=trackedOrder[goal.id] or (sceneGoalIds[goal.id]
           and sceneGoalIds[goal.id].order) or match.catalogIndex }
     end
@@ -248,19 +267,19 @@ local function refreshGoals(state, context, preserveSelection)
   end)
   table.sort(scenePending, function(left, right)
     local leftMeta, rightMeta = sceneGoalIds[left.id], sceneGoalIds[right.id]
+    local leftRank, rightRank = Recommendations.rank(left), Recommendations.rank(right)
+    if leftRank ~= rightRank then return leftRank > rightRank end
     if leftMeta.priority ~= rightMeta.priority then
       return leftMeta.priority < rightMeta.priority
     end
     return leftMeta.order < rightMeta.order
   end)
-  sortByRecommendation(currentPending)
+  sortByRecommendation(currentCharacterPending)
   sortByRecommendation(convertiblePending)
-  sortByRecommendation(otherCharacterPending)
-  sortByRecommendation(unavailable)
-  sortByRecommendation(completed)
+  sortByRecommendation(generalPending)
   local goals = {}
-  for _, bucket in ipairs({ tracked, scenePending, currentPending, convertiblePending,
-    otherCharacterPending, unavailable, completed }) do
+  for _, bucket in ipairs({ tracked, scenePending, currentCharacterPending, convertiblePending,
+    generalPending, unavailable, completed }) do
     for _, goal in ipairs(bucket) do table.insert(goals, goal) end
   end
   if state.menu.query ~= "" then
@@ -281,6 +300,7 @@ local function refreshGoals(state, context, preserveSelection)
   state.menu.relevanceSignature = context.signature
   state.menu.completionSignature = completedSignature(state)
   state.menu.opportunitySignature = sceneOpportunitySignature(state)
+  state.menu.routeSignature = state.routeContext
   state.menu.cursor = math.max(1, math.min(state.menu.cursor, #goals))
   if selectedGoalId then
     for index, goal in ipairs(goals) do
@@ -462,12 +482,14 @@ function Menu.update(state, save)
     state.menu.mouseDown = Input.IsMouseBtnPressed(Mouse.MOUSE_BUTTON_LEFT)
     return
   end
-  local context = CharacterRelevance.buildContext(Game(), Catalog.goals)
+  local context = CharacterRelevance.buildContext(Game(), Catalog.goals, state.run)
   local completionSignature = completedSignature(state)
   local opportunitySignature = sceneOpportunitySignature(state)
+  local routeSignature = state.routeContext
   if state.menu.relevanceSignature ~= context.signature
     or state.menu.completionSignature ~= completionSignature
-    or state.menu.opportunitySignature ~= opportunitySignature then
+    or state.menu.opportunitySignature ~= opportunitySignature
+    or state.menu.routeSignature ~= routeSignature then
     refreshGoals(state, context, true)
   end
   local searchConsumed = false
@@ -564,7 +586,7 @@ function Menu.render(state)
   local language = Text.resolveLanguage(state.settings.language)
   local labels = Text.labels(language)
   local context = state.menu.relevanceContext
-    or CharacterRelevance.buildContext(Game(), Catalog.goals)
+    or CharacterRelevance.buildContext(Game(), Catalog.goals, state.run)
   local layout = fitMenuLayout(state)
   local panelWidth, panelHeight = layout.panelWidth, layout.panelHeight
   local panelX, panelY = layout.panelX, layout.panelY

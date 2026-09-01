@@ -67,14 +67,14 @@ test("F3 applies the approved group order and recommendation sorting boundaries"
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.data\.recommendations"\)/);
   for (const bucket of [
-    "scenePending", "currentCharacterPending", "convertiblePending", "generalPending",
+    "currentCharacterPending", "convertiblePending", "generalPending",
   ]) {
     assert.match(menu, new RegExp(`sortByRecommendation\\(${bucket}\\)`));
   }
   assert.doesNotMatch(menu, /sortByRecommendation\((?:tracked|unavailable|completed)\)/);
   assert.match(menu,
     /\{ tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}/);
-  assert.match(menu, /recommendationRank=Recommendations\.rank\(goal\)/);
+  assert.match(menu, /recommendationRank=priorityRank >= 2[\s\S]*?Recommendations\.rank\(goal\) or 0/);
 
   const sceneSort = menu.match(/table\.sort\(scenePending,[\s\S]*?\r?\n  end\)/)?.[0] ?? "";
   const recommendationIndex = sceneSort.indexOf("Recommendations.rank");
@@ -95,7 +95,7 @@ test("F3 treats general goals separately and sends wrong mode, character, or rou
   const text = read("scripts/ui/text.lua");
 
   assert.match(menu, /require\("scripts\.core\.routes"\)/);
-  assert.match(menu, /Routes\.evaluate\(goal, state\.routeContext, state\.settings\.completionMarks/);
+  assert.match(menu, /Routes\.evaluate\(goal,[\s\S]{0,80}?routeEvaluationContext\(state\.routeContext, context\),[\s\S]{0,80}?state\.settings\.completionMarks/);
   assert.match(menu, /routeResult[\s\S]*?severity == "failed"[\s\S]*?VISUAL_STATES\.unavailable/);
   assert.match(menu, /relevance == "general"[\s\S]*?VISUAL_STATES\.general/);
   assert.match(menu, /relevance == "other"[\s\S]*?VISUAL_STATES\.unavailable/);
@@ -104,12 +104,21 @@ test("F3 treats general goals separately and sends wrong mode, character, or rou
   assert.match(text, /generalAvailable\s*=\s*"unconfirmed · available to any character"/);
 });
 
+test("route checks accept characters reachable through an actionable transformation", () => {
+  const menu = read("scripts/ui/menu.lua");
+  assert.match(menu, /local function routeEvaluationContext\(routeContext, relevanceContext\)/);
+  assert.match(menu, /for player in pairs\(relevanceContext\.convertible or \{\}\)/);
+  assert.match(menu, /for player in pairs\(relevanceContext\.ascentConvertible or \{\}\)/);
+  assert.match(menu, /Routes\.evaluate\(goal,[\s\S]{0,40}?routeEvaluationContext\(state\.routeContext, context\)/);
+});
+
 test("tracked goals stay first even when unavailable while untracked completed goals stay last", () => {
   const menu = read("scripts/ui/menu.lua");
   const trackedIndex = menu.indexOf("if Tracker.contains(state.tracker, goal.id)");
-  const completedIndex = menu.indexOf('visualState.key == "completed"', trackedIndex);
+  const completedIndex = menu.lastIndexOf("local bucket, priorityRank = completed, 7", trackedIndex);
   const unavailableIndex = menu.indexOf('visualState.key == "unavailable"', trackedIndex);
-  assert.ok(trackedIndex >= 0 && completedIndex > trackedIndex && unavailableIndex > trackedIndex,
+  assert.ok(trackedIndex >= 0 && completedIndex >= 0 && completedIndex < trackedIndex
+      && unavailableIndex > trackedIndex,
     "tracking must be considered before completion and availability buckets");
   assert.doesNotMatch(menu,
     /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]{0,120}?visualState\.key ~= "unavailable"/);

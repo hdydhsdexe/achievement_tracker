@@ -155,6 +155,7 @@ local function refreshRouteFloor()
   if reset then
     Routes.resetAttempt(State.run)
     Opportunities.resetAttempt(State.run)
+    CharacterRelevance.resetAttempt(State.run)
   end
   State.run.routeFloor = current
 end
@@ -202,6 +203,7 @@ function AchievementTracker:onGameStarted(isContinued)
       "player", currentPlayer:GetPlayerType(), nil, State.settings.achievementImport)
   end
   refreshRouteFloor()
+  CharacterRelevance.updateSources(State.run, GameInstance)
   if LongTermProgress.canObserve(GameInstance) then
     LongTermProgress.observeRoom(State.settings, State.run, GameInstance)
   end
@@ -226,6 +228,7 @@ function AchievementTracker:onUpdate()
   local second = math.floor(GameInstance.TimeCounter / 30)
   if second == State.lastEvaluation then return end
   State.lastEvaluation = second
+  if CharacterRelevance.updateSources(State.run, GameInstance) then save() end
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
   if Routes.updateRun(State.run, routeContext, trackingTaintedUnlock()) then save() end
@@ -281,6 +284,10 @@ end
 
 function AchievementTracker:onPickupUpdate(pickup)
   if not State.settings then return end
+  if CharacterRelevance.updateSources(State.run, GameInstance) then
+    State.lastEvaluation = -1
+    save()
+  end
   if Sensors.onPickupUpdate(State.run, pickup) then
     State.lastEvaluation = -1
     save()
@@ -337,6 +344,7 @@ end
 function AchievementTracker:onNewLevel()
   syncBossRushCompletion()
   refreshRouteFloor()
+  if CharacterRelevance.updateSources(State.run, GameInstance) then save() end
   observeAndSave("stage", GameInstance:GetLevel():GetStage())
   observeAndSave("stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
 end
@@ -344,6 +352,7 @@ end
 function AchievementTracker:onNewRoom()
   syncBossRushCompletion()
   local changed = Opportunities.onNewRoom(State.run, GameInstance)
+  if CharacterRelevance.updateSources(State.run, GameInstance) then changed = true end
   if LongTermProgress.canObserve(GameInstance)
     and LongTermProgress.observeRoom(State.settings, State.run, GameInstance) then changed = true end
   State.lastEvaluation = -1
