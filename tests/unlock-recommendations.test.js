@@ -154,23 +154,35 @@ test("prior-floor treasure and boss sources promote only matching Beast goals", 
     "an ascent source must stop applying after its stored floor was passed");
 });
 
-test("F3 renders four full-row priority backgrounds beneath status and selection layers", () => {
+test("F3 omits normal backgrounds and colors only the achievement-name area", () => {
   const menu = read("scripts/ui/menu.lua");
   const icons = read("scripts/ui/reward_icons.lua");
   const text = read("scripts/ui/text.lua");
 
   assert.match(icons, /local PRIORITY_BACKGROUNDS\s*=\s*\{/);
-  for (const tier of ["strong", "recommended", "normal", "discouraged"]) {
+  for (const tier of ["strong", "recommended", "discouraged"]) {
     assert.match(icons, new RegExp(`${tier}\\s*=\\s*Color\\(`), `missing ${tier} background`);
   }
+  assert.doesNotMatch(icons, /normal\s*=\s*Color\(/,
+    "normal recommendations must use the paper background");
   assert.match(icons, /function RewardIcons\.renderPriorityBackground\(priority, x, y, width, height\)/);
+  assert.match(icons, /local tint = PRIORITY_BACKGROUNDS\[priority\][\s\S]*?if not tint then return end/);
+  assert.doesNotMatch(icons, /PRIORITY_BACKGROUNDS\[priority\]\s+or\s+PRIORITY_BACKGROUNDS\.normal/);
 
   const tileRender = menu.match(/for index = state\.menu\.offset, last do[\s\S]*?\r?\n  end\r?\n\r?\n  local detailY/)?.[0] ?? "";
+  const nameIndex = tileRender.indexOf("local nameX =");
   const backgroundIndex = tileRender.indexOf("RewardIcons.renderPriorityBackground");
   const selectionIndex = tileRender.indexOf("RewardIcons.renderSelection");
+  const rewardIndex = tileRender.indexOf("RewardIcons.render(reward");
   const statusIndex = tileRender.indexOf("RewardIcons.renderStatus");
-  assert.ok(backgroundIndex >= 0 && selectionIndex > backgroundIndex && statusIndex > selectionIndex,
-    "priority background must render below the selected border and status icon");
+  assert.ok(nameIndex >= 0 && backgroundIndex > nameIndex && selectionIndex > backgroundIndex
+      && rewardIndex > selectionIndex && statusIndex > rewardIndex,
+    "name background must render after layout but below full-row selection and icons");
+  assert.match(tileRender,
+    /RewardIcons\.renderPriorityBackground\(priority, nameX, tileY,[\s\S]*?tileX \+ columnWidth - 2 - nameX[\s\S]*?layout\.lineHeight - 1\)/);
+  assert.match(tileRender,
+    /RewardIcons\.renderSelection\(tileX \+ 1, tileY, columnWidth - 2,[\s\S]*?layout\.lineHeight - 1\)/,
+    "selection must continue to highlight the full row");
 
   assert.match(menu, /labels\.recommendationPriorities\[priority\]/);
   for (const label of ["强烈推荐", "推荐", "普通", "不建议提前解锁"]) assert.match(text, new RegExp(label));
@@ -183,6 +195,7 @@ test("documentation attributes the derived recommendation profile and explains F
   const readme = read("README.md");
   const notices = read("THIRD_PARTY_NOTICES.md");
   assert.match(readme, /强烈推荐.*推荐.*普通.*不建议提前解锁/);
+  assert.match(readme, /名称文字底色[\s\S]*?普通[^。]*无底色/);
   assert.match(readme, /F3[\s\S]*?推荐/);
   assert.match(notices, /Unlock recommendations/);
   assert.match(notices, /Momo-Tori\/isaac_unlock_planner/);
