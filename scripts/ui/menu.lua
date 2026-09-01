@@ -626,13 +626,6 @@ function Menu.render(state)
     local tracked = Tracker.contains(state.tracker, goal.id)
     local reward = Rewards.display(goal)
     local priority = Recommendations.priority(goal)
-    RewardIcons.renderPriorityBackground(priority, tileX + 1, tileY,
-      columnWidth - 2, layout.lineHeight - 1)
-    if selected then
-      RewardIcons.renderSelection(tileX + 1, tileY, columnWidth - 2,
-        layout.lineHeight - 1)
-    end
-    RewardIcons.render(reward, tileX + 8, tileY + 6, 12, visualState.iconTint)
     local marker = selected and ">" or " "
     local tracking = tracked and "*" or " "
     local textX = tileX + 13
@@ -646,6 +639,13 @@ function Menu.render(state)
     local nameWidth = math.max(0, tileX + columnWidth - 2 - nameX)
     local name = Text.ellipsizePixels(Catalog.text(goal, language).name,
       nameWidth, fontPixels)
+    RewardIcons.renderPriorityBackground(priority, nameX, tileY,
+      math.max(0, tileX + columnWidth - 2 - nameX), layout.lineHeight - 1)
+    if selected then
+      RewardIcons.renderSelection(tileX + 1, tileY, columnWidth - 2,
+        layout.lineHeight - 1)
+    end
+    RewardIcons.render(reward, tileX + 8, tileY + 6, 12, visualState.iconTint)
     Text.drawPixels(marker, textX, tileY, fontPixels, DARK_INK, language)
     Text.drawPixels(tracking, trackingX, tileY, fontPixels,
       tracked and TRACKED_INK or INK, language)

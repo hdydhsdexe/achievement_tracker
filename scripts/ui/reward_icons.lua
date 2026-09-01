@@ -2,12 +2,11 @@ local Rewards = require("scripts.core.rewards")
 local RewardIcons = {}
 local cache = {}
 
--- These translucent fills mirror the upstream planner while leaving the
--- existing status ink, icons, tracking star, and selected border readable.
+-- Only exceptional recommendation tiers need a translucent emphasis. Normal
+-- rows keep the paper clear, and the menu limits these fills to name text.
 local PRIORITY_BACKGROUNDS = {
   strong=Color(0.53, 0.14, 0.14, 0.56),
   recommended=Color(0.51, 0.39, 0.11, 0.53),
-  normal=Color(0.33, 0.31, 0.29, 0.47),
   discouraged=Color(0.19, 0.10, 0.20, 0.62)
 }
 
@@ -422,8 +421,9 @@ local function renderSelectionPixel(x, y, width, height, tint)
 end
 
 function RewardIcons.renderPriorityBackground(priority, x, y, width, height)
-  renderSelectionPixel(x, y, width, height,
-    PRIORITY_BACKGROUNDS[priority] or PRIORITY_BACKGROUNDS.normal)
+  local tint = PRIORITY_BACKGROUNDS[priority]
+  if not tint then return end
+  renderSelectionPixel(x, y, width, height, tint)
 end
 
 function RewardIcons.renderSelection(x, y, width, height)
