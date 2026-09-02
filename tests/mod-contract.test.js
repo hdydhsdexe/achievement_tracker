@@ -97,7 +97,7 @@ test("catalog includes every HuijiWiki achievement through 641", () => {
 test("tracking core enforces uniqueness and a configurable maximum", () => {
   const tracker = read("scripts/core/tracker.lua");
   assert.match(tracker, /function Tracker\.track/);
-  assert.match(tracker, /#state\.ids\s*>=\s*state\.max/);
+  assert.match(tracker, /Tracker\.slotCount\(state\)\s*>=\s*state\.max/);
   assert.match(tracker, /Tracker\.contains/);
 });
 
@@ -182,8 +182,8 @@ test("F3 untracking keeps the current list position until the next refresh", () 
     "both tracking directions must persist immediately");
   assert.match(toggle[0], /if not wasTracked then refreshGoals\(state, context, true\) end/,
     "only newly tracked goals should trigger an immediate reorder");
-  assert.equal((toggle[0].match(/refreshGoals\(/g) || []).length, 1,
-    "untracking must not have a second unconditional refresh path");
+  assert.equal((toggle[0].match(/refreshGoals\(/g) || []).length, 2,
+    "route rows refresh immediately while ordinary untracking keeps its delayed refresh");
   assert.doesNotMatch(toggle[0], /state\.menu\.(?:cursor|offset)\s*=/,
     "untracking must leave the current selection and page untouched");
   assert.match(menu, /if queryChanged then[\s\S]*?refreshGoals\(state, context, false\)/);
@@ -347,7 +347,7 @@ test("F3 exposes every semantic reward group as a single-level filter", () => {
     assert.equal((text.match(new RegExp(`${kind}="`, "g")) || []).length, labelCount,
       `${kind} must have Chinese and English labels`);
   }
-  assert.match(menu, /local FILTERS = \{ "all", "collectible", "trinket", "card",\s*\n\s*"character", "monster", "area", "challenge", "pickup", "world",\s*\n\s*"feature", "other" \}/);
+  assert.match(menu, /local FILTERS = \{ "all", "collectible", "trinket", "card",\s*\n\s*"character", "monster", "area", "challenge", "pickup", "world",\s*\n\s*"feature", "route", "other" \}/);
   for (const [filter, labelCount] of [
     ["character", 4], ["monster", 4], ["area", 4], ["challenge", 4],
     ["pickup", 4], ["world", 2], ["feature", 4]
@@ -603,7 +603,7 @@ test("character reward renderer loads cached vanilla portraits with safe fallbac
 test("F3 visual menu filters rewards and renders condition-to-reward details", () => {
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
-  assert.match(menu, /local FILTERS\s*=\s*{\s*"all",\s*"collectible",\s*"trinket",\s*"card",\s*"character",\s*"monster",\s*"area",\s*"challenge",\s*"pickup",\s*"world",\s*"feature",\s*"other"\s*}/);
+  assert.match(menu, /local FILTERS\s*=\s*{\s*"all",\s*"collectible",\s*"trinket",\s*"card",\s*"character",\s*"monster",\s*"area",\s*"challenge",\s*"pickup",\s*"world",\s*"feature",\s*"route",\s*"other"\s*}/);
   assert.match(menu, /Keyboard\.KEY_TAB/);
   assert.match(menu, /filterIndex/);
   assert.match(menu, /RewardIcons\.render/);
@@ -738,7 +738,7 @@ test("F3 search uses slash without Ctrl or F and combines with category filterin
     assert.match(menu, new RegExp(`Keyboard\\.${key}`));
   }
   assert.match(menu, /Catalog\.search\(state\.menu\.query\)/);
-  assert.match(menu, /matchesFilter\(goal, filter\)/);
+  assert.match(menu, /matchesFilter\(goal, filter, activeRoute\)/);
   assert.match(menu, /left\.score ~= right\.score/);
   assert.match(menu, /state\.menu\.query = ""/);
 });
@@ -928,7 +928,7 @@ test("vanilla unlock inference uses reward availability and sorts untracked comp
   assert.match(achievements, /a\(326,[^\n]+reward\("card",28\)/);
   assert.match(achievements, /a\(361,[^\n]+reward\("card",52\)/);
   assert.match(achievements, /a\(386,[^\n]+reward\("collectible",538\)/);
-  assert.match(menu, /local tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
+  assert.match(menu, /local tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
   assert.match(menu, /state\.profileCompleted/);
 });
 
@@ -1109,14 +1109,14 @@ test("character relevance overrides malformed merged catalog conditions", () => 
 test("F3 tracking mode keeps non-challenge tracked goals before actionable and unavailable groups", () => {
   const menu = read("scripts/ui/menu.lua");
   assert.match(menu, /require\("scripts\.core\.character_relevance"\)/);
-  assert.match(menu, /local tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
+  assert.match(menu, /local tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed/);
   assert.match(menu, /Tracker\.contains\(state\.tracker, goal\.id\)/);
   assert.doesNotMatch(menu, /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]{0,120}?visualState\.key ~= "unavailable"/,
     "tracking must still promote an unavailable non-challenge goal");
   assert.match(menu, /elseif sceneGoalIds\[goal\.id\][\s\S]*?bucket, priorityRank = scenePending, 2/);
   assert.match(menu, /elseif visualState\.key == "unavailable" then[\s\S]*?bucket, priorityRank = unavailable, 6/);
   assert.match(menu, /CharacterRelevance\.classify\(goal, context\)/);
-  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}\)/);
+  assert.match(menu, /for _, bucket in ipairs\(\{ tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}\)/);
   assert.match(menu, /if left\.priorityRank ~= right\.priorityRank then[\s\S]*?left\.priorityRank < right\.priorityRank/,
     "availability priority must outrank fuzzy-search score");
   assert.match(menu, /if left\.score ~= right\.score then return left\.score < right\.score end/);

@@ -10,6 +10,8 @@ local Mcm = require("scripts.integrations.mcm")
 local Menu = require("scripts.ui.menu")
 local LongTermProgress = require("scripts.core.long_term_progress")
 local Opportunities = require("scripts.core.opportunities")
+local Recommendations = require("scripts.data.recommendations")
+local RouteRecommendations = require("scripts.core.route_recommendations")
 local Sensors = require("scripts.core.sensors")
 local Routes = require("scripts.core.routes")
 local Storage = require("scripts.core.storage")
@@ -26,12 +28,14 @@ local State = {
   lastEvaluation = -1,
   profileCompleted = {},
   routeContext = nil,
-  sceneOpportunities = {}
+  sceneOpportunities = {},
+  quickTrackNotice = nil
 }
 
 local function save()
   if not State.settings then return end
   State.settings.tracked = State.tracker.ids
+  State.run.trackedRoute = State.tracker.route
   State.settings.activeRun = State.run
   Storage.save(AchievementTracker, State.settings)
 end
@@ -57,9 +61,15 @@ local function refreshCompletionFromMarks()
   end
 end
 
+local function isGoalCompleted(goal)
+  return (State.profileCompleted and State.profileCompleted[goal.id])
+    or (State.run.completedGoals and State.run.completedGoals[goal.id])
+    or CompletionMarks.isSatisfied(goal, State.settings.completionMarks)
+end
+
 local function trackingTaintedUnlock()
   if not State.tracker then return false end
-  for _, id in ipairs(State.tracker.ids) do
+  for _, id in ipairs(Tracker.allIds(State.tracker)) do
     local goal = Catalog.get(id)
     if goal and goal.routeKind == "tainted_unlock" then return true end
   end
@@ -184,11 +194,15 @@ function AchievementTracker:onGameStarted(isContinued)
   else
     State.run = Sensors.newRun(startSeed)
   end
+  State.run.routeRecommendation = RouteRecommendations.normalize(State.run.routeRecommendation)
+  State.run.trackedRoute = RouteRecommendations.normalize(State.run.trackedRoute)
+  Tracker.setRoute(State.tracker, State.run.trackedRoute)
   Evaluator.reset(State.evaluator)
   State.activeWarning = nil
   State.lastEvaluation = -1
   State.routeContext = nil
   State.sceneOpportunities = {}
+  State.quickTrackNotice = nil
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
   Unlocks.refreshAchievementImport(Catalog.goals, State.settings.achievementImport)
@@ -204,6 +218,32 @@ function AchievementTracker:onGameStarted(isContinued)
   end
   refreshRouteFloor()
   CharacterRelevance.updateSources(State.run, GameInstance)
+  State.routeContext = Routes.context(GameInstance, State.run)
+  if not isContinued and completionAllowed() then
+    if not sameSavedRun then
+      local relevanceContext = CharacterRelevance.buildContext(GameInstance, Catalog.goals, State.run)
+      local recommendation = RouteRecommendations.choose(Catalog.goals, {
+        allowed=true,
+        greed=GameInstance:IsGreedMode(),
+        difficulty=CompletionMarks.difficultyValue(GameInstance),
+        completionStore=State.settings.completionMarks,
+        currentPlayers=State.routeContext.players,
+        relevanceContext=relevanceContext,
+        isCompleted=isGoalCompleted,
+        isTracked=function(id) return Tracker.containsAny(State.tracker, id) end,
+        evaluate=function(goal)
+          return Routes.evaluate(goal, State.routeContext,
+            State.settings.completionMarks, "en")
+        end
+      })
+      State.run.routeRecommendation = recommendation
+      local okStart, startRoomIndex = pcall(function()
+        return GameInstance:GetLevel():GetStartingRoomIndex()
+      end)
+      State.run.startRoomIndex = okStart and startRoomIndex or State.routeContext.roomIndex
+      State.run.startRoomPrompt = recommendation ~= nil
+    end
+  end
   if LongTermProgress.canObserve(GameInstance) then
     LongTermProgress.observeRoom(State.settings, State.run, GameInstance)
   end
@@ -235,7 +275,7 @@ function AchievementTracker:onUpdate()
   State.sceneOpportunities = Opportunities.evaluate(GameInstance, State.run,
     State.profileCompleted, completionAllowed(), routeContext, victoryLapOpportunitiesAllowed())
   syncBossRushCompletion()
-  for _, id in ipairs(State.tracker.ids) do
+  for _, id in ipairs(Tracker.allIds(State.tracker)) do
     local goal = Catalog.get(id)
     if goal then
       local warning = Evaluator.evaluate(State.evaluator, goal, Sensors.snapshot(goal, State.run, GameInstance))
@@ -270,9 +310,88 @@ function AchievementTracker:onPostHudRender()
   if State.settings then Menu.render(State) end
 end
 
+local function showQuickTrackNotice(key)
+  State.quickTrackNotice = { key=key, untilFrame=Isaac.GetFrameCount() + 240 }
+end
+
+local function quickTrackGoal(goalId)
+  if Tracker.containsAny(State.tracker, goalId) then return false end
+  if Tracker.slotCount(State.tracker) >= State.tracker.max then
+    showQuickTrackNotice("trackerFull")
+    return true
+  end
+  if Tracker.track(State.tracker, goalId) then
+    save()
+    return true
+  end
+  return false
+end
+
+local function conflictOptions()
+  local context = State.routeContext or Routes.context(GameInstance, State.run)
+  return {
+    difficulty=CompletionMarks.difficultyValue(GameInstance),
+    completionStore=State.settings.completionMarks,
+    currentPlayers=context.players
+  }
+end
+
+local function bestOrdinaryGoal()
+  if not State.tracker.route then return nil end
+  local relevanceContext = CharacterRelevance.buildContext(GameInstance, Catalog.goals, State.run)
+  local bestCurrent, bestGeneral
+  for _, goal in ipairs(Catalog.goals) do
+    if Catalog.isCompletable(goal, Isaac.GetChallenge())
+      and not isGoalCompleted(goal)
+      and not Tracker.containsAny(State.tracker, goal.id)
+      and Recommendations.priority(goal) ~= "discouraged"
+      and not RouteRecommendations.conflicts(goal, State.tracker.route, conflictOptions()) then
+      local route = Routes.evaluate(goal, State.routeContext,
+        State.settings.completionMarks, "en")
+      if not route or route.severity ~= "failed" then
+        local relevance = CharacterRelevance.classify(goal, relevanceContext)
+        local current = relevance == "current" and bestCurrent
+          or relevance == "general" and bestGeneral or nil
+        if relevance == "current" or relevance == "general" then
+          if not current or Recommendations.rank(goal) > Recommendations.rank(current) then
+            if relevance == "current" then bestCurrent = goal else bestGeneral = goal end
+          end
+        end
+      end
+    end
+  end
+  return bestCurrent or bestGeneral
+end
+
+local function updateQuickTrack()
+  if State.menu.open then return end
+  if not Input.IsButtonTriggered(Keyboard.KEY_V, 0) then return end
+  for _, opportunity in ipairs(State.sceneOpportunities or {}) do
+    local goal = opportunity.goalId and Catalog.get(opportunity.goalId) or nil
+    if goal and not isGoalCompleted(goal)
+      and not Tracker.containsAny(State.tracker, goal.id) then
+      quickTrackGoal(goal.id)
+      return
+    end
+  end
+  if not State.run.startRoomPrompt then return end
+  if not State.tracker.route and State.run.routeRecommendation then
+    if Tracker.slotCount(State.tracker) >= State.tracker.max then
+      showQuickTrackNotice("trackerFull")
+    elseif Tracker.trackRoute(State.tracker, State.run.routeRecommendation) then
+      State.run.trackedRoute = State.tracker.route
+      save()
+    end
+    return
+  end
+  local ordinary = bestOrdinaryGoal()
+  if ordinary then quickTrackGoal(ordinary.id) end
+end
+
 function AchievementTracker:onRender()
   if not State.settings then return end
   Menu.update(State, save)
+  updateQuickTrack()
   if not State.menu.open then
     Hud.render(State)
     Hud.renderWarning(State)
@@ -355,6 +474,11 @@ function AchievementTracker:onNewRoom()
   if CharacterRelevance.updateSources(State.run, GameInstance) then changed = true end
   if LongTermProgress.canObserve(GameInstance)
     and LongTermProgress.observeRoom(State.settings, State.run, GameInstance) then changed = true end
+  local roomIndex = GameInstance:GetLevel():GetCurrentRoomIndex()
+  if State.run.startRoomPrompt and State.run.startRoomIndex ~= roomIndex then
+    State.run.startRoomPrompt = false
+    changed = true
+  end
   State.lastEvaluation = -1
   if changed then save() end
 end

@@ -24,7 +24,7 @@ test("route planner selects only fully completable unfinished goals", () => {
   assert.match(planner, /options\.allowed ~= true then return nil/);
   assert.match(planner, /options\.isCompleted\(goal\)/);
   assert.match(planner, /options\.isTracked\(goal\.id\)/);
-  assert.match(planner, /Recommendations\.priority\(goal\) == "discouraged"/);
+  assert.match(planner, /Recommendations\.priority\(goal\) ~= "discouraged"/);
   assert.match(planner, /requirement\.difficulty > options\.difficulty/);
   assert.match(planner, /not family\.marks\[requirement\.mark\]/);
   assert.match(planner, /goal\.routeKind == "tainted_unlock"[\s\S]*?family\.key == "beast"/);
@@ -64,6 +64,10 @@ test("new runs choose and persist one recommendation while continued runs restor
   assert.match(main, /State\.run\.routeRecommendation = recommendation/);
   assert.match(main, /Tracker\.setRoute\(State\.tracker, State\.run\.trackedRoute\)/);
   assert.match(main, /State\.run\.startRoomPrompt = false/);
+  assert.ok(main.indexOf("local function isGoalCompleted") < main.indexOf("function AchievementTracker:onGameStarted"),
+    "startup must capture the local completion helper instead of looking up a missing global");
+  assert.match(main, /GetStartingRoomIndex\(\)/);
+  assert.match(main, /for _, id in ipairs\(Tracker\.allIds\(State\.tracker\)\)/);
   assert.doesNotMatch(main, /schemaVersion\s*=\s*11/);
 });
 
@@ -108,7 +112,7 @@ test("V tracks scene opportunities first, then the route and neutral goals", () 
     "V must prefer a live scene opportunity, then a route, then one neutral goal");
   assert.match(vHandler, /State\.run\.startRoomPrompt/);
   assert.match(vHandler, /Tracker\.slotCount\(State\.tracker\) >= State\.tracker\.max/);
-  assert.match(vHandler, /quickTrackNotice[\s\S]*?untilFrame/);
+  assert.match(main, /quickTrackNotice[\s\S]*?untilFrame/);
 });
 
 test("tracked route conflicts are allowed but rendered as warnings", () => {

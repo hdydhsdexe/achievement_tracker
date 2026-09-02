@@ -4,6 +4,8 @@ local Routes = require("scripts.core.routes")
 local Text = require("scripts.ui.text")
 local Sensors = require("scripts.core.sensors")
 local LongTermProgress = require("scripts.core.long_term_progress")
+local RouteRecommendations = require("scripts.core.route_recommendations")
+local Tracker = require("scripts.core.tracker")
 local Hud = {}
 
 local HUD_TITLE = KColor(1.00, 0.94, 0.78, 1)
@@ -73,6 +75,69 @@ local function opportunityBlock(state, language, maxWidth, fontPixels)
     opportunity.danger and HUD_FAILED or HUD_OPPORTUNITY, maxWidth, fontPixels)
 end
 
+local function routeBlock(state, language, maxWidth, fontPixels)
+  local route = state.tracker.route
+  local recommended = false
+  if not route and state.run.startRoomPrompt then
+    route = state.run.routeRecommendation
+    recommended = route ~= nil
+  end
+  if not route then return nil end
+  local labels = Text.labels(language)
+  local evaluation = RouteRecommendations.combinedEvaluation(route, {
+    getGoal=Catalog.get,
+    context=state.routeContext or Routes.context(Game(), state.run),
+    completionStore=state.settings.completionMarks,
+    language=language
+  })
+  local completed = 0
+  for _, id in ipairs(route.memberIds or {}) do
+    local goal = Catalog.get(id)
+    if goal and ((state.profileCompleted and state.profileCompleted[id])
+      or (state.run.completedGoals and state.run.completedGoals[id])
+      or CompletionMarks.isSatisfied(goal, state.settings.completionMarks)) then
+      completed = completed + 1
+    end
+  end
+  local color = evaluation.severity == "failed" and HUD_FAILED
+    or evaluation.severity == "warning" and HUD_WARNING
+    or evaluation.severity == "completed" and HUD_COMPLETED
+    or HUD_BODY
+  local rows = {}
+  local heading = recommended and labels.routeRecommendation or labels.trackedRoute
+  local routeProgress = string.format(labels.routeProgress, completed, #route.memberIds)
+  appendRows(rows, wrappedRows("- " .. heading .. "："
+    .. RouteRecommendations.label(route, language) .. "  " .. routeProgress,
+    0, color, maxWidth, fontPixels))
+  local memberNames = {}
+  for _, id in ipairs(route.memberIds or {}) do
+    local goal = Catalog.get(id)
+    if goal then memberNames[#memberNames + 1] = Catalog.text(goal, language).name end
+  end
+  appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
+    8, HUD_MUTED, maxWidth, fontPixels))
+  if #evaluation.current > 0 then
+    appendRows(rows, wrappedRows((language == "zh" and "当前：" or "NOW: ")
+      .. table.concat(evaluation.current, " / "), 8, color, maxWidth, fontPixels))
+  end
+  if #evaluation.next > 0 then
+    appendRows(rows, wrappedRows((language == "zh" and "下一步：" or "NEXT: ")
+      .. table.concat(evaluation.next, " / "), 8, HUD_MUTED, maxWidth, fontPixels))
+  end
+  if recommended then
+    appendRows(rows, wrappedRows(labels.trackRecommendedRoute,
+      8, HUD_OPPORTUNITY, maxWidth, fontPixels))
+  end
+  return rows
+end
+
+local function quickNoticeBlock(state, language, maxWidth, fontPixels)
+  local notice = state.quickTrackNotice
+  if not notice or notice.untilFrame < Isaac.GetFrameCount() then return nil end
+  local value = Text.labels(language)[notice.key]
+  return value and wrappedRows("! " .. value, 0, HUD_FAILED, maxWidth, fontPixels) or nil
+end
+
 local function buildBlocks(state, fontPixels, x, screenWidth)
   local settings = state.settings
   local language = Text.resolveLanguage(settings.language)
@@ -87,9 +152,12 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
     local challengeGoal = Catalog.challengeGoal(challengeId)
     trackedIds = challengeGoal and { challengeGoal.id } or {}
   end
+  local combinedRoute = challengeId == 0
+    and routeBlock(state, language, maxWidth, fontPixels) or nil
+  if combinedRoute then table.insert(blocks, combinedRoute) end
   for _, id in ipairs(trackedIds) do
     local goal = Catalog.get(id)
-    if goal then
+    if goal and not Tracker.routeContains(state.tracker, id) then
       local block = {}
       local text = Catalog.text(goal, language)
       local route = Routes.evaluate(goal, routeContext, settings.completionMarks, language)
@@ -105,8 +173,20 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
       local color = failed and HUD_FAILED
         or completed and HUD_COMPLETED
         or HUD_BODY
+      local routeConflict = not completed and state.tracker.route
+        and RouteRecommendations.conflicts(goal,
+        state.tracker.route, {
+          difficulty=CompletionMarks.difficultyValue(Game()),
+          completionStore=settings.completionMarks,
+          currentPlayers=routeContext.players
+        })
+      if routeConflict then
+        color = HUD_FAILED
+        suffix = suffix .. "  · " .. labels.routeConflict
+      end
       if route then
-        local routeColor = route.severity == "failed" and HUD_FAILED
+        local routeColor = routeConflict and HUD_FAILED
+          or route.severity == "failed" and HUD_FAILED
           or route.severity == "warning" and HUD_WARNING
           or route.severity == "completed" and HUD_COMPLETED
           or color
@@ -135,6 +215,8 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
   end
   local opportunity = opportunityBlock(state, language, maxWidth, fontPixels)
   if opportunity then table.insert(blocks, opportunity) end
+  local notice = quickNoticeBlock(state, language, maxWidth, fontPixels)
+  if notice then table.insert(blocks, notice) end
   return {
     headerRows=headerRows, blocks=blocks, controls=labels.controls,
     language=language, maxWidth=maxWidth, fontPixels=fontPixels

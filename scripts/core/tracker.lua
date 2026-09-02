@@ -1,7 +1,7 @@
 local Tracker = {}
 
-function Tracker.new(maximum, ids)
-  return { max = maximum or 3, ids = ids or {} }
+function Tracker.new(maximum, ids, route)
+  return { max = maximum or 3, ids = ids or {}, route = route }
 end
 
 function Tracker.contains(state, id)
@@ -11,10 +11,55 @@ function Tracker.contains(state, id)
   return false
 end
 
+function Tracker.routeContains(state, id)
+  for _, memberId in ipairs(state.route and state.route.memberIds or {}) do
+    if memberId == id then return true end
+  end
+  return false
+end
+
+function Tracker.containsAny(state, id)
+  return Tracker.contains(state, id) or Tracker.routeContains(state, id)
+end
+
+function Tracker.slotCount(state)
+  return #state.ids + (state.route and 1 or 0)
+end
+
+function Tracker.allIds(state)
+  local result, seen = {}, {}
+  for _, id in ipairs(state.ids) do
+    if not seen[id] then result[#result + 1], seen[id] = id, true end
+  end
+  for _, id in ipairs(state.route and state.route.memberIds or {}) do
+    if not seen[id] then result[#result + 1], seen[id] = id, true end
+  end
+  return result
+end
+
 function Tracker.track(state, id)
-  if Tracker.contains(state, id) then return true end
-  if #state.ids >= state.max then return false end
+  if Tracker.containsAny(state, id) then return true end
+  if Tracker.slotCount(state) >= state.max then return false end
   table.insert(state.ids, id)
+  return true
+end
+
+function Tracker.setRoute(state, route)
+  state.route = route
+  return route ~= nil
+end
+
+function Tracker.trackRoute(state, route)
+  if not route then return false end
+  if state.route then return state.route.family == route.family end
+  if Tracker.slotCount(state) >= state.max then return false end
+  state.route = route
+  return true
+end
+
+function Tracker.untrackRoute(state)
+  if not state.route then return false end
+  state.route = nil
   return true
 end
 
@@ -29,6 +74,7 @@ function Tracker.untrack(state, id)
 end
 
 function Tracker.toggle(state, id)
+  if Tracker.routeContains(state, id) then return false end
   if Tracker.contains(state, id) then return Tracker.untrack(state, id) end
   return Tracker.track(state, id)
 end
