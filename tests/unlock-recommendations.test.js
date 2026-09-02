@@ -112,14 +112,18 @@ test("route checks accept characters reachable through an actionable transformat
   assert.match(menu, /Routes\.evaluate\(goal,[\s\S]{0,40}?routeEvaluationContext\(state\.routeContext, context\)/);
 });
 
-test("tracked goals stay first even when unavailable while untracked completed goals stay last", () => {
+test("challenge-only goals stay unavailable outside their challenge even when tracked", () => {
   const menu = read("scripts/ui/menu.lua");
+  const challengeIndex = menu.indexOf("local challengeUnavailable = goal.challengeId ~= nil");
   const trackedIndex = menu.indexOf("if Tracker.contains(state.tracker, goal.id)");
   const completedIndex = menu.lastIndexOf("local bucket, priorityRank = completed, 7", trackedIndex);
   const unavailableIndex = menu.indexOf('visualState.key == "unavailable"', trackedIndex);
-  assert.ok(trackedIndex >= 0 && completedIndex >= 0 && completedIndex < trackedIndex
+  assert.ok(challengeIndex >= 0 && trackedIndex > challengeIndex
+      && completedIndex >= 0 && completedIndex < challengeIndex
       && unavailableIndex > trackedIndex,
-    "tracking must be considered before completion and availability buckets");
+    "a mode-incompatible challenge goal must be bucketed before tracking is considered");
+  assert.match(menu,
+    /local challengeUnavailable = goal\.challengeId ~= nil\s+and visualState\.key == "unavailable"[\s\S]{0,120}?if challengeUnavailable then[\s\S]{0,80}?bucket, priorityRank = unavailable, 6/);
   assert.doesNotMatch(menu,
     /Tracker\.contains\(state\.tracker, goal\.id\)[\s\S]{0,120}?visualState\.key ~= "unavailable"/);
 });
