@@ -242,7 +242,11 @@ local function refreshGoals(state, context, preserveSelection)
     if matchesFilter(goal, filter) then
       local visualState = resolveVisualState(state, goal, context)
       local bucket, priorityRank = completed, 7
-      if Tracker.contains(state.tracker, goal.id) then
+      local challengeUnavailable = goal.challengeId ~= nil
+        and visualState.key == "unavailable"
+      if challengeUnavailable then
+        bucket, priorityRank = unavailable, 6
+      elseif Tracker.contains(state.tracker, goal.id) then
         bucket, priorityRank = tracked, 1
       elseif sceneGoalIds[goal.id] and visualState.key ~= "completed"
           and visualState.key ~= "unavailable" then
