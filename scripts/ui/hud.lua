@@ -75,6 +75,11 @@ local function opportunityBlock(state, language, maxWidth, fontPixels)
     opportunity.danger and HUD_FAILED or HUD_OPPORTUNITY, maxWidth, fontPixels)
 end
 
+local function routeDetailsHeld()
+  return Input and Keyboard and Input.IsButtonPressed
+    and Input.IsButtonPressed(Keyboard.KEY_TAB, 0)
+end
+
 local function routeBlock(state, language, maxWidth, fontPixels)
   local route = state.tracker.route
   local recommended = false
@@ -88,7 +93,8 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     getGoal=Catalog.get,
     context=state.routeContext or Routes.context(Game(), state.run),
     completionStore=state.settings.completionMarks,
-    language=language
+    language=language,
+    tracked=not recommended
   })
   local completed = 0
   for _, id in ipairs(route.memberIds or {}) do
@@ -104,29 +110,39 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     or evaluation.severity == "completed" and HUD_COMPLETED
     or HUD_BODY
   local rows = {}
-  local heading = recommended and labels.routeRecommendation or labels.trackedRoute
-  local routeProgress = string.format(labels.routeProgress, completed, #route.memberIds)
-  appendRows(rows, wrappedRows("- " .. heading .. "："
-    .. RouteRecommendations.label(route, language) .. "  " .. routeProgress,
-    0, color, maxWidth, fontPixels))
-  local memberNames = {}
-  for _, id in ipairs(route.memberIds or {}) do
-    local goal = Catalog.get(id)
-    if goal then memberNames[#memberNames + 1] = Catalog.text(goal, language).name end
+  local expanded = routeDetailsHeld()
+  if expanded then
+    local heading = recommended and labels.routeRecommendation or labels.trackedRoute
+    local routeProgress = string.format(labels.routeProgress, completed, #route.memberIds)
+    appendRows(rows, wrappedRows("- " .. heading .. "："
+      .. RouteRecommendations.label(route, language) .. "  " .. routeProgress,
+      0, color, maxWidth, fontPixels))
+    local memberNames = {}
+    for _, id in ipairs(route.memberIds or {}) do
+      local goal = Catalog.get(id)
+      if goal then memberNames[#memberNames + 1] = Catalog.text(goal, language).name end
+    end
+    appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
+      8, HUD_MUTED, maxWidth, fontPixels))
   end
-  appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
-    8, HUD_MUTED, maxWidth, fontPixels))
   if #evaluation.current > 0 then
     appendRows(rows, wrappedRows((language == "zh" and "当前：" or "NOW: ")
-      .. table.concat(evaluation.current, " / "), 8, color, maxWidth, fontPixels))
+      .. table.concat(evaluation.current, " / "), expanded and 8 or 0,
+      color, maxWidth, fontPixels))
   end
-  if #evaluation.next > 0 then
+  if expanded and #evaluation.next > 0 then
     appendRows(rows, wrappedRows((language == "zh" and "下一步：" or "NEXT: ")
       .. table.concat(evaluation.next, " / "), 8, HUD_MUTED, maxWidth, fontPixels))
   end
   if recommended then
     appendRows(rows, wrappedRows(labels.trackRecommendedRoute,
       8, HUD_OPPORTUNITY, maxWidth, fontPixels))
+  end
+  for _, warning in ipairs(evaluation.departureWarnings or {}) do
+    appendRows(rows, wrappedRows("! " .. warning, 0, HUD_WARNING, maxWidth, fontPixels))
+  end
+  for _, hint in ipairs(evaluation.contextHints or {}) do
+    appendRows(rows, wrappedRows("> " .. hint, 0, HUD_OPPORTUNITY, maxWidth, fontPixels))
   end
   return rows
 end
@@ -185,6 +201,7 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
         suffix = suffix .. "  · " .. labels.routeConflict
       end
       if route then
+        local expanded = routeDetailsHeld()
         local routeColor = routeConflict and HUD_FAILED
           or route.severity == "failed" and HUD_FAILED
           or route.severity == "warning" and HUD_WARNING
@@ -192,15 +209,28 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
           or color
         local markProgress = route.required > 1
           and string.format("  [%d/%d]", route.known, route.required) or ""
-        appendRows(block, wrappedRows("- " .. text.name .. markProgress,
-          0, routeColor, maxWidth, fontPixels))
         local currentPrefix = language == "zh" and "当前：" or "NOW: "
         local nextPrefix = language == "zh" and "下一步：" or "NEXT: "
-        appendRows(block, wrappedRows(currentPrefix .. route.current,
-          8, routeColor, maxWidth, fontPixels))
-        if route.next then
+        if route and not expanded then
+          appendRows(block, wrappedRows(currentPrefix .. route.current,
+            0, routeColor, maxWidth, fontPixels))
+        else
+          appendRows(block, wrappedRows("- " .. text.name .. markProgress,
+            0, routeColor, maxWidth, fontPixels))
+          appendRows(block, wrappedRows(currentPrefix .. route.current,
+            8, routeColor, maxWidth, fontPixels))
+        end
+        if expanded and route.next then
           appendRows(block, wrappedRows(nextPrefix .. route.next,
             8, HUD_MUTED, maxWidth, fontPixels))
+        end
+        local guidance = RouteRecommendations.goalGuidance(goal, route, {
+          context=routeContext, completionStore=settings.completionMarks,
+          language=language
+        })
+        for _, warning in ipairs(guidance.departureWarnings or {}) do
+          appendRows(block, wrappedRows("! " .. warning,
+            0, HUD_WARNING, maxWidth, fontPixels))
         end
       else
         appendRows(block, wrappedRows("- " .. text.detail .. suffix,

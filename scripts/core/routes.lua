@@ -25,6 +25,9 @@ local REP_A = enum(StageType,"STAGETYPE_REPENTANCE",4)
 local REP_B = enum(StageType,"STAGETYPE_REPENTANCE_B",5)
 local ORIGINAL = enum(StageType,"STAGETYPE_ORIGINAL",0)
 local WOTL = enum(StageType,"STAGETYPE_WOTL",1)
+local ENTITY_URIEL = enum(EntityType,"ENTITY_URIEL",271)
+local ENTITY_GABRIEL = enum(EntityType,"ENTITY_GABRIEL",272)
+local GRID_STATUE = enum(GridEntityType,"GRID_STATUE",21)
 
 local AID_DEFS = {
   knife1={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_KNIFE_PIECE_1",626), zh="菜刀碎片1", en="Knife Piece 1"},
@@ -212,11 +215,15 @@ local function scanGroundAids(context)
   for _, entity in ipairs(Isaac.GetRoomEntities()) do
     local pickup = entity.ToPickup and entity:ToPickup() or nil
     if pickup then
+      local collecting = pickup.GetSprite and pickup:GetSprite():IsPlaying("Collect")
       for key, aid in pairs(AID_DEFS) do
         local variant = aid.kind == "collectible" and enum(PickupVariant,"PICKUP_COLLECTIBLE",100)
           or aid.kind == "trinket" and enum(PickupVariant,"PICKUP_TRINKET",350)
           or enum(PickupVariant,"PICKUP_TAROTCARD",300)
-        if pickup.Variant == variant and pickup.SubType == aid.id then context.aids[key] = true end
+        if not collecting and pickup.Variant == variant and pickup.SubType == aid.id then
+          context.aids[key] = true
+          context.groundAids[key] = true
+        end
       end
     end
   end
@@ -237,14 +244,35 @@ local function scanGroundTrinkets(context)
   end
 end
 
-local function scanVoidPortal(context, room)
+local function scanTrapdoors(context, room)
   if not room or type(room.GetGridSize) ~= "function" then return end
   for index = 0, room:GetGridSize() - 1 do
     local grid = room:GetGridEntity(index)
-    if grid and grid.GetType and grid:GetType() == enum(GridEntityType,"GRID_TRAPDOOR",17)
-      and grid.GetVariant and grid:GetVariant() == 1 then
-      context.voidPortal = true
-      return
+    if grid and grid.GetType and grid:GetType() == enum(GridEntityType,"GRID_TRAPDOOR",17) then
+      local variant = grid.GetVariant and grid:GetVariant() or 0
+      local varData = tonumber(grid.VarData) or 0
+      if variant == 1 or varData == 1 then context.voidPortal = true end
+      if variant == 0 and varData ~= 1 then context.normalTrapdoor = true end
+    end
+  end
+end
+
+local function scanAngelRoom(context, room)
+  if context.roomType ~= enum(RoomType,"ROOM_ANGEL",15) then return end
+  if Isaac and type(Isaac.GetRoomEntities) == "function" then
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+      local alive = not entity.IsDead or not entity:IsDead()
+      if alive and (entity.Type == ENTITY_URIEL or entity.Type == ENTITY_GABRIEL) then
+        context.angelAlive = true
+      end
+    end
+  end
+  if not room or type(room.GetGridSize) ~= "function" then return end
+  for index = 0, room:GetGridSize() - 1 do
+    local grid = room:GetGridEntity(index)
+    if grid and grid.GetType and grid:GetType() == GRID_STATUE
+      and (grid.State == nil or grid.State == 0) then
+      context.angelStatue = true
     end
   end
 end
@@ -254,7 +282,8 @@ function Routes.context(game, run)
   local context = {
     stage=level:GetStage(), stageType=level:GetStageType(), elapsed=math.floor(game.TimeCounter / 30),
     roomType=room:GetType(), roomIndex=level:GetCurrentRoomIndex(),
-    greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, groundTrinkets={}, voidPortal=false,
+    greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, groundAids={}, groundTrinkets={},
+    voidPortal=false, normalTrapdoor=false, angelAlive=false, angelStatue=false, hasBomb=false,
     routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
     secretExitUnlocked=secretExitUnlocked()
   }
@@ -264,6 +293,8 @@ function Routes.context(game, run)
     local player = Isaac.GetPlayer(index)
     local playerType = CharacterRelevance.normalize(player:GetPlayerType())
     context.players[playerType] = true
+    if (player.GetNumBombs and player:GetNumBombs() > 0)
+      or (player.HasGoldenBomb and player:HasGoldenBomb()) then context.hasBomb = true end
     for key, aid in pairs(AID_DEFS) do
       local held = aid.kind == "collectible" and player.HasCollectible
           and player:HasCollectible(aid.id)
@@ -281,7 +312,8 @@ function Routes.context(game, run)
   end
   scanGroundAids(context)
   scanGroundTrinkets(context)
-  scanVoidPortal(context, room)
+  scanTrapdoors(context, room)
+  scanAngelRoom(context, room)
   for _, key in ipairs({"knife1","knife2","key1","key2","dads_note"}) do
     if context.routeItems[key] then context.aids[key] = true end
   end

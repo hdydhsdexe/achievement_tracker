@@ -207,7 +207,7 @@ function routeBlocks(font, maxWidth) {
   }
   return {
     header: wrapped("ACHIEVEMENT CONDITIONS"),
-    footer: wrapped("F3: goals  |  F4: hide  [9/9]"),
+    footer: wrapped("F3: goals  |  Hold Tab for route details  |  F4: hide  [9/9]"),
     blocks,
   };
 }

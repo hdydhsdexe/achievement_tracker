@@ -40,7 +40,7 @@ end
 
 local ui = {
   zh = {
-    title = "成就条件追踪", controls = "F3：选择目标  |  F4：隐藏",
+    title = "成就条件追踪", controls = "F3：选择目标  |  按住 Tab 查看路线详情  |  F4：隐藏",
     menuTitle = "成就奖励", tracked = "个正在追踪",
     remaining = "剩余", failed = "条件已失效", language = "中文",
     unlockReward = "解锁奖励",
@@ -71,7 +71,7 @@ local ui = {
       area="地点", challenge="挑战", feature="机制", other="其他" }
   },
   en = {
-    title = "ACHIEVEMENT CONDITIONS", controls = "F3: goals  |  F4: hide",
+    title = "ACHIEVEMENT CONDITIONS", controls = "F3: goals  |  Hold Tab for route details  |  F4: hide",
     menuTitle = "ACHIEVEMENT REWARDS", tracked = "tracked",
     remaining = "remaining", failed = "condition lost", language = "English",
     unlockReward = "UNLOCKS",
