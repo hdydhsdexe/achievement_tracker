@@ -40,10 +40,10 @@ test("route guidance defines structured floor-exit obligations without parsing c
   const planner = read("scripts/core/route_recommendations.lua");
   assert.match(planner, /local function departureWarnings\(route, options, result\)/);
   assert.match(planner, /context\.normalTrapdoor/);
-  assert.match(planner, /route\.family == "mother"[\s\S]*?knife1[\s\S]*?knife2/);
-  assert.match(planner, /route\.family == "chest"[\s\S]*?polaroid/);
-  assert.match(planner, /route\.family == "dark_room"[\s\S]*?negative/);
-  assert.match(planner, /route\.family == "beast"[\s\S]*?dads_note/);
+  assert.match(planner, /endpoint == "mother"[\s\S]*?knife1[\s\S]*?knife2/);
+  assert.match(planner, /endpoint == "blue_baby"[\s\S]*?polaroid/);
+  assert.match(planner, /endpoint == "lamb"[\s\S]*?negative/);
+  assert.match(planner, /endpoint == "beast"[\s\S]*?dads_note/);
   assert.match(planner, /BOSS_RUSH/);
   assert.match(planner, /HUSH[\s\S]*?DELIRIUM/);
   assert.match(planner, /sharp_key[\s\S]*?soul_cain[\s\S]*?cracked_orb/,

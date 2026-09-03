@@ -53,7 +53,6 @@ function Tracker.removeIds(state, idSet)
   state.ids = ids
   if state.route then
     state.route.memberIds = routeMembers
-    if #routeMembers == 0 then state.route = nil end
   end
   return removed
 end
@@ -70,9 +69,14 @@ function Tracker.setRoute(state, route)
   return route ~= nil
 end
 
+function Tracker.sameRoute(left, right)
+  if not left or not right then return false end
+  return (left.endpoint or left.family) == (right.endpoint or right.family)
+end
+
 function Tracker.trackRoute(state, route)
   if not route then return false end
-  if state.route then return state.route.family == route.family end
+  if state.route then return Tracker.sameRoute(state.route, route) end
   if Tracker.slotCount(state) >= state.max then return false end
   state.route = route
   return true

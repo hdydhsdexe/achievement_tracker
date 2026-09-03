@@ -29,6 +29,8 @@ local ENTITY_URIEL = enum(EntityType,"ENTITY_URIEL",271)
 local ENTITY_GABRIEL = enum(EntityType,"ENTITY_GABRIEL",272)
 local GRID_STATUE = enum(GridEntityType,"GRID_STATUE",21)
 local ROOM_BOSS = enum(RoomType,"ROOM_BOSS",5)
+local ROOM_DEVIL = enum(RoomType,"ROOM_DEVIL",14)
+local ROOM_ANGEL = enum(RoomType,"ROOM_ANGEL",15)
 local ROOM_SECRET_EXIT_IDX = enum(GridRooms,"ROOM_SECRET_EXIT_IDX",-10)
 
 local AID_DEFS = {
@@ -155,11 +157,11 @@ local GREED_PATH_STEPS = {
   [GREED_STAGE.SHOP]=message("完成商店层并进入究极贪婪层。","Finish The Shop and enter the Ultra Greed floor.")
 }
 
-local function secretExitUnlocked()
+local function persistentUnlocked(achievementId)
   if not Isaac or type(Isaac.GetPersistentGameData) ~= "function" then return nil end
   local okData, persistentData = pcall(Isaac.GetPersistentGameData)
   if not okData or not persistentData then return nil end
-  local okUnlock, unlocked = pcall(function() return persistentData:Unlocked(407) end)
+  local okUnlock, unlocked = pcall(function() return persistentData:Unlocked(achievementId) end)
   if not okUnlock then return nil end
   return unlocked == true
 end
@@ -260,6 +262,8 @@ local function scanTrapdoors(context, room)
   end
 end
 
+local function secretExitUnlocked() return persistentUnlocked(407) end
+
 local function scanExitDoors(context, room)
   if context.roomType ~= ROOM_BOSS or not room or type(room.GetDoor) ~= "function" then return end
   for slot = 0, 7 do
@@ -316,8 +320,12 @@ function Routes.context(game, run)
     bossDefeated=floorBossDefeated(level), angelAlive=false, angelStatue=false, hasBomb=false,
     routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
     floorAids=floorAids,
-    secretExitUnlocked=secretExitUnlocked()
+    secretExitUnlocked=secretExitUnlocked(),
+    deepPathsUnlocked=persistentUnlocked(34), polaroidUnlocked=persistentUnlocked(57),
+    negativeUnlocked=persistentUnlocked(78), strangeDoorUnlocked=persistentUnlocked(635)
   }
+  context.devilExit = context.stage == STAGE.WOMB2 and context.roomType == ROOM_DEVIL
+  context.angelExit = context.stage == STAGE.WOMB2 and context.roomType == ROOM_ANGEL
   for key in pairs(floorAids) do context.aids[key] = true end
   local ok, ascent = pcall(function() return level:IsAscent() end)
   context.ascent = ok and ascent == true

@@ -115,7 +115,8 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     context=evaluationContext,
     completionStore=state.settings.completionMarks,
     language=language,
-    tracked=not recommended
+    tracked=not recommended,
+    completedBosses=state.run.routeBosses
   })
   local completed = 0
   for _, id in ipairs(route.memberIds or {}) do
@@ -137,17 +138,37 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     and Routes.compactActions(evaluationContext, language) or nil
   if expanded then
     local heading = recommended and labels.routeRecommendation or labels.trackedRoute
-    local routeProgress = string.format(labels.routeProgress, completed, #route.memberIds)
+    local routeProgress = #route.memberIds > 0
+      and "  " .. string.format(labels.routeProgress, completed, #route.memberIds) or ""
     appendRows(rows, wrappedRows("- " .. heading .. "："
-      .. RouteRecommendations.label(route, language) .. "  " .. routeProgress,
+      .. RouteRecommendations.label(route, language) .. routeProgress,
       0, color, maxWidth, fontPixels))
     local memberNames = {}
     for _, id in ipairs(route.memberIds or {}) do
       local goal = Catalog.get(id)
       if goal then memberNames[#memberNames + 1] = Catalog.text(goal, language).name end
     end
-    appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
+    if #memberNames > 0 then
+      appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
+        8, HUD_MUTED, maxWidth, fontPixels))
+    end
+    appendRows(rows, wrappedRows(labels.routeProcess .. "："
+      .. table.concat(RouteRecommendations.fullProcess(route, language, {
+        context=evaluationContext, completedBosses=state.run.routeBosses }), " → "),
       8, HUD_MUTED, maxWidth, fontPixels))
+    if evaluation.missed then
+      appendRows(rows, wrappedRows("! " .. labels.routeMissedRemedies,
+        0, HUD_WARNING, maxWidth, fontPixels))
+      local remedyLabels = { available=labels.remedyAvailable,
+        possible=labels.remedyPossible, expired=labels.remedyExpired }
+      local remedyColors = { available=HUD_OPPORTUNITY,
+        possible=HUD_BODY, expired=HUD_MUTED }
+      for _, remedy in ipairs(evaluation.remedies or {}) do
+        appendRows(rows, wrappedRows((remedyLabels[remedy.status] or "")
+          .. "：" .. remedy.text, 8, remedyColors[remedy.status] or HUD_MUTED,
+          maxWidth, fontPixels))
+      end
+    end
   end
   if not expanded and compactActions then
     appendCompactActions(rows, compactActions, color, maxWidth, fontPixels)
@@ -163,6 +184,15 @@ local function routeBlock(state, language, maxWidth, fontPixels)
   if recommended then
     appendRows(rows, wrappedRows(labels.trackRecommendedRoute,
       8, HUD_OPPORTUNITY, maxWidth, fontPixels))
+  end
+  if not expanded and evaluation.missed then
+    appendRows(rows, wrappedRows("! " .. labels.routeMissedRemedies,
+      0, HUD_WARNING, maxWidth, fontPixels))
+  end
+  local extension = not recommended and state.run.pendingRouteExtension or nil
+  if extension then
+    appendRows(rows, wrappedRows("> " .. string.format(labels.routeExtensionPrompt,
+      extension.source, extension.label), 0, HUD_OPPORTUNITY, maxWidth, fontPixels))
   end
   for _, warning in ipairs(evaluation.departureWarnings or {}) do
     appendRows(rows, wrappedRows("! " .. warning, 0, HUD_WARNING, maxWidth, fontPixels))

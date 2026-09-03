@@ -12,7 +12,8 @@ test("tracker removes completed ordinary goals and route members as one operatio
   assert.match(tracker, /for _, id in ipairs\(state\.ids\)/);
   assert.match(tracker, /for _, id in ipairs\(state\.route and state\.route\.memberIds or \{\}\)/);
   assert.match(tracker, /state\.route\.memberIds = routeMembers/);
-  assert.match(tracker, /if #routeMembers == 0 then state\.route = nil end/);
+  assert.doesNotMatch(tracker, /if #routeMembers == 0 then state\.route = nil end/,
+    "pure navigation routes remain tracked after their achievement members complete");
   assert.match(tracker, /return removed/);
 });
 

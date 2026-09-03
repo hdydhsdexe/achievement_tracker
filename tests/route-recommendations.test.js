@@ -6,16 +6,13 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("route planner defines conservative compatible boss families", () => {
+test("route planner defines endpoint routes and optional boss compatibility", () => {
   const planner = read("scripts/core/route_recommendations.lua");
-  for (const family of ["chest", "dark_room", "mother", "beast", "greed"]) {
-    assert.match(planner, new RegExp(`${family}\\s*=\\s*\\{`));
+  for (const endpoint of ["mother", "lamb", "blue_baby", "beast", "greed", "greedier"]) {
+    assert.match(planner, new RegExp(`${endpoint}\\s*=\\s*\\{`));
   }
-  assert.match(planner, /chest[\s\S]*?BOSS_RUSH[\s\S]*?HUSH[\s\S]*?MOMS_HEART[\s\S]*?ISAAC[\s\S]*?BLUE_BABY[\s\S]*?MEGA_SATAN[\s\S]*?DELIRIUM/);
-  assert.match(planner, /dark_room[\s\S]*?BOSS_RUSH[\s\S]*?HUSH[\s\S]*?MOMS_HEART[\s\S]*?SATAN[\s\S]*?LAMB[\s\S]*?MEGA_SATAN[\s\S]*?DELIRIUM/);
-  assert.match(planner, /mother[\s\S]*?BOSS_RUSH[\s\S]*?MOTHER/);
-  assert.match(planner, /beast[\s\S]*?BOSS_RUSH[\s\S]*?BEAST/);
-  assert.match(planner, /greed[\s\S]*?ULTRA_GREED/);
+  assert.match(planner, /OPTIONAL_ORDER\s*=\s*\{\s*"BOSS_RUSH",\s*"HUSH",\s*"DELIRIUM",\s*"MEGA_SATAN"\s*\}/);
+  assert.match(planner, /mark == "MEGA_SATAN"[\s\S]*?endpoint == "lamb" or endpoint == "blue_baby"/);
 });
 
 test("route planner selects only fully completable unfinished goals", () => {
@@ -26,8 +23,8 @@ test("route planner selects only fully completable unfinished goals", () => {
   assert.match(planner, /options\.isTracked\(goal\.id\)/);
   assert.match(planner, /Recommendations\.priority\(goal\) ~= "discouraged"/);
   assert.match(planner, /requirement\.difficulty > options\.difficulty/);
-  assert.match(planner, /not family\.marks\[requirement\.mark\]/);
-  assert.match(planner, /goal\.routeKind == "tainted_unlock"[\s\S]*?family\.key == "beast"/);
+  assert.match(planner, /not marks\[requirement\.mark\]/);
+  assert.match(planner, /goal\.routeKind == "tainted_unlock"[\s\S]*?== "beast"/);
   assert.match(planner, /routeResult and routeResult\.severity == "failed"/);
 });
 
@@ -122,7 +119,7 @@ test("tracked route conflicts are allowed but rendered as warnings", () => {
   const menu = read("scripts/ui/menu.lua");
   const hud = read("scripts/ui/hud.lua");
   assert.match(planner, /function RouteRecommendations\.conflicts\(goal, route, options\)/);
-  assert.match(planner, /return not compatible/);
+  assert.match(planner, /return not routeCompatible/);
   assert.match(menu, /RouteRecommendations\.conflicts/);
   assert.match(menu, /VISUAL_STATES\.conflict/);
   assert.match(hud, /RouteRecommendations\.conflicts[\s\S]*?HUD_FAILED/);

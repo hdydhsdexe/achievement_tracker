@@ -121,6 +121,11 @@ local function completionAllowed()
   return true
 end
 
+local function isGreedier()
+  local greedier = Difficulty and Difficulty.DIFFICULTY_GREEDIER or 3
+  return GameInstance.Difficulty == greedier
+end
+
 local function runStartRouteContext(routeContext, relevanceContext)
   local result, players = {}, {}
   for key, value in pairs(routeContext or {}) do result[key] = value end
@@ -195,6 +200,11 @@ end
 local function recordCompletionMark(mark)
   if not mark or not completionAllowed() then return false end
   local changed = false
+  State.run.routeBosses = State.run.routeBosses or {}
+  if not State.run.routeBosses[mark] then
+    State.run.routeBosses[mark] = true
+    changed = true
+  end
   local value = CompletionMarks.difficultyValue(GameInstance)
   for index = 0, GameInstance:GetNumPlayers() - 1 do
     local playerType = CharacterRelevance.normalize(Isaac.GetPlayer(index):GetPlayerType())
@@ -203,6 +213,14 @@ local function recordCompletionMark(mark)
   if changed then
     refreshCompletionFromMarks()
     syncCompletionTransitions()
+    save()
+  end
+  if State.tracker.route
+    and RouteRecommendations.isComplete(State.tracker.route, State.run.routeBosses) then
+    Tracker.untrackRoute(State.tracker)
+    State.run.trackedRoute = nil
+    State.run.pendingRouteExtension = nil
+    changed = true
     save()
   end
   return changed
@@ -276,8 +294,11 @@ function AchievementTracker:onGameStarted(isContinued)
   else
     State.run = Sensors.newRun(startSeed)
   end
-  State.run.routeRecommendation = RouteRecommendations.normalize(State.run.routeRecommendation)
-  State.run.trackedRoute = RouteRecommendations.normalize(State.run.trackedRoute)
+  local routeNormalizeOptions = { greedier=isGreedier() }
+  State.run.routeRecommendation = RouteRecommendations.normalize(
+    State.run.routeRecommendation, routeNormalizeOptions)
+  State.run.trackedRoute = RouteRecommendations.normalize(
+    State.run.trackedRoute, routeNormalizeOptions)
   Tracker.setRoute(State.tracker, State.run.trackedRoute)
   Evaluator.reset(State.evaluator)
   State.activeWarning = nil
@@ -303,6 +324,9 @@ function AchievementTracker:onGameStarted(isContinued)
   refreshRouteFloor()
   CharacterRelevance.updateSources(State.run, GameInstance)
   State.routeContext = Routes.context(GameInstance, State.run)
+  if RouteRecommendations.initializeProgress(State.tracker.route, State.routeContext) then
+    State.run.trackedRoute = State.tracker.route
+  end
   local relevanceContext = CharacterRelevance.buildContext(GameInstance, Catalog.goals, State.run)
   initializeCompletionBaseline()
   if not isContinued then
@@ -311,6 +335,7 @@ function AchievementTracker:onGameStarted(isContinued)
       local recommendation = RouteRecommendations.choose(Catalog.goals, {
         allowed=true,
         greed=GameInstance:IsGreedMode(),
+        greedier=isGreedier(), context=State.routeContext,
         difficulty=CompletionMarks.difficultyValue(GameInstance),
         completionStore=State.settings.completionMarks,
         currentPlayers=State.routeContext.players,
@@ -364,6 +389,18 @@ function AchievementTracker:onUpdate()
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
   if Routes.updateRun(State.run, routeContext, trackingTaintedUnlock()) then save() end
+  local pendingRouteExtension = RouteRecommendations.extension(State.tracker.route,
+    routeContext, State.settings.language)
+  local previousExtension = State.run.pendingRouteExtension
+  if pendingRouteExtension and (not previousExtension
+      or previousExtension.target ~= pendingRouteExtension.target
+      or previousExtension.source ~= pendingRouteExtension.source) then
+    State.run.pendingRouteExtension = pendingRouteExtension
+    save()
+  elseif not pendingRouteExtension and previousExtension then
+    State.run.pendingRouteExtension = nil
+    save()
+  end
   State.sceneOpportunities = Opportunities.evaluate(GameInstance, State.run,
     State.profileCompleted, completionAllowed(), routeContext, victoryLapOpportunitiesAllowed())
   syncBossRushCompletion()
@@ -466,6 +503,15 @@ local function updateQuickTrack()
       return
     end
   end
+  if State.tracker.route and State.run.pendingRouteExtension then
+    if RouteRecommendations.confirmExtension(State.tracker.route,
+      State.run.pendingRouteExtension) then
+      State.run.trackedRoute = State.tracker.route
+      State.run.pendingRouteExtension = nil
+      save()
+    end
+    return
+  end
   if not State.run.startRoomPrompt then return end
   if not State.tracker.route and State.run.routeRecommendation then
     if Tracker.slotCount(State.tracker) >= State.tracker.max then
@@ -563,9 +609,18 @@ function AchievementTracker:onPlayerInit(player)
 end
 
 function AchievementTracker:onNewLevel()
+  if not State.settings or not State.tracker then return end
   syncBossRushCompletion()
   local changed = refreshRouteFloor()
   if CharacterRelevance.updateSources(State.run, GameInstance) then changed = true end
+  local currentRouteContext = Routes.context(GameInstance, State.run)
+  State.routeContext = currentRouteContext
+  if RouteRecommendations.syncActualProgress(State.tracker.route,
+    currentRouteContext) then
+    State.run.trackedRoute = State.tracker.route
+    State.run.pendingRouteExtension = nil
+    changed = true
+  end
   if changed then save() end
   observeAndSave("stage", GameInstance:GetLevel():GetStage())
   observeAndSave("stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())

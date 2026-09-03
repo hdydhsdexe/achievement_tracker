@@ -46,6 +46,7 @@ function Sensors.newRun(startSeed)
     completedGoals={}, progress={ items=0, growth=0, gulp=0 }, progressUseKeys={},
     routeItems={}, routeEvents={}, routeFloor=nil, routeFloorAids={},
     routeRecommendation=nil, trackedRoute=nil, startRoomPrompt=true, startRoomIndex=nil,
+    pendingRouteExtension=nil, routeBosses={},
     characterSources={ ground={}, historical={}, floor=nil },
     longTermObservedPickups={}, longTermObservedRooms={} }
 end
@@ -62,6 +63,9 @@ function Sensors.normalizeRun(run)
   run.routeRecommendation = type(run.routeRecommendation) == "table"
     and run.routeRecommendation or nil
   run.trackedRoute = type(run.trackedRoute) == "table" and run.trackedRoute or nil
+  run.pendingRouteExtension = type(run.pendingRouteExtension) == "table"
+    and run.pendingRouteExtension or nil
+  run.routeBosses = type(run.routeBosses) == "table" and run.routeBosses or {}
   if run.startRoomPrompt == nil then run.startRoomPrompt = false end
   run.characterSources = run.characterSources or { ground={}, historical={}, floor=nil }
   run.characterSources.ground = run.characterSources.ground or {}

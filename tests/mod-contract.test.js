@@ -182,8 +182,8 @@ test("F3 untracking keeps the current list position until the next refresh", () 
     "both tracking directions must persist immediately");
   assert.match(toggle[0], /if not wasTracked then refreshGoals\(state, context, true\) end/,
     "only newly tracked goals should trigger an immediate reorder");
-  assert.equal((toggle[0].match(/refreshGoals\(/g) || []).length, 2,
-    "route rows refresh immediately while ordinary untracking keeps its delayed refresh");
+  assert.equal((toggle[0].match(/refreshGoals\(/g) || []).length, 3,
+    "route and route-option rows refresh immediately while ordinary untracking stays delayed");
   assert.doesNotMatch(toggle[0], /state\.menu\.(?:cursor|offset)\s*=/,
     "untracking must leave the current selection and page untouched");
   assert.match(menu, /if queryChanged then[\s\S]*?refreshGoals\(state, context, false\)/);
@@ -995,6 +995,13 @@ test("Boss Rush completion uses the persistent game-state flag across room and f
   assert.match(main, /MC_POST_NEW_ROOM/);
 });
 
+test("a Repentance+ level callback before game startup cannot access an uninitialized tracker", () => {
+  const main = fs.readFileSync(path.join(root, "main.lua"), "utf8");
+  const callback = main.match(/function AchievementTracker:onNewLevel\(\)[\s\S]*?\nend/)?.[0] ?? "";
+  assert.match(callback, /if not State\.settings or not State\.tracker then return end/);
+  assert.ok(callback.indexOf("not State.tracker") < callback.indexOf("State.tracker.route"));
+});
+
 test("Chest and Dark Room routes prompt for the correct photo after Mom dies", () => {
   const routes = read("scripts/core/routes.lua");
   assert.match(routes, /heldAids=\{\}/);
@@ -1018,7 +1025,7 @@ test("dynamic boss routes provide concrete bilingual exits for every main-path f
     assert.match(routes, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(routes, /沿主线(?:推进|前往)|Follow the main path/);
-  assert.match(routes, /persistentData:Unlocked\(407\)/);
+  assert.match(routes, /persistentUnlocked\(407\)/);
   assert.match(routes, /context\.secretExitUnlocked == false/,
     "unknown unlock state must continue to expose possible alternate exits");
   assert.match(routes, /policy == "main"/);

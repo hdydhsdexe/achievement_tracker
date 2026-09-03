@@ -6,7 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("route planner exposes every mode-compatible family with live member status", () => {
+test("route planner exposes every current-mode endpoint with live member status", () => {
   const planner = read("scripts/core/route_recommendations.lua");
   assert.match(planner, /function RouteRecommendations\.list\(goals, options\)/);
   assert.match(planner, /availableMemberIds/);
@@ -14,7 +14,7 @@ test("route planner exposes every mode-compatible family with live member status
   assert.match(planner, /selectable\s*=/);
   assert.match(planner, /recoverable\s*=/);
   assert.match(planner, /failureReason\s*=/);
-  assert.match(planner, /\(options\.greed == true\) == \(family\.key == "greed"\)/);
+  assert.match(planner, /if options\.greed then return \{ options\.greedier and "greedier" or "greed" \} end/);
 });
 
 test("manual route scores merge current and general goals across four recommendation tiers", () => {
@@ -66,7 +66,7 @@ test("F3 renders ranked route rows without duplicating shared member tiles", () 
   assert.match(menu, /score\.normal/);
   assert.match(menu, /score\.discouraged/);
   assert.match(menu, /Tracker\.replaceRoute\(state\.tracker, goal\.route\)/);
-  assert.match(menu, /routeUnavailable/);
+  assert.match(menu, /routeOptionUnavailable/);
   assert.match(text, /availableRoute\s*=\s*"可选路线"/);
   assert.match(text, /unavailableRoute\s*=\s*"当前不可选路线"/);
   assert.match(text, /routeUnavailable\s*=\s*"当前路线不可进入"/);
