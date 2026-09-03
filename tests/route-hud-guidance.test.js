@@ -83,3 +83,33 @@ test("HUD controls explain that Tab reveals route details in both languages", ()
   assert.match(text, /controls = "F3：选择目标\s*\|\s*按住 Tab 查看路线详情\s*\|\s*F4：隐藏"/);
   assert.match(text, /controls = "F3: goals\s*\|\s*Hold Tab for route details\s*\|\s*F4: hide"/);
 });
+
+test("compact route guidance waits for the floor boss before naming exits", () => {
+  const routes = read("scripts/core/routes.lua");
+  assert.match(routes, /function Routes\.compactActions\(context, language\)/);
+  assert.match(routes, /if not context\.bossDefeated then[\s\S]*?"击败本层头目"/);
+  assert.match(routes, /context\.bossDefeated/);
+  assert.match(routes, /descriptor\.Data\.Type == ROOM_BOSS[\s\S]*?descriptor\.Clear/);
+  assert.doesNotMatch(routes, /compactActions[\s\S]*?string\.find/,
+    "compact guidance must be derived from structured state, not localized route copy");
+});
+
+test("compact exit choices expose live main and alternate availability", () => {
+  const routes = read("scripts/core/routes.lua");
+  assert.match(routes, /ROOM_SECRET_EXIT_IDX/);
+  assert.match(routes, /door\.TargetRoomIndex == ROOM_SECRET_EXIT_IDX/);
+  assert.match(routes, /context\.secretExitDoor = true/);
+  assert.match(routes, /available=context\.normalTrapdoor/);
+  assert.match(routes, /available=context\.secretExitDoor/);
+  assert.match(routes, /"进入地下室II"[\s\S]*?"进入下水道I"/);
+  assert.match(routes, /"Enter Basement II"[\s\S]*?"Enter Downpour I"/);
+});
+
+test("compact HUD grays only unavailable exit choices", () => {
+  const hud = read("scripts/ui/hud.lua");
+  assert.match(hud, /Routes\.compactActions\(evaluationContext, language\)/);
+  assert.match(hud, /action\.available and color or HUD_MUTED/);
+  assert.match(hud, /if not expanded and compactActions then/);
+  assert.match(hud, /if expanded then[\s\S]*?evaluation\.current/,
+    "holding Tab must retain the full route wording");
+});
