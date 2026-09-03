@@ -58,10 +58,11 @@ test("route tracking consumes one slot while exposing every member", () => {
   assert.match(sensors, /run\.trackedRoute/);
 });
 
-test("new runs choose and persist one recommendation while continued runs restore it", () => {
+test("new runs clear stale tracking and choose a fresh recommendation while continued runs restore it", () => {
   const main = read("main.lua");
   assert.match(main, /require\("scripts\.core\.route_recommendations"\)/);
-  assert.match(main, /if not isContinued and completionAllowed\(\) then[\s\S]*?RouteRecommendations\.choose/);
+  assert.match(main,
+    /if not isContinued then[\s\S]*?prepareNewRunTracking[\s\S]*?completionAllowed\(\)[\s\S]*?RouteRecommendations\.choose/);
   assert.match(main, /State\.run\.routeRecommendation = recommendation/);
   assert.match(main, /Tracker\.setRoute\(State\.tracker, State\.run\.trackedRoute\)/);
   assert.match(main, /State\.run\.startRoomPrompt = false/);
