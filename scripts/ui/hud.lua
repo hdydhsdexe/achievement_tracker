@@ -75,6 +75,19 @@ local function opportunityBlock(state, language, maxWidth, fontPixels)
     opportunity.danger and HUD_FAILED or HUD_OPPORTUNITY, maxWidth, fontPixels)
 end
 
+local function completionNoticeBlocks(state, language, maxWidth, fontPixels)
+  local blocks = {}
+  local labels = Text.labels(language)
+  for _, id in ipairs(state.completionNotices or {}) do
+    local goal = Catalog.get(id)
+    if goal then
+      blocks[#blocks + 1] = wrappedRows(string.format(labels.goalCompleted, Catalog.text(goal,
+        language).name), 0, HUD_COMPLETED, maxWidth, fontPixels)
+    end
+  end
+  return blocks
+end
+
 local function routeDetailsHeld()
   return Input and Keyboard and Input.IsButtonPressed
     and Input.IsButtonPressed(Keyboard.KEY_TAB, 0)
@@ -174,6 +187,9 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
   local maxWidth = math.max(1, screenWidth - SCREEN_MARGIN - x)
   local headerRows = wrappedRows(labels.title, 0, HUD_TITLE, maxWidth, fontPixels)
   local blocks = {}
+  for _, block in ipairs(completionNoticeBlocks(state, language, maxWidth, fontPixels)) do
+    table.insert(blocks, block)
+  end
   local routeContext = state.routeContext or Routes.context(Game(), state.run)
   local trackedIds = state.tracker.ids
   local challengeId = Isaac.GetChallenge()

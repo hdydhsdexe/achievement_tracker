@@ -37,7 +37,8 @@ test("completion notices are room-scoped and rendered before tracked route conte
     /function AchievementTracker:onNewRoom\(\)[\s\S]*?State\.completionNotices = \{\}/);
   assert.match(hud, /local function completionNoticeBlocks\(state, language, maxWidth, fontPixels\)/);
   assert.match(hud, /for _, id in ipairs\(state\.completionNotices or \{\}\)/);
-  assert.match(hud, /string\.format\(labels\.goalCompleted, Catalog\.text\(goal, language\)\.name\)/);
+  assert.match(hud,
+    /string\.format\(labels\.goalCompleted, Catalog\.text\(goal,[\s\S]*?language\)\.name\)/);
   assert.match(hud, /HUD_COMPLETED/);
   assert.match(hud, /completionNoticeBlocks[\s\S]*?routeBlock/,
     "completion notices must be added before route and ordinary tracker blocks");
@@ -70,9 +71,9 @@ test("non-continued games clear routes and prune every currently impossible targ
 
 test("startup silently removes historical completions without replaying notices", () => {
   const main = read("main.lua");
-  assert.match(main,
-    /local function initializeCompletionBaseline\(\)[\s\S]*?Tracker\.removeIds\(State\.tracker, completedIds\)/);
-  assert.doesNotMatch(main,
-    /local function initializeCompletionBaseline\(\)[\s\S]*?completionNotices[\s\S]*?end\n\nlocal function/,
+  const initialize = main.match(
+    /local function initializeCompletionBaseline\(\)[\s\S]*?\nend\n\nlocal function syncCompletionTransitions/)?.[0] ?? "";
+  assert.match(initialize, /Tracker\.removeIds\(State\.tracker, completedIds\)/);
+  assert.doesNotMatch(initialize, /completionNotices/,
     "baseline initialization must not enqueue historical completion notices");
 });

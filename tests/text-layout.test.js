@@ -321,6 +321,23 @@ test("320x180 HUD pagination preserves every complete target row inside safe bou
   assert.ok(layout.y >= 8 && layout.y + layout.totalHeight <= 172);
 });
 
+test("320x180 pagination preserves multiple room-scoped completion notices", () => {
+  const font = parseFont(11);
+  const content = routeBlocks(font, 304);
+  const notices = ["#324 completed", "#325 completed", "#326 completed"]
+    .map((value) => wrap(value, 304, font.records));
+  content.blocks.unshift(...notices);
+  const availableLines = hudLineCapacity(164, font, 0);
+  const {pages, split} = paginatedRows(content, availableLines);
+  assert.equal(split, false);
+  assert.deepEqual(pages.flat(), content.blocks.flat());
+  assert.deepEqual(pages.flat().slice(0, notices.length), notices.flat());
+  for (const page of pages) {
+    assert.ok(hudHeight(page.length + content.header.length + content.footer.length,
+      font, 0) <= 164);
+  }
+});
+
 test("HUD line spacing uses integer gaps in static and paged safe-area calculations", () => {
   const fonts = new Map(HUD_TIERS.map((pixels) => [pixels, parseFont(pixels)]));
   const compact = fitNativeHud(11, 1920, 1080, 18, 82, fonts, 0);

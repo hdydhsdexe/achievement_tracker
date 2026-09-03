@@ -565,6 +565,7 @@ local function toggleGoal(state, goal, save, context)
     refreshGoals(state, context, true)
     return true
   end
+  if isCompleted(state, goal) then return false end
   if Tracker.routeContains(state.tracker, goal.id) then
     state.menu.routeMemberNotice = goal.id
     return false

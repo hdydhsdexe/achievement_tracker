@@ -29,7 +29,9 @@ local State = {
   profileCompleted = {},
   routeContext = nil,
   sceneOpportunities = {},
-  quickTrackNotice = nil
+  quickTrackNotice = nil,
+  completionBaseline = {},
+  completionNotices = {}
 }
 
 local function save()
@@ -67,6 +69,31 @@ local function isGoalCompleted(goal)
     or CompletionMarks.isSatisfied(goal, State.settings.completionMarks)
 end
 
+local function initializeCompletionBaseline()
+  State.completionBaseline = {}
+  local completedIds = {}
+  for _, goal in ipairs(Catalog.goals) do
+    if isGoalCompleted(goal) then
+      State.completionBaseline[goal.id] = true
+      completedIds[goal.id] = true
+    end
+  end
+  return Tracker.removeIds(State.tracker, completedIds)
+end
+
+local function syncCompletionTransitions()
+  local newlyCompleted = {}
+  for _, goal in ipairs(Catalog.goals) do
+    local completed = isGoalCompleted(goal) == true
+    if completed and not State.completionBaseline[goal.id] then
+      newlyCompleted[goal.id] = true
+      table.insert(State.completionNotices, goal.id)
+    end
+    State.completionBaseline[goal.id] = completed or nil
+  end
+  return Tracker.removeIds(State.tracker, newlyCompleted)
+end
+
 local function trackingTaintedUnlock()
   if not State.tracker then return false end
   for _, id in ipairs(Tracker.allIds(State.tracker)) do
@@ -92,6 +119,54 @@ local function completionAllowed()
     if ok and disallowed then return false end
   end
   return true
+end
+
+local function runStartRouteContext(routeContext, relevanceContext)
+  local result, players = {}, {}
+  for key, value in pairs(routeContext or {}) do result[key] = value end
+  for player in pairs(routeContext and routeContext.players or {}) do players[player] = true end
+  for player in pairs(relevanceContext.convertible or {}) do players[player] = true end
+  for player in pairs(relevanceContext.ascentConvertible or {}) do players[player] = true end
+  result.players = players
+  return result
+end
+
+local function goalAvailableAtRunStart(goal, relevanceContext, routeContext)
+  if isGoalCompleted(goal) or not Catalog.isCompletable(goal, Isaac.GetChallenge()) then
+    return false
+  end
+  if not completionAllowed() and Isaac.GetChallenge() == 0 then return false end
+  local relevance = CharacterRelevance.classify(goal, relevanceContext)
+  if relevance ~= "current" and relevance ~= "general" and relevance ~= "convertible" then
+    return false
+  end
+  local evaluationContext = runStartRouteContext(routeContext, relevanceContext)
+  local _, _, remaining = CompletionMarks.progress(goal,
+    State.settings.completionMarks, evaluationContext.players)
+  local difficulty = CompletionMarks.difficultyValue(GameInstance)
+  for _, requirement in ipairs(remaining) do
+    if requirement.difficulty > difficulty then return false end
+  end
+  local routeResult = Routes.evaluate(goal, evaluationContext,
+    State.settings.completionMarks, "en")
+  if routeResult and routeResult.severity == "failed" then return false end
+  return true
+end
+
+local function prepareNewRunTracking(relevanceContext, routeContext)
+  Tracker.untrackRoute(State.tracker)
+  State.run.trackedRoute = nil
+  State.run.routeRecommendation = nil
+  State.run.startRoomPrompt = false
+  State.run.startRoomIndex = nil
+  local unavailable = {}
+  for _, id in ipairs(State.tracker.ids) do
+    local goal = Catalog.get(id)
+    if not goal or not goalAvailableAtRunStart(goal, relevanceContext, routeContext) then
+      unavailable[id] = true
+    end
+  end
+  return Tracker.removeIds(State.tracker, unavailable)
 end
 
 local VICTORY_LAP_OPPORTUNITY_IDS = {
@@ -125,7 +200,11 @@ local function recordCompletionMark(mark)
     local playerType = CharacterRelevance.normalize(Isaac.GetPlayer(index):GetPlayerType())
     changed = CompletionMarks.merge(State.settings.completionMarks, playerType, mark, value) or changed
   end
-  if changed then refreshCompletionFromMarks(); save() end
+  if changed then
+    refreshCompletionFromMarks()
+    syncCompletionTransitions()
+    save()
+  end
   return changed
 end
 
@@ -206,6 +285,8 @@ function AchievementTracker:onGameStarted(isContinued)
   State.routeContext = nil
   State.sceneOpportunities = {}
   State.quickTrackNotice = nil
+  State.completionBaseline = {}
+  State.completionNotices = {}
   local player = Isaac.GetPlayer(0)
   if player then Sensors.initialize(State.run, player) end
   Unlocks.refreshAchievementImport(Catalog.goals, State.settings.achievementImport)
@@ -222,9 +303,11 @@ function AchievementTracker:onGameStarted(isContinued)
   refreshRouteFloor()
   CharacterRelevance.updateSources(State.run, GameInstance)
   State.routeContext = Routes.context(GameInstance, State.run)
-  if not isContinued and completionAllowed() then
-    if not sameSavedRun then
-      local relevanceContext = CharacterRelevance.buildContext(GameInstance, Catalog.goals, State.run)
+  local relevanceContext = CharacterRelevance.buildContext(GameInstance, Catalog.goals, State.run)
+  initializeCompletionBaseline()
+  if not isContinued then
+    prepareNewRunTracking(relevanceContext, State.routeContext)
+    if completionAllowed() then
       local recommendation = RouteRecommendations.choose(Catalog.goals, {
         allowed=true,
         greed=GameInstance:IsGreedMode(),
@@ -255,6 +338,7 @@ function AchievementTracker:onGameStarted(isContinued)
   Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
     "stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType(),
     State.settings.achievementImport)
+  syncCompletionTransitions()
   save()
   Mcm.setup(State, save)
 end
@@ -266,11 +350,16 @@ function AchievementTracker:onUpdate()
   for index = 0, GameInstance:GetNumPlayers() - 1 do
     if Sensors.observeBlueFlies(State.run, Isaac.GetPlayer(index)) then runChanged = true end
   end
-  if runChanged then save() end
+  if runChanged then
+    syncCompletionTransitions()
+    save()
+  end
   if Opportunities.updateRun(State.run, GameInstance) then save() end
   local second = math.floor(GameInstance.TimeCounter / 30)
   if second == State.lastEvaluation then return end
   State.lastEvaluation = second
+  local completedTracking = syncCompletionTransitions()
+  if #completedTracking > 0 then save() end
   if CharacterRelevance.updateSources(State.run, GameInstance) then save() end
   local routeContext = Routes.context(GameInstance, State.run)
   State.routeContext = routeContext
@@ -412,6 +501,7 @@ function AchievementTracker:onPickupUpdate(pickup)
   end
   if Sensors.onPickupUpdate(State.run, pickup) then
     State.lastEvaluation = -1
+    syncCompletionTransitions()
     save()
   end
   if LongTermProgress.canObserve(GameInstance)
@@ -429,6 +519,7 @@ function AchievementTracker:onUseItem(collectible, rng, player)
   changed = Sensors.onUseItem(State.run, collectible, player, Isaac.GetFrameCount()) or changed
   if changed then
     State.lastEvaluation = -1
+    syncCompletionTransitions()
     save()
   end
 end
@@ -436,6 +527,7 @@ end
 function AchievementTracker:onUsePill(pillEffect, player)
   if State.settings and Sensors.onUsePill(State.run, pillEffect, player, Isaac.GetFrameCount()) then
     State.lastEvaluation = -1
+    syncCompletionTransitions()
     save()
   end
 end
@@ -450,13 +542,20 @@ function AchievementTracker:onUseCard(card, player)
       changed = LongTermProgress.increment(State.settings, 7, 1) or changed
     end
   end
-  if changed then State.lastEvaluation = -1; save() end
+  if changed then
+    State.lastEvaluation = -1
+    syncCompletionTransitions()
+    save()
+  end
 end
 
 local function observeAndSave(kind, value, variant)
   if not State.settings then return end
   if Unlocks.observe(Catalog.goals, State.settings.observedCompleted, State.profileCompleted,
-    kind, value, variant, State.settings.achievementImport) then save() end
+    kind, value, variant, State.settings.achievementImport) then
+    syncCompletionTransitions()
+    save()
+  end
 end
 
 function AchievementTracker:onPlayerInit(player)
@@ -473,6 +572,7 @@ function AchievementTracker:onNewLevel()
 end
 
 function AchievementTracker:onNewRoom()
+  State.completionNotices = {}
   syncBossRushCompletion()
   local changed = Opportunities.onNewRoom(State.run, GameInstance)
   if CharacterRelevance.updateSources(State.run, GameInstance) then changed = true end
@@ -517,7 +617,8 @@ function AchievementTracker:onAchievementUnlocked(achievementId)
   CompletionMarks.infer(Catalog.goals, State.profileCompleted, State.settings.completionMarks)
   refreshCompletionFromMarks()
   State.lastEvaluation = -1
-  if importedChanged then save() end
+  local removed = syncCompletionTransitions()
+  if importedChanged or #removed > 0 then save() end
 end
 
 function AchievementTracker:onExit(shouldSave)

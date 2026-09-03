@@ -37,6 +37,27 @@ function Tracker.allIds(state)
   return result
 end
 
+function Tracker.removeIds(state, idSet)
+  local ids, routeMembers, removed, seen = {}, {}, {}, {}
+  local function retain(id, target)
+    if idSet[id] then
+      if not seen[id] then removed[#removed + 1], seen[id] = id, true end
+    else
+      target[#target + 1] = id
+    end
+  end
+  for _, id in ipairs(state.ids) do retain(id, ids) end
+  for _, id in ipairs(state.route and state.route.memberIds or {}) do
+    retain(id, routeMembers)
+  end
+  state.ids = ids
+  if state.route then
+    state.route.memberIds = routeMembers
+    if #routeMembers == 0 then state.route = nil end
+  end
+  return removed
+end
+
 function Tracker.track(state, id)
   if Tracker.containsAny(state, id) then return true end
   if Tracker.slotCount(state) >= state.max then return false end
