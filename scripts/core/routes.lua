@@ -28,6 +28,8 @@ local WOTL = enum(StageType,"STAGETYPE_WOTL",1)
 local ENTITY_URIEL = enum(EntityType,"ENTITY_URIEL",271)
 local ENTITY_GABRIEL = enum(EntityType,"ENTITY_GABRIEL",272)
 local GRID_STATUE = enum(GridEntityType,"GRID_STATUE",21)
+local ROOM_BOSS = enum(RoomType,"ROOM_BOSS",5)
+local ROOM_SECRET_EXIT_IDX = enum(GridRooms,"ROOM_SECRET_EXIT_IDX",-10)
 
 local AID_DEFS = {
   knife1={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_KNIFE_PIECE_1",626), zh="菜刀碎片1", en="Knife Piece 1"},
@@ -257,6 +259,31 @@ local function scanTrapdoors(context, room)
   end
 end
 
+local function scanExitDoors(context, room)
+  if context.roomType ~= ROOM_BOSS or not room or type(room.GetDoor) ~= "function" then return end
+  for slot = 0, 7 do
+    local door = room:GetDoor(slot)
+    if door and door.TargetRoomIndex == ROOM_SECRET_EXIT_IDX then
+      context.secretExitDoor = true
+      return
+    end
+  end
+end
+
+local function floorBossDefeated(level)
+  if not level or type(level.GetRooms) ~= "function" then return false end
+  local rooms = level:GetRooms()
+  local found = false
+  for index = 0, rooms.Size - 1 do
+    local descriptor = rooms:Get(index)
+    if descriptor and descriptor.Data and descriptor.Data.Type == ROOM_BOSS then
+      found = true
+      if not descriptor.Clear then return false end
+    end
+  end
+  return found
+end
+
 local function scanAngelRoom(context, room)
   if context.roomType ~= enum(RoomType,"ROOM_ANGEL",15) then return end
   if Isaac and type(Isaac.GetRoomEntities) == "function" then
@@ -283,7 +310,8 @@ function Routes.context(game, run)
     stage=level:GetStage(), stageType=level:GetStageType(), elapsed=math.floor(game.TimeCounter / 30),
     roomType=room:GetType(), roomIndex=level:GetCurrentRoomIndex(),
     greed=game:IsGreedMode(), players={}, aids={}, heldAids={}, groundAids={}, groundTrinkets={},
-    voidPortal=false, normalTrapdoor=false, angelAlive=false, angelStatue=false, hasBomb=false,
+    voidPortal=false, normalTrapdoor=false, secretExitDoor=false,
+    bossDefeated=floorBossDefeated(level), angelAlive=false, angelStatue=false, hasBomb=false,
     routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
     secretExitUnlocked=secretExitUnlocked()
   }
@@ -313,11 +341,62 @@ function Routes.context(game, run)
   scanGroundAids(context)
   scanGroundTrinkets(context)
   scanTrapdoors(context, room)
+  scanExitDoors(context, room)
   scanAngelRoom(context, room)
   for _, key in ipairs({"knife1","knife2","key1","key2","dads_note"}) do
     if context.routeItems[key] then context.aids[key] = true end
   end
   return context
+end
+
+local NORMAL_EXITS = {
+  [STAGE.BASEMENT1]={ main={zh="进入地下室II",en="Enter Basement II"},
+    alt={zh="进入下水道I",en="Enter Downpour I"} },
+  [STAGE.BASEMENT2]={ main={zh="进入洞穴I",en="Enter Caves I"},
+    alt={zh="进入下水道II",en="Enter Downpour II"} },
+  [STAGE.CAVES1]={ main={zh="进入洞穴II",en="Enter Caves II"},
+    alt={zh="进入矿层I",en="Enter Mines I"} },
+  [STAGE.CAVES2]={ main={zh="进入深牢I",en="Enter Depths I"},
+    alt={zh="进入矿层II",en="Enter Mines II"} },
+  [STAGE.DEPTHS1]={ main={zh="进入深牢II",en="Enter Depths II"},
+    alt={zh="进入陵墓I",en="Enter Mausoleum I"} },
+  [STAGE.DEPTHS2]={ main={zh="进入子宫I",en="Enter Womb I"} },
+  [STAGE.WOMB1]={ main={zh="进入子宫II",en="Enter Womb II"} }
+}
+
+local REPENTANCE_EXITS = {
+  [STAGE.BASEMENT1]={ main={zh="进入下水道II",en="Enter Downpour II"} },
+  [STAGE.BASEMENT2]={ main={zh="进入洞穴II",en="Enter Caves II"},
+    alt={zh="进入矿层I",en="Enter Mines I"} },
+  [STAGE.CAVES1]={ main={zh="进入矿层II",en="Enter Mines II"} },
+  [STAGE.CAVES2]={ main={zh="进入深牢II",en="Enter Depths II"},
+    alt={zh="进入陵墓I",en="Enter Mausoleum I"} },
+  [STAGE.DEPTHS1]={ main={zh="进入陵墓II",en="Enter Mausoleum II"} }
+}
+
+function Routes.compactActions(context, language)
+  if not context or context.greed then return nil end
+  local exits = (isRepentanceFloor(context) and REPENTANCE_EXITS or NORMAL_EXITS)[context.stage]
+  if not exits then return nil end
+  local exitHere = context.normalTrapdoor or context.secretExitDoor
+  if not context.bossDefeated then
+    if not exitHere then
+      return { { text=localText(language,"击败本层头目","Defeat this floor's boss"), available=true } }
+    end
+  end
+  if not exitHere and context.roomType ~= ROOM_BOSS then
+    return { { text=localText(language,"返回头目房选择出口","Return to the Boss Room and choose an exit"),
+      available=true } }
+  end
+  local actions = {
+    { text=exits.main[language] or exits.main.en, available=context.normalTrapdoor }
+  }
+  if exits.alt then
+    actions[#actions + 1] = {
+      text=exits.alt[language] or exits.alt.en, available=context.secretExitDoor
+    }
+  end
+  return actions
 end
 
 local function isCrackedKeyRoom(roomType)

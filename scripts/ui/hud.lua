@@ -80,6 +80,13 @@ local function routeDetailsHeld()
     and Input.IsButtonPressed(Keyboard.KEY_TAB, 0)
 end
 
+local function appendCompactActions(rows, actions, color, maxWidth, fontPixels)
+  for _, action in ipairs(actions or {}) do
+    appendRows(rows, wrappedRows(action.text, 0,
+      action.available and color or HUD_MUTED, maxWidth, fontPixels))
+  end
+end
+
 local function routeBlock(state, language, maxWidth, fontPixels)
   local route = state.tracker.route
   local recommended = false
@@ -89,9 +96,10 @@ local function routeBlock(state, language, maxWidth, fontPixels)
   end
   if not route then return nil end
   local labels = Text.labels(language)
+  local evaluationContext = state.routeContext or Routes.context(Game(), state.run)
   local evaluation = RouteRecommendations.combinedEvaluation(route, {
     getGoal=Catalog.get,
-    context=state.routeContext or Routes.context(Game(), state.run),
+    context=evaluationContext,
     completionStore=state.settings.completionMarks,
     language=language,
     tracked=not recommended
@@ -111,6 +119,9 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     or HUD_BODY
   local rows = {}
   local expanded = routeDetailsHeld()
+  local compactActions = evaluation.severity ~= "failed"
+    and evaluation.severity ~= "completed"
+    and Routes.compactActions(evaluationContext, language) or nil
   if expanded then
     local heading = recommended and labels.routeRecommendation or labels.trackedRoute
     local routeProgress = string.format(labels.routeProgress, completed, #route.memberIds)
@@ -125,7 +136,9 @@ local function routeBlock(state, language, maxWidth, fontPixels)
     appendRows(rows, wrappedRows(labels.routeMembers .. "：" .. table.concat(memberNames, "、"),
       8, HUD_MUTED, maxWidth, fontPixels))
   end
-  if #evaluation.current > 0 then
+  if not expanded and compactActions then
+    appendCompactActions(rows, compactActions, color, maxWidth, fontPixels)
+  elseif #evaluation.current > 0 then
     appendRows(rows, wrappedRows((language == "zh" and "当前：" or "NOW: ")
       .. table.concat(evaluation.current, " / "), expanded and 8 or 0,
       color, maxWidth, fontPixels))
@@ -212,8 +225,15 @@ local function buildBlocks(state, fontPixels, x, screenWidth)
         local currentPrefix = language == "zh" and "当前：" or "NOW: "
         local nextPrefix = language == "zh" and "下一步：" or "NEXT: "
         if route and not expanded then
-          appendRows(block, wrappedRows(currentPrefix .. route.current,
-            0, routeColor, maxWidth, fontPixels))
+          local compactActions = route.severity ~= "failed"
+            and route.severity ~= "completed"
+            and Routes.compactActions(routeContext, language) or nil
+          if compactActions then
+            appendCompactActions(block, compactActions, routeColor, maxWidth, fontPixels)
+          else
+            appendRows(block, wrappedRows(currentPrefix .. route.current,
+              0, routeColor, maxWidth, fontPixels))
+          end
         else
           appendRows(block, wrappedRows("- " .. text.name .. markProgress,
             0, routeColor, maxWidth, fontPixels))
