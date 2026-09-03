@@ -59,6 +59,7 @@ local function maximumDetailLines(language, contentWidth, bodyPixels)
     maximum = math.max(maximum,
       #Text.wrapPixels(Catalog.text(goal, language).detail, contentWidth, bodyPixels))
   end
+  maximum = math.max(maximum, 4)
   detailLineCache[key] = maximum
   return maximum
 end
@@ -161,6 +162,8 @@ local VISUAL_STATES = {
   unavailable={ key="unavailable", label="currentModeUnavailable", iconFrame=4,
     ink=UNAVAILABLE_INK, iconTint=UNAVAILABLE_TINT }
 }
+local ROUTE_DISABLED = { key="route_unavailable", label="unavailableRoute", iconFrame=4,
+  ink=MUTED, iconTint=Color(0.55, 0.52, 0.48, 1) }
 
 local function routeEvaluationContext(routeContext, relevanceContext)
   if not routeContext then return nil end
@@ -215,7 +218,7 @@ end
 
 local function matchesFilter(goal, filter, route)
   if filter == "all" then return true end
-  if filter == "route" then return RouteRecommendations.contains(route, goal.id) end
+  if filter == "route" then return false end
   return Rewards.filterKind(Rewards.display(goal)) == filter
 end
 
@@ -227,16 +230,30 @@ local ROUTE_SEARCH = {
   greed="greed ultra greed greedier 贪婪 究极贪婪"
 }
 
-local function routeEntry(state, route, tracked)
+local function routeEntry(candidate, tracked, recommended)
+  local route = candidate.route
   return { id="route:" .. route.family, entryKind="route", route=route,
-    tracked=tracked == true, priority=route.priority or "normal" }
+    candidate=candidate, tracked=tracked == true, recommended=recommended == true,
+    priority=route.priority or "normal" }
 end
 
-local function routeMatchesQuery(route, query, language)
+local function candidateMemberIds(candidate)
+  local result, seen = {}, {}
+  for _, ids in ipairs({ candidate.availableMemberIds or {},
+      candidate.unavailableMemberIds or {} }) do
+    for _, id in ipairs(ids) do
+      if not seen[id] then result[#result + 1], seen[id] = id, true end
+    end
+  end
+  return result
+end
+
+local function routeMatchesQuery(candidate, query, language)
   if query == "" then return true end
+  local route = candidate.route
   local haystack = RouteRecommendations.label(route, language) .. " "
     .. (ROUTE_SEARCH[route.family] or "")
-  for _, id in ipairs(route.memberIds or {}) do
+  for _, id in ipairs(candidateMemberIds(candidate)) do
     local goal = Catalog.get(id)
     if goal then
       haystack = haystack .. " " .. Catalog.text(goal, language).name
@@ -246,22 +263,79 @@ local function routeMatchesQuery(route, query, language)
   return string.find(string.lower(haystack), string.lower(query), 1, true) ~= nil
 end
 
-local function pendingRecommendedRoute(state)
-  local route = state.run.routeRecommendation
+local function routeSelectionAllowed(game)
+  if Isaac.GetChallenge() ~= 0 then return false end
+  local seeds = game:GetSeeds()
+  if seeds and seeds.IsCustomRun then
+    local ok, custom = pcall(function() return seeds:IsCustomRun() end)
+    if ok and custom then return false end
+  end
+  if game.GetVictoryLap then
+    local ok, lap = pcall(function() return game:GetVictoryLap() end)
+    if ok and lap > 0 then return false end
+  end
+  if game.AchievementUnlocksDisallowed then
+    local ok, disallowed = pcall(function() return game:AchievementUnlocksDisallowed() end)
+    if ok and disallowed then return false end
+  end
+  return true
+end
+
+local function liveRouteCandidates(state, relevanceContext, language)
+  local game = Game()
+  local routeContext = state.routeContext or Routes.context(game, state.run)
+  return RouteRecommendations.list(Catalog.goals, {
+    allowed=routeSelectionAllowed(game), greed=game:IsGreedMode(),
+    difficulty=CompletionMarks.difficultyValue(game),
+    completionStore=state.settings.completionMarks,
+    currentPlayers=routeContext.players, relevanceContext=relevanceContext,
+    isCompleted=function(goal) return isCompleted(state, goal) end,
+    isTracked=function(id) return Tracker.contains(state.tracker, id) end,
+    includeDiscouraged=true,
+    evaluate=function(goal)
+      return Routes.evaluate(goal, routeContext,
+        state.settings.completionMarks, language)
+    end
+  })
+end
+
+local function scoreIds(ids)
+  local score = { strong=0, recommended=0, normal=0, discouraged=0,
+    total=0, earliest=math.huge }
+  for _, id in ipairs(ids or {}) do
+    local goal = Catalog.get(id)
+    if goal then
+      local priority = Recommendations.priority(goal)
+      score[priority] = score[priority] + 1
+      score.total = score.total + 1
+      score.earliest = math.min(score.earliest, catalogOrder[id] or math.huge)
+    end
+  end
+  return score
+end
+
+local function trackedCandidate(state, language)
+  local route = state.tracker.route
   if not route then return nil end
-  local pending = false
+  local available, unavailable, reason = {}, {}, nil
+  local routeContext = state.routeContext or Routes.context(Game(), state.run)
   for _, id in ipairs(route.memberIds or {}) do
     local goal = Catalog.get(id)
-    if goal and not isCompleted(state, goal) then pending = true; break end
+    if goal and not isCompleted(state, goal) then
+      local result = Routes.evaluate(goal, routeContext,
+        state.settings.completionMarks, language)
+      if result and result.severity == "failed" then
+        unavailable[#unavailable + 1] = id
+        reason = reason or result.current
+      else
+        available[#available + 1] = id
+      end
+    end
   end
-  if not pending then return nil end
-  local evaluation = RouteRecommendations.combinedEvaluation(route, {
-    getGoal=Catalog.get,
-    context=state.routeContext or Routes.context(Game(), state.run),
-    completionStore=state.settings.completionMarks,
-    language=Text.resolveLanguage(state.settings.language)
-  })
-  return evaluation.severity ~= "failed" and route or nil
+  return { route=route, availableMemberIds=available,
+    unavailableMemberIds=unavailable, selectable=true,
+    failed=#unavailable > 0, recoverable=false,
+    failureReason=reason, score=scoreIds(available), order=0 }
 end
 
 local function sortByRecommendation(goals)
@@ -277,12 +351,12 @@ local function refreshGoals(state, context, preserveSelection)
   local selectedGoalId = preserveSelection and state.menu.goals
     and state.menu.goals[state.menu.cursor]
     and state.menu.goals[state.menu.cursor].id
-  local tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,
+  local tracked, routeEntries, scenePending, currentCharacterPending, convertiblePending,
     generalPending, unavailable, completed = {}, {}, {}, {}, {}, {}, {}, {}
   local searchMeta = {}
   local trackedOrder = {}
   for index, id in ipairs(state.tracker.ids) do trackedOrder[id] = index end
-  local activeRoute = state.tracker.route or pendingRecommendedRoute(state)
+  local activeRoute = state.tracker.route
   local routeOrder = {}
   for index, id in ipairs(activeRoute and activeRoute.memberIds or {}) do
     routeOrder[id] = index
@@ -298,12 +372,29 @@ local function refreshGoals(state, context, preserveSelection)
   context = context or CharacterRelevance.buildContext(Game(), Catalog.goals, state.run)
   local filter = FILTERS[state.menu.filterIndex] or "all"
   local language = Text.resolveLanguage(state.settings.language)
-  if activeRoute and (filter == "all" or filter == "route")
-    and routeMatchesQuery(activeRoute, state.menu.query, language) then
-    local entry = routeEntry(state, activeRoute, state.tracker.route ~= nil)
-    table.insert(recommendedRoute, entry)
-    searchMeta[entry.id] = { score=0, priorityRank=state.tracker.route and 1 or 2,
-      recommendationRank=Recommendations.SCORE[entry.priority] or 1, stableOrder=0 }
+  if filter == "all" or filter == "route" then
+    local current = trackedCandidate(state, language)
+    if current and routeMatchesQuery(current, state.menu.query, language) then
+      local entry = routeEntry(current, true, false)
+      routeEntries[#routeEntries + 1] = entry
+      searchMeta[entry.id] = { score=0, priorityRank=0,
+        recommendationRank=Recommendations.SCORE[entry.priority] or 1, stableOrder=0 }
+    end
+    local recommended = false
+    for _, candidate in ipairs(liveRouteCandidates(state, context, language)) do
+      if not activeRoute or candidate.route.family ~= activeRoute.family then
+        local isRecommended = candidate.selectable and not recommended
+        if isRecommended then recommended = true end
+        if routeMatchesQuery(candidate, state.menu.query, language) then
+          local entry = routeEntry(candidate, false, isRecommended)
+          routeEntries[#routeEntries + 1] = entry
+          searchMeta[entry.id] = { score=0,
+            priorityRank=candidate.selectable and 2 or 6,
+            recommendationRank=Recommendations.SCORE[entry.priority] or 1,
+            stableOrder=candidate.order }
+        end
+      end
+    end
   end
   for _, match in ipairs(Catalog.search(state.menu.query)) do
     local goal = match.goal
@@ -314,10 +405,7 @@ local function refreshGoals(state, context, preserveSelection)
         and visualState.key == "unavailable"
       if challengeUnavailable then
         bucket, priorityRank = unavailable, 6
-      elseif Tracker.routeContains(state.tracker, goal.id)
-        or (not state.tracker.route and RouteRecommendations.contains(activeRoute, goal.id)) then
-        bucket, priorityRank = recommendedRoute, state.tracker.route and 1 or 2
-      elseif Tracker.contains(state.tracker, goal.id) then
+      elseif Tracker.containsAny(state.tracker, goal.id) then
         bucket, priorityRank = tracked, 1
       elseif sceneGoalIds[goal.id] and visualState.key ~= "completed"
           and visualState.key ~= "unavailable" then
@@ -338,7 +426,11 @@ local function refreshGoals(state, context, preserveSelection)
     end
   end
   table.sort(tracked, function(left, right)
-    return trackedOrder[left.id] < trackedOrder[right.id]
+    local leftOrder = trackedOrder[left.id]
+      or (#state.tracker.ids + (routeOrder[left.id] or math.huge))
+    local rightOrder = trackedOrder[right.id]
+      or (#state.tracker.ids + (routeOrder[right.id] or math.huge))
+    return leftOrder < rightOrder
   end)
   table.sort(scenePending, function(left, right)
     local leftMeta, rightMeta = sceneGoalIds[left.id], sceneGoalIds[right.id]
@@ -349,14 +441,11 @@ local function refreshGoals(state, context, preserveSelection)
     end
     return leftMeta.order < rightMeta.order
   end)
-  table.sort(recommendedRoute, function(left, right)
-    return (routeOrder[left.id] or 0) < (routeOrder[right.id] or 0)
-  end)
   sortByRecommendation(currentCharacterPending)
   sortByRecommendation(convertiblePending)
   sortByRecommendation(generalPending)
   local goals = {}
-  for _, bucket in ipairs({ tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,
+  for _, bucket in ipairs({ routeEntries, tracked, scenePending, currentCharacterPending, convertiblePending,
     generalPending, unavailable, completed }) do
     for _, goal in ipairs(bucket) do table.insert(goals, goal) end
   end
@@ -457,11 +546,15 @@ local function toggleGoal(state, goal, save, context)
   if not goal then return false end
   if goal.entryKind == "route" then
     local changed
-    if state.tracker.route then
+    if state.tracker.route and state.tracker.route.family == goal.route.family then
       changed = Tracker.untrackRoute(state.tracker)
       state.run.trackedRoute = nil
+    elseif not goal.candidate.selectable then
+      state.quickTrackNotice = { key="routeUnavailable",
+        untilFrame=Isaac.GetFrameCount() + 240 }
+      return false
     else
-      changed = Tracker.trackRoute(state.tracker, goal.route)
+      changed = Tracker.replaceRoute(state.tracker, goal.route)
       if changed then state.run.trackedRoute = state.tracker.route end
     end
     if not changed then
@@ -679,6 +772,18 @@ local function rewardMeta(reward, labels)
   return kind
 end
 
+local function routeVisualState(entry)
+  if entry.tracked and entry.candidate.failed then return VISUAL_STATES.unavailable end
+  if not entry.candidate.selectable then return ROUTE_DISABLED end
+  return VISUAL_STATES.current
+end
+
+local function routeStatusLabel(entry, labels)
+  if entry.tracked then return labels.trackedRoute end
+  if not entry.candidate.selectable then return labels.unavailableRoute end
+  return entry.recommended and labels.routeRecommendation or labels.availableRoute
+end
+
 function Menu.render(state)
   if not state.menu.open then return end
   local goals = state.menu.goals or {}
@@ -722,7 +827,7 @@ function Menu.render(state)
       gridTop + row * layout.lineHeight
     local selected = index == state.menu.cursor
     local routeRow = goal.entryKind == "route"
-    local visualState = routeRow and VISUAL_STATES.current
+    local visualState = routeRow and routeVisualState(goal)
       or resolveVisualState(state, goal, context)
     local tracked = routeRow and goal.tracked
       or Tracker.containsAny(state.tracker, goal.id)
@@ -740,21 +845,26 @@ function Menu.render(state)
     local nameX = statusX + statusSize / 2 + statusGap
     local nameWidth = math.max(0, tileX + columnWidth - 2 - nameX)
     local displayName = routeRow
-      and ((goal.tracked and labels.trackedRoute or labels.routeRecommendation)
+      and (routeStatusLabel(goal, labels)
         .. "：" .. RouteRecommendations.label(goal.route, language))
       or Catalog.text(goal, language).name
     local name = Text.ellipsizePixels(displayName,
       nameWidth, fontPixels)
-    RewardIcons.renderPriorityBackground(priority, nameX, tileY,
-      math.max(0, tileX + columnWidth - 2 - nameX), layout.lineHeight - 1)
+    if not routeRow or goal.candidate.selectable or goal.tracked then
+      RewardIcons.renderPriorityBackground(priority, nameX, tileY,
+        math.max(0, tileX + columnWidth - 2 - nameX), layout.lineHeight - 1)
+    end
     if selected then
       RewardIcons.renderSelection(tileX + 1, tileY, columnWidth - 2,
         layout.lineHeight - 1)
     end
     if reward then RewardIcons.render(reward, tileX + 8, tileY + 6, 12, visualState.iconTint) end
-    Text.drawPixels(marker, textX, tileY, fontPixels, DARK_INK, language)
+    Text.drawPixels(marker, textX, tileY, fontPixels,
+      routeRow and not goal.candidate.selectable and not goal.tracked
+        and visualState.ink or DARK_INK, language)
     Text.drawPixels(tracking, trackingX, tileY, fontPixels,
-      tracked and TRACKED_INK or INK, language)
+      tracked and TRACKED_INK or (routeRow and not goal.candidate.selectable
+        and visualState.ink or INK), language)
     RewardIcons.renderStatus(visualState.iconFrame, statusX,
       tileY + layout.lineHeight / 2, statusSize, visualState.iconTint)
     Text.drawPixels(name, nameX, tileY, fontPixels, visualState.ink, language)
@@ -765,11 +875,11 @@ function Menu.render(state)
   if selected then
     local routeRow = selected.entryKind == "route"
     local reward = not routeRow and Rewards.display(selected) or nil
-    local visualState = routeRow and VISUAL_STATES.current
+    local visualState = routeRow and routeVisualState(selected)
       or resolveVisualState(state, selected, context)
     local priority = routeRow and selected.priority or Recommendations.priority(selected)
     local statusLabel = routeRow
-      and (selected.tracked and labels.trackedRoute or labels.routeRecommendation)
+      and routeStatusLabel(selected, labels)
       or labels[visualState.label]
     local statusWidth = Text.widthPixels(statusLabel, fontPixels)
     local minimumRewardWidth = math.floor(fontPixels * 45 / 11 + 0.5)
@@ -784,7 +894,8 @@ function Menu.render(state)
     local rewardWidth = contentWidth - leftWidth
     local summary
     if routeRow then
-      summary = string.format(labels.routeSlot, #selected.route.memberIds)
+      summary = string.format(labels.routeSlot,
+        #(selected.candidate.availableMemberIds or {}))
     else
       local meta = labels.unlockReward .. " " .. rewardMeta(reward, labels)
       local separator = " · "
@@ -802,12 +913,27 @@ function Menu.render(state)
     local detail
     if routeRow then
       local memberNames = {}
-      for _, id in ipairs(selected.route.memberIds or {}) do
+      for _, id in ipairs(selected.candidate.availableMemberIds or {}) do
         local member = Catalog.get(id)
         if member then memberNames[#memberNames + 1] = Catalog.text(member, language).name end
       end
-      detail = labels.routeMembers .. "：" .. table.concat(memberNames, "、")
-      if not selected.tracked then detail = detail .. "  ·  " .. labels.trackRecommendedRoute end
+      local score = selected.candidate.score
+      detail = string.format(labels.routeScore, score.strong, score.recommended,
+        score.normal, score.discouraged)
+      if #memberNames > 0 then
+        detail = detail .. "  ·  " .. labels.routeMembers .. "："
+          .. table.concat(memberNames, "、")
+      end
+      local missed = #(selected.candidate.unavailableMemberIds or {})
+      if missed > 0 then
+        detail = detail .. "  ·  " .. string.format(labels.routeMissed, missed)
+        if selected.candidate.failureReason then
+          detail = detail .. "：" .. selected.candidate.failureReason
+        end
+      end
+      if not selected.tracked and selected.candidate.selectable then
+        detail = detail .. "  ·  " .. labels.routeSelectHint
+      end
     else
       detail = Catalog.text(selected, language).detail
         .. (LongTermProgress.format(selected, state, language) or "")

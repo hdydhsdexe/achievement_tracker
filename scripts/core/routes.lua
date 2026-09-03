@@ -42,6 +42,7 @@ local AID_DEFS = {
   red_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_RED_KEY",580), zh="红钥匙", en="Red Key"},
   sharp_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_SHARP_KEY",623), zh="尖头钥匙", en="Sharp Key"},
   cracked_orb={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_CRACKED_ORB",675), zh="碎裂的宝珠", en="Cracked Orb"},
+  r_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_R_KEY",636), zh="R Key", en="R Key"},
   mama_mega={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_MAMA_MEGA",483), zh="超级妈妈！", en="Mama Mega!"},
   mega_bean={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_MEGA_BEAN",351), zh="超级豆子", en="Mega Bean"},
   dads_key={kind="collectible", id=enum(CollectibleType,"COLLECTIBLE_DADS_KEY",175), zh="爸爸的钥匙", en="Dad's Key"},
@@ -306,6 +307,7 @@ end
 
 function Routes.context(game, run)
   local level, room = game:GetLevel(), game:GetRoom()
+  local floorAids = run and run.routeFloorAids and run.routeFloorAids.aids or {}
   local context = {
     stage=level:GetStage(), stageType=level:GetStageType(), elapsed=math.floor(game.TimeCounter / 30),
     roomType=room:GetType(), roomIndex=level:GetCurrentRoomIndex(),
@@ -313,8 +315,10 @@ function Routes.context(game, run)
     voidPortal=false, normalTrapdoor=false, secretExitDoor=false,
     bossDefeated=floorBossDefeated(level), angelAlive=false, angelStatue=false, hasBomb=false,
     routeItems=run and run.routeItems or {}, routeEvents=run and run.routeEvents or {},
+    floorAids=floorAids,
     secretExitUnlocked=secretExitUnlocked()
   }
+  for key in pairs(floorAids) do context.aids[key] = true end
   local ok, ascent = pcall(function() return level:IsAscent() end)
   context.ascent = ok and ascent == true
   for index = 0, game:GetNumPlayers() - 1 do
@@ -417,11 +421,29 @@ local function groundTrinketSeeds(context)
   return seeds
 end
 
+function Routes.beginFloor(run, stage, stageType, seed)
+  if not run then return false end
+  local current = run.routeFloorAids
+  if current and current.stage == stage and current.stageType == stageType
+    and current.seed == seed then return false end
+  run.routeFloorAids = { stage=stage, stageType=stageType, seed=seed, aids={} }
+  return true
+end
+
 function Routes.updateRun(run, context, trackTaintedUnlock)
   run.routeItems = run.routeItems or {}
   run.routeEvents = run.routeEvents or {}
   local heldAids = context.heldAids or {}
   local changed = false
+  local floorAids = run.routeFloorAids and run.routeFloorAids.aids
+  if floorAids then
+    for key in pairs(heldAids) do
+      if not floorAids[key] then floorAids[key], changed = true, true end
+    end
+    for key in pairs(context.groundAids or {}) do
+      if not floorAids[key] then floorAids[key], changed = true, true end
+    end
+  end
   for _, key in ipairs({"knife1","knife2","key1","key2","dads_note"}) do
     if context.aids[key] and not run.routeItems[key] then
       run.routeItems[key] = true
@@ -549,6 +571,7 @@ end
 function Routes.resetAttempt(run)
   run.routeItems = {}
   run.routeEvents = {}
+  run.routeFloorAids = {}
 end
 
 local function motherRoute(context, language)
@@ -1095,6 +1118,29 @@ local function mismatchSuffix(goal, requirement, language)
   return " (Defeat this boss as " .. name .. "!)"
 end
 
+local function applyRKeyRecovery(result, context, language, blocked)
+  if blocked or result.severity ~= "failed" or context.greed
+    or not context.aids or not context.aids.r_key then return result end
+  result.severity = "warning"
+  result.current = localText(language,
+    "取得并使用本层发现的 R Key 后，可重新开始这条路线。",
+    "Collect and use the R Key found on this floor to restart this route.")
+  result.next = localText(language,
+    "重置后将按新楼层状态重新评估路线。",
+    "The route will be re-evaluated after the reset.")
+  result.alternatives = { "R Key" }
+  return result
+end
+
+local function requiredPlayerPresent(goal, players)
+  local required = CharacterRelevance.requiredPlayerTypes(goal)
+  if next(required) == nil then return true end
+  for playerType in pairs(required) do
+    if players and players[playerType] then return true end
+  end
+  return false
+end
+
 function Routes.evaluate(goal, context, completionStore, language)
   if not goal then return nil end
   if goal.routeKind == "tainted_unlock" then
@@ -1102,7 +1148,8 @@ function Routes.evaluate(goal, context, completionStore, language)
     result.current = result.current and (result.current[language] or result.current.en) or nil
     result.next = result.next and (result.next[language] or result.next.en) or nil
     result.known, result.required, result.mark = 0, 1, "TAINTED_UNLOCK"
-    return result
+    return applyRKeyRecovery(result, context, language,
+      not requiredPlayerPresent(goal, context.players))
   end
   if not goal.completionRequirements then return nil end
   local known, required, remaining = CompletionMarks.progress(goal, completionStore, context.players)
@@ -1123,7 +1170,9 @@ function Routes.evaluate(goal, context, completionStore, language)
   result.current = result.current and (result.current[language] or result.current.en) or nil
   result.next = result.next and (result.next[language] or result.next.en) or nil
   result.known, result.required, result.mark = known, required, requirement.mark
-  if requirement.playerType ~= nil and not context.players[requirement.playerType] then
+  local characterMismatch = requirement.playerType ~= nil
+    and not context.players[requirement.playerType]
+  if characterMismatch then
     result.severity = "failed"
     result.current = result.current .. mismatchSuffix(goal, requirement, language)
   end
@@ -1131,7 +1180,10 @@ function Routes.evaluate(goal, context, completionStore, language)
     local prefix = language == "zh" and "可用替代：" or "Available alternative: "
     result.current = result.current .. "  " .. prefix .. table.concat(result.alternatives, "/")
   end
-  return result
+  local permanentlyLocked = requirement.mark == "MOTHER"
+    and context.secretExitUnlocked == false
+  return applyRKeyRecovery(result, context, language,
+    characterMismatch or permanentlyLocked)
 end
 
 function Routes.markFromNpc(npc, game)

@@ -57,6 +57,17 @@ function Tracker.trackRoute(state, route)
   return true
 end
 
+function Tracker.replaceRoute(state, route)
+  if not route then return false end
+  if state.route then
+    state.route = route
+    return true
+  end
+  if Tracker.slotCount(state) >= state.max then return false end
+  state.route = route
+  return true
+end
+
 function Tracker.untrackRoute(state)
   if not state.route then return false end
   state.route = nil

@@ -73,13 +73,13 @@ test("HUD appends one opportunity after tracked blocks", () => {
   assert.match(hud, /HUD_FAILED/);
 });
 
-test("F3 ranks tracked, scene opportunities, and existing buckets in that order", () => {
+test("F3 ranks route choices, tracked goals, scene opportunities, and existing buckets in that order", () => {
   const menu = read("scripts/ui/menu.lua");
-  assert.match(menu, /local tracked, recommendedRoute, scenePending, currentCharacterPending/);
+  assert.match(menu, /local tracked, routeEntries, scenePending, currentCharacterPending/);
   assert.match(menu, /sceneGoalIds/);
   assert.match(menu, /bucket, priorityRank = scenePending, 2/);
   assert.match(menu, /bucket, priorityRank = currentCharacterPending, 3/);
-  assert.match(menu, /\{ tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,/);
+  assert.match(menu, /\{ routeEntries, tracked, scenePending, currentCharacterPending, convertiblePending,/);
   assert.match(menu, /opportunitySignature/);
   assert.match(menu, /sceneOpportunitySignature\(state\)/);
 });

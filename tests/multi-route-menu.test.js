@@ -42,7 +42,8 @@ test("route aids persist for one floor and R Key recovers failed normal routes",
   assert.match(routes, /context\.aids\.r_key/);
   assert.match(sensors, /routeFloorAids=\{\}/);
   assert.match(sensors, /run\.routeFloorAids = type\(run\.routeFloorAids\)/);
-  assert.match(main, /Routes\.beginFloor\(State\.run, current\.stage, current\.stageType, current\.seed\)/);
+  assert.match(main,
+    /Routes\.beginFloor\(State\.run,[\s\S]*?current\.stage, current\.stageType, current\.seed\)/);
 });
 
 test("tracker replaces a route in place without consuming another slot", () => {
@@ -56,17 +57,17 @@ test("F3 renders ranked route rows without duplicating shared member tiles", () 
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
   assert.match(menu, /RouteRecommendations\.list\(Catalog\.goals/);
-  assert.match(menu, /local routeEntries/);
+  assert.match(menu, /local tracked, routeEntries/);
   assert.match(menu, /if filter == "route" then return false end/);
   assert.match(menu, /candidate\.selectable/);
-  assert.match(menu, /candidate\.score\.strong/);
-  assert.match(menu, /candidate\.score\.recommended/);
-  assert.match(menu, /candidate\.score\.normal/);
-  assert.match(menu, /candidate\.score\.discouraged/);
+  assert.match(menu, /local score = selected\.candidate\.score/);
+  assert.match(menu, /score\.strong/);
+  assert.match(menu, /score\.recommended/);
+  assert.match(menu, /score\.normal/);
+  assert.match(menu, /score\.discouraged/);
   assert.match(menu, /Tracker\.replaceRoute\(state\.tracker, goal\.route\)/);
   assert.match(menu, /routeUnavailable/);
   assert.match(text, /availableRoute\s*=\s*"可选路线"/);
   assert.match(text, /unavailableRoute\s*=\s*"当前不可选路线"/);
   assert.match(text, /routeUnavailable\s*=\s*"当前路线不可进入"/);
 });
-

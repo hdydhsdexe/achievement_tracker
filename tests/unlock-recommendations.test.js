@@ -73,7 +73,7 @@ test("F3 applies the approved group order and recommendation sorting boundaries"
   }
   assert.doesNotMatch(menu, /sortByRecommendation\((?:tracked|unavailable|completed)\)/);
   assert.match(menu,
-    /\{ tracked, recommendedRoute, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}/);
+    /\{ routeEntries, tracked, scenePending, currentCharacterPending, convertiblePending,[\s\S]*?generalPending, unavailable, completed \}/);
   assert.match(menu, /recommendationRank=priorityRank >= 2[\s\S]*?Recommendations\.rank\(goal\) or 0/);
 
   const sceneSort = menu.match(/table\.sort\(scenePending,[\s\S]*?\r?\n  end\)/)?.[0] ?? "";
@@ -115,7 +115,7 @@ test("route checks accept characters reachable through an actionable transformat
 test("challenge-only goals stay unavailable outside their challenge even when tracked", () => {
   const menu = read("scripts/ui/menu.lua");
   const challengeIndex = menu.indexOf("local challengeUnavailable = goal.challengeId ~= nil");
-  const trackedIndex = menu.indexOf("elseif Tracker.contains(state.tracker, goal.id)", challengeIndex);
+  const trackedIndex = menu.indexOf("elseif Tracker.containsAny(state.tracker, goal.id)", challengeIndex);
   const completedIndex = menu.lastIndexOf("local bucket, priorityRank = completed, 7", trackedIndex);
   const unavailableIndex = menu.indexOf('visualState.key == "unavailable"', trackedIndex);
   assert.ok(challengeIndex >= 0 && trackedIndex > challengeIndex

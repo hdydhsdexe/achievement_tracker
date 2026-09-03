@@ -83,14 +83,9 @@ local function familyCompatible(goal, family, options)
   return true
 end
 
-local function routeAvailable(goal, options)
-  if not options.evaluate then return true end
-  local routeResult = options.evaluate(goal)
-  return not (routeResult and routeResult.severity == "failed")
-end
-
 local function newScore()
-  return { strong=0, recommended=0, normal=0, total=0, earliest=math.huge }
+  return { strong=0, recommended=0, normal=0, discouraged=0,
+    total=0, earliest=math.huge }
 end
 
 local function scoreGoals(goals, catalogOrder)
@@ -115,6 +110,9 @@ local function better(left, right)
   if left.score.normal ~= right.score.normal then
     return left.score.normal > right.score.normal
   end
+  if left.score.discouraged ~= right.score.discouraged then
+    return left.score.discouraged > right.score.discouraged
+  end
   if left.score.total ~= right.score.total then return left.score.total > right.score.total end
   if left.score.earliest ~= right.score.earliest then
     return left.score.earliest < right.score.earliest
@@ -122,71 +120,97 @@ local function better(left, right)
   return left.order < right.order
 end
 
-function RouteRecommendations.choose(goals, options)
+local function sortGoalIds(goals, catalogOrder)
+  local byId, memberIds = {}, {}
+  for _, goal in ipairs(goals) do
+    byId[goal.id] = goal
+    memberIds[#memberIds + 1] = goal.id
+  end
+  table.sort(memberIds, function(leftId, rightId)
+    local left, right = byId[leftId], byId[rightId]
+    local leftRank, rightRank = Recommendations.rank(left), Recommendations.rank(right)
+    if leftRank ~= rightRank then return leftRank > rightRank end
+    return catalogOrder[leftId] < catalogOrder[rightId]
+  end)
+  return memberIds
+end
+
+local function strongestPriority(goals)
+  local strongest = "normal"
+  for _, goal in ipairs(goals) do
+    if Recommendations.SCORE[Recommendations.priority(goal)]
+      > Recommendations.SCORE[strongest] then strongest = Recommendations.priority(goal) end
+  end
+  return strongest
+end
+
+function RouteRecommendations.list(goals, options)
   options = options or {}
-  if options.allowed ~= true then return nil end
+  if options.allowed ~= true then return {} end
   options.difficulty = tonumber(options.difficulty) or 1
   options.completionStore = options.completionStore or {}
   options.currentPlayers = options.currentPlayers or {}
   options.isCompleted = options.isCompleted or function() return false end
   options.isTracked = options.isTracked or function() return false end
+  local includeDiscouraged = options.includeDiscouraged == true
   local catalogOrder = {}
   for index, goal in ipairs(goals or {}) do catalogOrder[goal.id] = index end
-  local bundles, hasCurrentCandidates = {}, false
+  local candidates = {}
   for _, familyKey in ipairs(FAMILY_ORDER) do
     local family = RouteRecommendations.FAMILIES[familyKey]
     if (options.greed == true) == (family.key == "greed") then
-      local bundle = { family=family.key, order=family.order, current={}, general={} }
+      local available, unavailable, failureReason, recoverable = {}, {}, nil, false
       for _, goal in ipairs(goals or {}) do
         if not options.isCompleted(goal) and not options.isTracked(goal.id)
-          and Recommendations.priority(goal) ~= "discouraged"
-          and familyCompatible(goal, family, options) and routeAvailable(goal, options) then
+          and (includeDiscouraged or Recommendations.priority(goal) ~= "discouraged")
+          and familyCompatible(goal, family, options) then
           local relevance = CharacterRelevance.classify(goal, options.relevanceContext)
-          if relevance == "current" then
-            bundle.current[#bundle.current + 1] = goal
-            hasCurrentCandidates = true
-          elseif relevance == "general" then
-            bundle.general[#bundle.general + 1] = goal
+          if relevance == "current" or relevance == "general" then
+            local routeResult = options.evaluate and options.evaluate(goal) or nil
+            if routeResult and routeResult.severity == "failed" then
+              unavailable[#unavailable + 1] = goal
+              failureReason = failureReason or routeResult.current
+            else
+              available[#available + 1] = goal
+              recoverable = recoverable or (routeResult
+                and routeResult.severity == "warning"
+                and #(routeResult.alternatives or {}) > 0) or false
+            end
           end
         end
       end
-      bundles[#bundles + 1] = bundle
+      if #available > 0 or #unavailable > 0 then
+        local score = scoreGoals(available, catalogOrder)
+        candidates[#candidates + 1] = {
+          route={ family=family.key, memberIds=sortGoalIds(available, catalogOrder),
+            priority=strongestPriority(available) },
+          availableMemberIds=sortGoalIds(available, catalogOrder),
+          unavailableMemberIds=sortGoalIds(unavailable, catalogOrder),
+          selectable=#available > 0, recoverable=recoverable,
+          failureReason=failureReason, score=score, order=family.order
+        }
+      end
     end
   end
-  local winner
-  for _, bundle in ipairs(bundles) do
-    local scoring = hasCurrentCandidates and bundle.current or bundle.general
-    if #scoring > 0 then
-      bundle.score = scoreGoals(scoring, catalogOrder)
-      if better(bundle, winner) then winner = bundle end
-    end
-  end
-  if not winner then return nil end
-  local memberGoals = {}
-  for _, goal in ipairs(hasCurrentCandidates and winner.current or winner.general) do
-    memberGoals[#memberGoals + 1] = goal
-  end
-  if hasCurrentCandidates then
-    for _, goal in ipairs(winner.general) do memberGoals[#memberGoals + 1] = goal end
-  end
-  winner.memberIds = {}
-  for _, goal in ipairs(memberGoals) do winner.memberIds[#winner.memberIds + 1] = goal.id end
-  table.sort(winner.memberIds, function(leftId, rightId)
-    local left, right
-    for _, goal in ipairs(memberGoals) do
-      if goal.id == leftId then left = goal elseif goal.id == rightId then right = goal end
-    end
-    local leftRank, rightRank = Recommendations.rank(left), Recommendations.rank(right)
-    if leftRank ~= rightRank then return leftRank > rightRank end
-    return catalogOrder[leftId] < catalogOrder[rightId]
+  table.sort(candidates, function(left, right)
+    if left.selectable ~= right.selectable then return left.selectable end
+    return better(left, right)
   end)
-  local strongest = "normal"
-  for _, goal in ipairs(memberGoals) do
-    if Recommendations.SCORE[Recommendations.priority(goal)]
-      > Recommendations.SCORE[strongest] then strongest = Recommendations.priority(goal) end
+  return candidates
+end
+
+function RouteRecommendations.choose(goals, options)
+  options = options or {}
+  if options.allowed ~= true then return nil end
+  local listOptions = {}
+  for key, value in pairs(options) do listOptions[key] = value end
+  listOptions.includeDiscouraged=false
+  for _, candidate in ipairs(RouteRecommendations.list(goals, listOptions)) do
+    if candidate.selectable then
+      return RouteRecommendations.normalize(candidate.route)
+    end
   end
-  winner.priority = strongest
-  return { family=winner.family, memberIds=winner.memberIds, priority=winner.priority }
+  return nil
 end
 
 function RouteRecommendations.contains(route, id)

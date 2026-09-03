@@ -91,12 +91,12 @@ test("F3 adds a route filter, virtual route row, and protected route members", (
   const menu = read("scripts/ui/menu.lua");
   const text = read("scripts/ui/text.lua");
   assert.match(menu, /"feature", "route", "other"/);
-  assert.match(menu, /local function routeEntry\(state/);
+  assert.match(menu, /local function routeEntry\(candidate/);
   assert.match(menu, /entryKind="route"/);
-  assert.match(menu, /local tracked, recommendedRoute, scenePending/);
-  assert.match(menu, /\{ tracked, recommendedRoute, scenePending/);
+  assert.match(menu, /local tracked, routeEntries, scenePending/);
+  assert.match(menu, /\{ routeEntries, tracked, scenePending/);
   assert.match(menu, /Tracker\.routeContains\(state\.tracker, goal\.id\)/);
-  assert.match(menu, /if goal\.entryKind == "route" then[\s\S]*?Tracker\.untrackRoute/);
+  assert.match(menu, /if goal\.entryKind == "route" then[\s\S]*?Tracker\.replaceRoute/);
   assert.match(menu, /labels\.routeMemberLocked/);
   assert.match(text, /route="路线"/);
 });

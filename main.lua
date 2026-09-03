@@ -167,7 +167,10 @@ local function refreshRouteFloor()
     Opportunities.resetAttempt(State.run)
     CharacterRelevance.resetAttempt(State.run)
   end
+  local aidsChanged = Routes.beginFloor(State.run,
+    current.stage, current.stageType, current.seed)
   State.run.routeFloor = current
+  return reset or aidsChanged
 end
 
 local function load()
@@ -462,8 +465,9 @@ end
 
 function AchievementTracker:onNewLevel()
   syncBossRushCompletion()
-  refreshRouteFloor()
-  if CharacterRelevance.updateSources(State.run, GameInstance) then save() end
+  local changed = refreshRouteFloor()
+  if CharacterRelevance.updateSources(State.run, GameInstance) then changed = true end
+  if changed then save() end
   observeAndSave("stage", GameInstance:GetLevel():GetStage())
   observeAndSave("stage_type", GameInstance:GetLevel():GetStage(), GameInstance:GetLevel():GetStageType())
 end
