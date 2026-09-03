@@ -31,15 +31,16 @@ test("route planner selects only fully completable unfinished goals", () => {
   assert.match(planner, /routeResult and routeResult\.severity == "failed"/);
 });
 
-test("route planner prioritizes character goals and tier-count scoring", () => {
+test("route planner combines current and general goals with tier-count scoring", () => {
   const planner = read("scripts/core/route_recommendations.lua");
   assert.match(planner, /CharacterRelevance\.classify\(goal, options\.relevanceContext\)/);
-  assert.match(planner, /hasCurrentCandidates/);
-  assert.match(planner, /strong[\s\S]*?recommended[\s\S]*?normal[\s\S]*?total[\s\S]*?earliest/);
+  assert.match(planner, /relevance == "current" or relevance == "general"/);
+  assert.match(planner, /strong[\s\S]*?recommended[\s\S]*?normal[\s\S]*?discouraged[\s\S]*?total[\s\S]*?earliest/);
   assert.match(planner, /if left\.score\.strong ~= right\.score\.strong/);
   assert.match(planner, /if left\.score\.recommended ~= right\.score\.recommended/);
   assert.match(planner, /if left\.score\.normal ~= right\.score\.normal/);
-  assert.match(planner, /table\.sort\(winner\.memberIds/);
+  assert.match(planner, /if left\.score\.discouraged ~= right\.score\.discouraged/);
+  assert.match(planner, /table\.sort\(memberIds/);
 });
 
 test("route tracking consumes one slot while exposing every member", () => {
